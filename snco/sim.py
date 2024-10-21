@@ -1,5 +1,9 @@
+from collections import defaultdict
+
 import numpy as np
 import pandas as pd
+
+from .signal import estimate_overall_background_signal, subtract_background
 
 
 def co_invs_to_gt(co_invs, chrom_nbins):
@@ -38,27 +42,35 @@ def read_ground_truth_haplotypes(co_invs_fn, chrom_sizes, bin_size=25_000):
     return gt
 
 
-def apply_gt_to_markers(gt, m, bg_rate):
+def apply_gt_to_markers(gt, m, bg_rate, bg_signal):
     gt = gt.astype(int)
-    m = m.sum(1)
     s = len(m)
-    idx = np.arange(s)
-    nmarkers = sum(m)
-    bg = np.bincount(
-        np.random.choice(idx, replace=True, p=m / nmarkers, size=int(nmarkers * bg_rate)),
-        minlength=s
-    )
-    bg = np.minimum(bg, m)
-    fg = m - bg
+    nmarkers = m.sum(axis=None)
+    nbg = int(round(nmarkers * bg_rate))
+
+    # simulate a realistic background signal using the average background across the dataset
+    fg, bg = subtract_background(m, bg_signal, bg_rate, return_bg=True)
+
+    # flatten haplotypes
+    fg = fg.sum(axis=1)
+    bg = bg.sum(axis=1)
 
     sim = np.zeros(shape=(s, 2))
+    idx = np.arange(s)
     sim[idx, gt] = fg
     sim[idx, 1 - gt] = bg
     
     return sim
 
 
-def generate_simulated_data(ground_truth, co_markers, bg_rate=0.05, nsim_per_sample=100):
+def generate_simulated_data(ground_truth, co_markers,
+                            bin_size=25_000, conv_window_size=2_500_000,
+                            bg_rate='auto', nsim_per_sample=100):
+
+    bg, frac_bg = estimate_overall_background_signal(co_markers, bin_size, conv_window_size)
+    if bg_rate != 'auto':
+        frac_bg = defaultdict(lambda: bg_rate)
+    
     sim_data = {}
     for sample_id, gt in ground_truth.items():
         cbs_to_sim = np.random.choice(list(co_markers.keys()), replace=False, size=nsim_per_sample)
@@ -67,6 +79,6 @@ def generate_simulated_data(ground_truth, co_markers, bg_rate=0.05, nsim_per_sam
             m = co_markers[cb]
             s = {}
             for chrom, chrom_gt_haplo in gt.items():
-                s[chrom] = apply_gt_to_markers(chrom_gt_haplo, m[chrom], bg_rate)
+                s[chrom] = apply_gt_to_markers(chrom_gt_haplo, m[chrom], frac_bg[cb], bg[chrom])
             sim_data[sim_id] = s
     return sim_data

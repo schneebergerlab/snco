@@ -13,7 +13,7 @@ from .bam import BAMHaplotypeIntervalReader, get_chrom_sizes_bam
 def get_chrom_co_markers(bam_fn, chrom, **kwargs):
     with BAMHaplotypeIntervalReader(bam_fn, **kwargs) as bam:
         nbins = bam.nbins[chrom]
-        chrom_co_markers = defaultdict(lambda: np.zeros(shape=(nbins, 2), dtype=np.uint32))
+        chrom_co_markers = defaultdict(lambda: np.zeros(shape=(nbins, 2), dtype=np.float64))
         for bin_idx in range(nbins):
             interval_counts = bam.fetch_interval_counts(chrom, bin_idx)
             
@@ -51,57 +51,6 @@ def get_co_markers(bam_fns, processes=1, **kwargs):
     return co_markers, chrom_sizes
 
 
-def estimate_bg_signal(co_markers, chrom_sizes, bin_size=25_000, max_imbalance_mask=0.9):
-    bg_signal = {}
-    for chrom, cs in chrom_sizes.items():
-        nbins = int(cs // bin_size + bool(cs % bin_size))
-        bg_signal[chrom] = np.zeros(shape=(nbins, 2), dtype=np.float64)
-
-    tot = 0
-    for chrom_co_markers in co_markers.values():
-        for chrom, m in chrom_co_markers.items():
-            m = m.astype(np.float64)
-            bg_signal[chrom] += m
-            tot += m.sum()
-    mask = {}
-    for chrom, sig in bg_signal.items():
-        bg_signal[chrom] = sig / tot
-        ratio = bg_signal[chrom][:, 0] / bg_signal[chrom].sum(axis=1)
-        m = (ratio > max_imbalance_mask) | (ratio < (1 - max_imbalance_mask))
-        mask[chrom] = m
-    return bg_signal, mask
-
-
-def estimate_and_subtract_background(co_markers, chrom_sizes,
-                                     bin_size=25_000, window_size=1_000_000,
-                                     max_bin_count=20, max_imbalance_mask=0.9):
-    bg_signal, imbalance_mask = estimate_bg_signal(co_markers, chrom_sizes, bin_size)
-    perc_contamination = {}
-    co_markers_bg_subtracted = {}
-    ws = window_size // bin_size
-    for cb, cb_co_markers in co_markers.items():
-        nmarkers_tot = 0
-        nmarkers_contam = 0
-        for m in cb_co_markers.values():
-            for i in range(len(m) - ws + 1):
-                win = m[i: i + ws].sum(axis=0)
-                nmarkers_tot += win.sum()
-                nmarkers_contam += min(win)
-        pc = nmarkers_contam / nmarkers_tot
-        perc_contamination[cb] = pc
-        bg_subtracted = {}
-        for chrom, m in cb_co_markers.items():
-            bg = pc * m.sum() * bg_signal[chrom]
-            m_sub = np.minimum(
-                np.round(np.maximum(m.astype(np.float64) - bg, 0)),
-                max_bin_count
-            ).astype(np.uint16)
-            m_sub[imbalance_mask[chrom]] = 0
-            bg_subtracted[chrom] = m_sub
-        co_markers_bg_subtracted[cb] = bg_subtracted
-    return perc_contamination, co_markers_bg_subtracted
-
-
 def co_markers_to_json(output_fn, co_markers, chrom_sizes, bin_size):
     co_markers_json_serialisable = {}
     marker_arr_sizes = {chrom: int(cs // bin_size + bool(cs % bin_size)) for chrom, cs, in chrom_sizes.items()}
@@ -131,7 +80,7 @@ def load_co_markers_from_json(co_marker_json_fn):
     for cb, cb_marker_idx in co_marker_json['data'].items():
         cb_co_markers = {}
         for chrom, (idx, val) in cb_marker_idx.items():
-            m = np.zeros(shape=arr_shapes[chrom] * 2, dtype=np.uint16)
+            m = np.zeros(shape=arr_shapes[chrom] * 2, dtype=np.float64)
             m[idx] = val
             cb_co_markers[chrom] = m.reshape(-1, 2)
         co_markers[cb] = cb_co_markers
