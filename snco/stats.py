@@ -1,0 +1,118 @@
+import numpy as np
+import pandas as pd
+
+from joblib import Parallel, delayed
+
+
+def total_markers(cb_co_markers):
+    tot = 0
+    for m in cb_co_markers.values():
+        tot += m.sum(axis=None)
+    return np.log10(tot)
+
+
+def n_crossovers(cb_co_preds, min_co_prob=1e-3):
+    nco = 0
+    for p in cb_co_preds.values():
+        p_co = np.abs(np.diff(p))
+        p_co = np.where(p_co >= min_co_prob, p_co, 0)
+        nco += p_co.sum(axis=None)
+    return nco
+
+
+def accuracy_score(cb_co_markers, cb_co_preds, max_score=10):
+    nom = 0
+    denom = 0
+    for chrom, m in cb_co_markers.items():
+        p = cb_co_preds[chrom]
+        nom += (m[:, 0] * (1 - p)).sum() + (m[:, 1] * p).sum()
+        denom += m.sum(axis=None)
+    return np.minimum(-np.log2(1 - (nom / denom)), max_score)
+
+
+def uncertainty_score(cb_co_preds):
+    auc = 0
+    for p in cb_co_preds.values():
+        hu = np.abs(p - (p > 0.5))
+        auc += np.trapz(hu).sum(axis=None)
+    return np.maximum(np.log10(auc), 0)
+
+
+def coverage_score(cb_co_markers, max_score=10):
+    cov = 0
+    tot = 0
+    for chrom, m in cb_co_markers.items():
+        idx, = np.nonzero(m.sum(axis=1))
+        try:
+            cov += idx[-1] - idx[0] + 1
+        except KeyError:
+            cov += 0
+        tot += len(m)
+    return np.minimum(-np.log2(1 - (cov / tot)), max_score)
+
+
+def mean_haplotype(cb_co_preds):
+    return np.concatenate([p for p in cb_co_preds.values()]).mean()
+
+
+def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=1e-3, max_phred_score=10):
+    qual_metrics = []
+    for cb, cb_co_markers in co_markers.items():
+        cb_co_preds = co_preds[cb]
+        qual_metrics.append([
+            cb,
+            total_markers(cb_co_markers),
+            n_crossovers(cb_co_preds, min_co_prob=nco_min_prob),
+            accuracy_score(cb_co_markers, cb_co_preds, max_phred_score),
+            uncertainty_score(cb_co_preds),
+            coverage_score(cb_co_markers),
+            mean_haplotype(cb_co_preds)
+        ])
+    qual_metrics = pd.DataFrame(
+        qual_metrics,
+        columns=['cb', 'total_markers', 'n_crossovers',
+                 'accuracy_score', 'uncertainty_score',
+                 'coverage_score', 'mean_haplotype']
+    )
+    return qual_metrics
+
+
+def gt_haplotype_accuracy_score(cb_co_preds, cb_co_gt, thresholded=False, max_score=10):
+    dev = 0
+    nbins = 0
+    for chrom, p in cb_co_preds.items():
+        if thresholded:
+            p = (p > 0.5).astype(np.float32)
+        gt = cb_co_gt[chrom]
+        dev += np.abs(p - gt).sum(axis=None)
+        nbins += len(p)
+    return np.minimum(-np.log2(dev / nbins), max_score)
+
+
+def calculate_score_metrics(co_preds, ground_truth, max_phred_score=10):
+    score_metrics = []
+    for sample_id_cb, cb_co_preds in co_preds.items():
+        sample_id, cb = sample_id_cb.split(':')
+        try:
+            cb_co_gt = ground_truth[sample_id]
+        except KeyError:
+            raise KeyError(f'Sample id "{sample_id}" not present in haplo-bed-fn')
+        score_metrics.append([
+            sample_id_cb,
+            sample_id,
+            n_crossovers(cb_co_gt),
+            gt_haplotype_accuracy_score(cb_co_preds, cb_co_gt),
+            gt_haplotype_accuracy_score(cb_co_preds, cb_co_gt, thresholded=True),
+        ])
+    score_metrics = pd.DataFrame(
+        score_metrics,
+        columns=['cb', 'gt_sample_id', 'gt_n_crossovers', 'gt_accuracy_score', 'gt_thresholded_acc_score']
+    )
+    return score_metrics
+
+
+
+def write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics=None, precision=3):
+    if score_metrics is not None:
+        qual_metrics = qual_metrics.merge(score_metrics, on='cb', how='outer')
+    qual_metrics.to_csv(output_tsv_fn, sep='\t', index=False, float_format=f'%.{precision}f')

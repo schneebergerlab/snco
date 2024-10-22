@@ -33,11 +33,7 @@ def read_ground_truth_haplotypes(co_invs_fn, chrom_sizes, bin_size=25_000):
         sample_gt = {}
         for chrom, n in nbins.items():
             chrom_invs = sample_invs.query('chrom == @chrom')
-            if not len(chrom_invs):
-                # no COs on this chromosome for this sample, randomly select a haplotype
-                sample_gt[chrom] = np.repeat(np.random.randint(2), n)
-            else:
-                sample_gt[chrom] = co_invs_to_gt(chrom_invs, n)
+            sample_gt[chrom] = co_invs_to_gt(chrom_invs, n)
         gt[sample_id] = sample_gt
     return gt
 

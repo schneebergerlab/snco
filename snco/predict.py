@@ -1,3 +1,4 @@
+import sys
 import json
 from collections import namedtuple, defaultdict
 import numpy as np
@@ -166,7 +167,22 @@ def co_preds_to_json(output_fn, co_preds, chrom_sizes, bin_size, precision=2):
         co_preds_json_serialisable[cb] = d
     with open(output_fn, 'w') as o:
         return json.dump({
+            'cmd': ' '.join(sys.argv),
             'bin_size': bin_size,
             'chrom_sizes': chrom_sizes,
             'data': co_preds_json_serialisable
         }, fp=o)
+
+
+def load_co_preds_from_json(co_pred_json_fn):
+    with open(co_pred_json_fn) as f:
+        co_pred_json = json.load(f)
+    co_preds = {}
+    bin_size = co_pred_json['bin_size']
+    chrom_sizes = co_pred_json['chrom_sizes']
+    for cb, cb_co_pred in co_pred_json['data'].items():
+        for chrom, p in cb_co_pred.items():
+            cb_co_pred[chrom] = np.array(p)
+        co_preds[cb] = cb_co_pred
+    return co_preds, chrom_sizes, bin_size
+

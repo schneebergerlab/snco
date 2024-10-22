@@ -1,3 +1,4 @@
+import sys
 import json
 from collections import defaultdict, Counter
 import itertools as it
@@ -63,6 +64,7 @@ def co_markers_to_json(output_fn, co_markers, chrom_sizes, bin_size):
         co_markers_json_serialisable[cb] = d
     with open(output_fn, 'w') as o:
         return json.dump({
+            'cmd': ' '.join(sys.argv),
             'bin_size': bin_size,
             'chrom_sizes': chrom_sizes,
             'shape': marker_arr_sizes,
