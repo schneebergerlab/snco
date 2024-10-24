@@ -1,12 +1,11 @@
-import sys
-import json
-from collections import namedtuple, defaultdict
+from collections import namedtuple
 import numpy as np
 
 import torch
 from pomegranate import distributions as pmd
 from pomegranate import hmm as pmh
 
+from .records import PredictionRecords
 from .signal import predict_foreground_convolution
 
 
@@ -19,7 +18,7 @@ class RigidHMM:
         defaults=[0.0, 0.0, 0.0, 0.0, 0.0]
     )
 
-    
+
     def __init__(self, rfactor, term_rfactor, trans_prob):
         self.rfactor = rfactor
         self.term_rfactor = term_rfactor
@@ -62,12 +61,29 @@ class RigidHMM:
 
     def _create_rigid_chain(self, params, haplotype):
         self._distributions[haplotype] = []
-        for i in range(self.rfactor):
+        for _ in range(self.rfactor):
             d = pmd.Poisson(params)
             self._model.add_distribution(d)
             self._distributions[haplotype].append(d)
 
     def _add_transitions(self):
+
+        # manually set all edges to -inf first, then update
+        # this prevents a bug where edges in large models are occasionally
+        # initialised with NaNs by pomegranate
+        # see: https://github.com/jmschrei/pomegranate/issues/1078
+
+        n = self._model.n_distributions
+        self._model.starts = torch.full(
+            (n,), -np.inf, dtype=self._model.dtype, device=self._model.device
+        )
+        self._model.ends = torch.full(
+            (n,), -np.inf, dtype=self._model.dtype, device=self._model.device
+        )
+        self._model.edges = torch.full(
+            (n, n), -np.inf, dtype=self._model.dtype, device=self._model.device
+        )
+
         for hap in self.haplotypes:
             for i in range(self.rfactor):
                 if self._transition_probs[i].self_loop:
@@ -100,8 +116,9 @@ class RigidHMM:
                         self._model.end,
                         self._transition_probs[i].end
                     )
-            
+
     def initialise_model(self, fg_lambda, bg_lambda):
+        # todo: implement sparse version for when rfactor is very large
         self._model = pmh.DenseHMM(frozen=True)
         for haplotype in self.haplotypes:
             params = [fg_lambda, bg_lambda] if haplotype == 0 else [bg_lambda, fg_lambda]
@@ -124,65 +141,39 @@ class RigidHMM:
         fg_lambda, bg_lambda = self.estimate_params(X)
         self.initialise_model(fg_lambda, bg_lambda)
 
-    def predict(self, X):
-        X = torch.from_numpy(X)
-        proba = self._model.predict_proba(X)
-        proba = proba[..., self._hap2_states].sum(axis=2).numpy()
-        return proba
+    def predict(self, X, batch_size=1_000):
+        proba = []
+        for X_batch in np.array_split(X, int(np.ceil(len(X) / batch_size))):
+            X_batch = torch.from_numpy(X_batch)
+            p_batch = self._model.predict_proba(X_batch)
+            p_batch = p_batch[..., self._hap2_states].sum(axis=2).numpy()
+            proba.append(p_batch)
+        return np.concatenate(proba, axis=0)
 
 
-def create_rhmm(co_markers, bin_size=25_000, cm_per_mb=4.5,
+def create_rhmm(co_markers, cm_per_mb=4.5,
                 segment_size=1_000_000, terminal_segment_size=50_000,
                 model_lambdas='auto'):
+    bin_size = co_markers.bin_size
     rfactor = segment_size // bin_size
     term_rfactor = terminal_segment_size // bin_size
     trans_prob = cm_per_mb * (bin_size / 1e8)
     rhmm = RigidHMM(rfactor, term_rfactor, trans_prob)
     if model_lambdas == 'auto':
-        X = [m for cb_co_markers in co_markers.values() for m in cb_co_markers.values()]
+        X = list(co_markers.deep_values())
         rhmm.fit(X)
     else:
         rhmm.initialise_model(*model_lambdas)
     return rhmm
 
 
-def detect_crossovers(co_markers, rhmm, chrom_sizes, processes=1):
-    cb_whitelist = list(co_markers.keys())
-    co_preds = defaultdict(dict)
+def detect_crossovers(co_markers, rhmm, processes=1):
+    seen_barcodes = co_markers.seen_barcodes
+    co_preds = PredictionRecords.new_like(co_markers)
     torch.set_num_threads(processes)
-    for chrom in chrom_sizes:
-        X = np.array([co_markers[cb][chrom] for cb in cb_whitelist])
+    for chrom in co_markers.chrom_sizes:
+        X = np.array([co_markers[cb, chrom] for cb in seen_barcodes])
         X_pred = rhmm.predict(X)
-        for cb, p in zip(cb_whitelist, X_pred):
-            co_preds[cb][chrom] = p
-    return dict(co_preds)
-
-
-def co_preds_to_json(output_fn, co_preds, chrom_sizes, bin_size, precision=2):
-    co_preds_json_serialisable = {}
-    for cb, cb_co_preds in co_preds.items():
-        d = {}
-        for chrom, pred in cb_co_preds.items():
-            d[chrom] = [round(float(p), precision) for p in pred]
-        co_preds_json_serialisable[cb] = d
-    with open(output_fn, 'w') as o:
-        return json.dump({
-            'cmd': ' '.join(sys.argv),
-            'bin_size': bin_size,
-            'chrom_sizes': chrom_sizes,
-            'data': co_preds_json_serialisable
-        }, fp=o)
-
-
-def load_co_preds_from_json(co_pred_json_fn):
-    with open(co_pred_json_fn) as f:
-        co_pred_json = json.load(f)
-    co_preds = {}
-    bin_size = co_pred_json['bin_size']
-    chrom_sizes = co_pred_json['chrom_sizes']
-    for cb, cb_co_pred in co_pred_json['data'].items():
-        for chrom, p in cb_co_pred.items():
-            cb_co_pred[chrom] = np.array(p)
-        co_preds[cb] = cb_co_pred
-    return co_preds, chrom_sizes, bin_size
-
+        for cb, p in zip(seen_barcodes, X_pred):
+            co_preds[cb, chrom] = p
+    return co_preds

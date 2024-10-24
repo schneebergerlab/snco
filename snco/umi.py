@@ -1,4 +1,4 @@
-from copy import copy, deepcopy
+from copy import deepcopy
 from collections import defaultdict
 import itertools as it
 

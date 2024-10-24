@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.ndimage import convolve1d
 
+from .records import MarkerRecords
 
 def predict_foreground_convolution(m, ws=100):
     rs = convolve1d(m, np.ones(ws), axis=0, mode='constant', cval=0)
@@ -15,8 +16,8 @@ def _estimate_marker_background(m, ws=100):
     return fg_masked
 
 
-def estimate_overall_background_signal(co_markers, bin_size, conv_window_size):
-    conv_bins = conv_window_size // bin_size
+def estimate_overall_background_signal(co_markers, conv_window_size):
+    conv_bins = conv_window_size // co_markers.bin_size
     bg_signal = {}
     frac_bg = {}
     for cb, cb_co_markers in co_markers.items():
@@ -29,7 +30,7 @@ def estimate_overall_background_signal(co_markers, bin_size, conv_window_size):
                 bg_signal[chrom] = bg
             else:
                 bg_signal[chrom] += bg
-            
+
             bg_count += bg.sum(axis=None)
             tot_count += m.sum(axis=None)
         frac_bg[cb] = bg_count / tot_count
@@ -38,7 +39,8 @@ def estimate_overall_background_signal(co_markers, bin_size, conv_window_size):
         chrom: sig / sig.sum(axis=None)
         for chrom, sig in bg_signal.items()
     }
-    
+    co_markers.metadata['background_signal'] = bg_signal
+    co_markers.metadata['estimated_background_fraction'] = frac_bg
     return bg_signal, frac_bg
 
 
@@ -56,52 +58,47 @@ def subtract_background(m, bg_signal, frac_bg, return_bg=False):
     m_sub = m - bg
     if not return_bg:
         return m_sub
-    else:
-        return m_sub, bg
+    return m_sub, bg
 
 
-def clean_marker_background(co_markers, bin_size, conv_filter_size):
-    bg_signal, frac_bg = estimate_overall_background_signal(co_markers, bin_size, conv_filter_size)
-    co_markers_c = {}
-    for cb, cb_co_markers in co_markers.items():
-        co_markers_c[cb] = {}
-        for chrom, m in cb_co_markers.items():
-            co_markers_c[cb][chrom] = subtract_background(m, bg_signal[chrom], frac_bg[cb])
+def clean_marker_background(co_markers, conv_filter_size):
+    bg_signal, frac_bg = estimate_overall_background_signal(co_markers, conv_filter_size)
+    co_markers_c = MarkerRecords.new_like(co_markers)
+    for cb, chrom, m in co_markers.deep_items():
+        co_markers_c[cb, chrom] = subtract_background(m, bg_signal[chrom], frac_bg[cb])
     return co_markers_c
 
 
 def create_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.9):
     tot_signal = {}
-    for cb, cb_co_markers in co_markers.items():
-        for chrom, m in cb_co_markers.items():
-            if chrom not in tot_signal:
-                tot_signal[chrom] = m
-            else:
-                tot_signal[chrom] += m
+    for _, chrom, m in co_markers.deep_items():
+        if chrom not in tot_signal:
+            tot_signal[chrom] = m.copy()
+        else:
+            tot_signal[chrom] += m
 
     imbalance_mask = {}
     for chrom, m in tot_signal.items():
-        ratio = m[:, 0] / m.sum(axis=1)
+        with np.errstate(invalid='ignore'):
+            bin_sum = m.sum(axis=1)
+            ratio = m[:, 0] / bin_sum
+        np.nan_to_num(ratio, nan=0.5, copy=False)
         mask = (ratio > max_imbalance_mask) | (ratio < (1 - max_imbalance_mask))
-        mask = np.tile(mask, 2).reshape(-1, 2)
-        imbalance_mask[chrom] = mask
+        imbalance_mask[chrom] = np.stack([mask, mask], axis=1)
+    co_markers.metadata['haplotype_imbalance_mask'] = imbalance_mask
     return imbalance_mask
 
 
 def apply_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.9):
     mask = create_haplotype_imbalance_mask(co_markers, max_imbalance_mask)
-    co_markers_m = {}
-    for cb, cb_co_markers in co_markers.items():
-        co_markers_m[cb] = {}
-        for chrom, m in cb_co_markers.items():
-            co_markers_m[cb][chrom] = np.where(mask[chrom], 0, m)
+    co_markers_m = MarkerRecords.new_like(co_markers)
+    for cb, chrom, m in co_markers.deep_items():
+        co_markers_m[cb, chrom] = np.where(mask[chrom], 0, m)
     return co_markers_m
 
 
 def apply_marker_threshold(co_markers, max_marker_threshold):
-    co_markers_t = {}
-    for cb, cb_co_markers in co_markers.items():
-        co_markers_t[cb] = {}
-        for chrom, m in cb_co_markers.items():
-            co_markers_t[cb][chrom] = np.minimum(m, max_marker_threshold)
+    co_markers_t = MarkerRecords.new_like(co_markers)
+    for cb, chrom, m in co_markers.deep_items():
+        co_markers_t[cb, chrom] = np.minimum(m, max_marker_threshold)
     return co_markers_t

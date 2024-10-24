@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
-
-from joblib import Parallel, delayed
+from scipy.ndimage import convolve1d
 
 
 def total_markers(cb_co_markers):
@@ -35,13 +34,14 @@ def uncertainty_score(cb_co_preds):
     for p in cb_co_preds.values():
         hu = np.abs(p - (p > 0.5))
         auc += np.trapz(hu).sum(axis=None)
-    return np.maximum(np.log10(auc), 0)
+    with np.errstate(divide='ignore'):
+        return np.maximum(np.log10(auc), 0)
 
 
 def coverage_score(cb_co_markers, max_score=10):
     cov = 0
     tot = 0
-    for chrom, m in cb_co_markers.items():
+    for m in cb_co_markers.values():
         idx, = np.nonzero(m.sum(axis=1))
         try:
             cov += idx[-1] - idx[0] + 1
@@ -52,7 +52,7 @@ def coverage_score(cb_co_markers, max_score=10):
 
 
 def mean_haplotype(cb_co_preds):
-    return np.concatenate([p for p in cb_co_preds.values()]).mean()
+    return np.concatenate(list(cb_co_preds.values())).mean()
 
 
 def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=1e-3, max_phred_score=10):
@@ -63,7 +63,7 @@ def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=1e-3, max_phred
             cb,
             total_markers(cb_co_markers),
             n_crossovers(cb_co_preds, min_co_prob=nco_min_prob),
-            accuracy_score(cb_co_markers, cb_co_preds, max_phred_score),
+            accuracy_score(cb_co_markers, cb_co_preds, max_score=max_phred_score),
             uncertainty_score(cb_co_preds),
             coverage_score(cb_co_markers),
             mean_haplotype(cb_co_preds)
@@ -86,30 +86,71 @@ def gt_haplotype_accuracy_score(cb_co_preds, cb_co_gt, thresholded=False, max_sc
         gt = cb_co_gt[chrom]
         dev += np.abs(p - gt).sum(axis=None)
         nbins += len(p)
-    return np.minimum(-np.log2(dev / nbins), max_score)
+    with np.errstate(divide='ignore'):
+        return np.minimum(-np.log2(dev / nbins), max_score)
 
 
-def calculate_score_metrics(co_preds, ground_truth, max_phred_score=10):
+def _co_score(p, gt, ws=40):
+    assert not ws % 2
+    filt = np.ones(ws) / ws
+    filt[: ws // 2] = np.negative(filt[: ws // 2])
+    gt_c = convolve1d((gt - 0.5) * 2, filt, mode='nearest')
+    p_c = convolve1d((p - 0.5) * 2, filt, mode='nearest')
+    return np.trapz(gt_c * p_c)
+
+
+def gt_co_score(cb_co_preds, cb_co_gt, window_size=40):
+    n_co = n_crossovers(cb_co_gt)
+    if not n_co:
+        return np.nan
+    co = 0
+    for chrom, p in cb_co_preds.items():
+        gt = cb_co_gt[chrom]
+        co += _co_score(p, gt, window_size)
+    return np.log10(np.maximum(co / n_co, 1))
+
+
+def _max_detectable_cos(m, gt):
+    co_idx = np.where(np.diff(gt))[0] + 1
+    m_seg = np.array_split(m, co_idx, axis=0)
+    seg_haps = gt[np.insert(co_idx, 0, 0)].astype(int)
+    supported_haps = []
+    for seg, h in zip(m_seg, seg_haps):
+        support = seg[:, h].sum()
+        if support:
+            supported_haps.append(h)
+    return len(np.where(np.diff(supported_haps))[0])
+
+
+def gt_max_detectable_cos(cb_co_markers, cb_co_gt):
+    dcos = 0
+    for chrom, m in cb_co_markers.items():
+        gt = cb_co_gt[chrom]
+        dcos += _max_detectable_cos(m, gt)
+    return dcos
+
+
+def calculate_score_metrics(co_markers, co_preds, ground_truth, max_phred_score=10):
     score_metrics = []
-    for sample_id_cb, cb_co_preds in co_preds.items():
-        sample_id, cb = sample_id_cb.split(':')
-        try:
-            cb_co_gt = ground_truth[sample_id]
-        except KeyError:
-            raise KeyError(f'Sample id "{sample_id}" not present in haplo-bed-fn')
+    for cb, cb_co_preds in co_preds.items():
+        cb_co_markers = co_markers[cb]
+        cb_co_gt = ground_truth[cb]
         score_metrics.append([
-            sample_id_cb,
-            sample_id,
-            n_crossovers(cb_co_gt),
-            gt_haplotype_accuracy_score(cb_co_preds, cb_co_gt),
-            gt_haplotype_accuracy_score(cb_co_preds, cb_co_gt, thresholded=True),
+            cb,
+            int(n_crossovers(cb_co_gt)),
+            gt_max_detectable_cos(cb_co_markers, cb_co_gt),
+            gt_haplotype_accuracy_score(cb_co_preds, cb_co_gt, max_score=max_phred_score),
+            gt_haplotype_accuracy_score(
+                cb_co_preds, cb_co_gt, thresholded=True, max_score=max_phred_score
+            ),
+            gt_co_score(cb_co_preds, cb_co_gt),
         ])
     score_metrics = pd.DataFrame(
         score_metrics,
-        columns=['cb', 'gt_sample_id', 'gt_n_crossovers', 'gt_accuracy_score', 'gt_thresholded_acc_score']
+        columns=['cb', 'gt_n_crossovers', 'gt_detectable_cos',
+                 'gt_accuracy_score', 'gt_thresholded_acc_score', 'gt_co_score']
     )
     return score_metrics
-
 
 
 def write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics=None, precision=3):
