@@ -21,6 +21,7 @@ def get_chrom_co_markers(bam_fn, chrom, **kwargs):
         for bin_idx in range(bam.nbins[chrom]):
             interval_counts = bam.fetch_interval_counts(chrom, bin_idx)
 
+            # todo: not all datasets need umi deduping, make optional
             interval_counts = {
                 cb: umi_dedup_hap(cb_interval_counts)
                 for cb, cb_interval_counts
