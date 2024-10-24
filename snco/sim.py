@@ -8,23 +8,32 @@ from .signal import estimate_overall_background_signal, subtract_background
 
 
 def co_invs_to_gt(co_invs, chrom_nbins):
+    '''
+    Convert intervals from a bed file representing haplotypes into a binary numpy array
+    '''
     gt = np.full(chrom_nbins, np.nan)
-    for _, inv in co_invs.iterrows():
-        gt[inv.start_bin: inv.end_bin] = inv.haplo
+
+    start_bin = np.ceil(co_invs.start.values / bin_size)
+    end_bin = np.ceil(co_invs.end.values / bin_size)
+    haplo = co_invs.haplo.values
+
+    for s, e, h in zip(start_bin, end_bin, haplo):
+        gt[s: e] = haplo
     if np.isnan(gt).any():
         raise ValueError('Supplied intervals in haplo-bed-fn do not completely cover chromosomes')
     return gt
 
 
 def read_ground_truth_haplotypes(co_invs_fn, chrom_sizes, bin_size=25_000):
-
+    '''
+    Read a bed file containing haplotype intervals from a ground truth dataset
+    and convert these into binned binary arrays, stored in PredictionRecords object
+    '''
     co_invs = pd.read_csv(
         co_invs_fn,
         sep='\t',
         names=['chrom', 'start', 'end', 'sample_id', 'haplo', 'strand']
     )
-    co_invs['start_bin'] = np.ceil(co_invs.start / bin_size)
-    co_invs['end_bin'] = np.ceil(co_invs.end / bin_size)
 
     gt = PredictionRecords(chrom_sizes, bin_size, set(co_invs.sample_id))
 
@@ -36,6 +45,11 @@ def read_ground_truth_haplotypes(co_invs_fn, chrom_sizes, bin_size=25_000):
 
 
 def apply_gt_to_markers(gt, m, bg_rate, bg_signal):
+    '''
+    For an array of markers from one chromosome of a cell barcode,
+    estimate the foreground and background signal and then apply the ground truth
+    haplotypes to create a simulated marker set for known crossovers
+    '''
     gt = gt.astype(int)
     s = len(m)
 
@@ -48,6 +62,8 @@ def apply_gt_to_markers(gt, m, bg_rate, bg_signal):
 
     sim = np.zeros(shape=(s, 2))
     idx = np.arange(s)
+
+    # apply fg at ground truth haplotype, and bg on other haplotype
     sim[idx, gt] = fg
     sim[idx, 1 - gt] = bg
 
@@ -56,11 +72,16 @@ def apply_gt_to_markers(gt, m, bg_rate, bg_signal):
 
 def generate_simulated_data(ground_truth, co_markers, conv_window_size=2_500_000,
                             bg_rate='auto', nsim_per_sample=100):
-
+    '''
+    For a set of crossover markers from real data, estimate the foreground 
+    and background signal for each, and then apply the ground truth
+    haplotypes to create a simulated marker set for known crossovers. 
+    These can be used for benchmarking.
+    '''
     bg, frac_bg = estimate_overall_background_signal(co_markers, conv_window_size)
     if bg_rate != 'auto':
         frac_bg = defaultdict(lambda: bg_rate)
-    
+
     # todo: simulate some doublets
 
     sim_co_markers = MarkerRecords.new_like(co_markers)
@@ -81,6 +102,9 @@ def generate_simulated_data(ground_truth, co_markers, conv_window_size=2_500_000
 
 
 def ground_truth_from_marker_records(co_markers):
+    '''
+    Extract ground truth information from a marker dataset into a new PredictionRecords object
+    '''
     ground_truth = PredictionRecords.new_like(co_markers)
     for cb, sd in co_markers.metadata['ground_truth'].items():
         for chrom, arr in sd.items():
