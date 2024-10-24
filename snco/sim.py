@@ -23,17 +23,13 @@ def read_ground_truth_haplotypes(co_invs_fn, chrom_sizes, bin_size=25_000):
         sep='\t',
         names=['chrom', 'start', 'end', 'sample_id', 'haplo', 'strand']
     )
-    co_invs['start_bin'] = co_invs.start // bin_size + (co_invs.start % bin_size).astype(bool)
-    co_invs['end_bin'] = co_invs.end // bin_size + (co_invs.end % bin_size).astype(bool)
-
-    nbins = {}
-    for chrom, cs in chrom_sizes.items():
-        nbins[chrom] = int(cs // bin_size + bool(cs % bin_size))
+    co_invs['start_bin'] = np.ceil(co_invs.start / bin_size)
+    co_invs['end_bin'] = np.ceil(co_invs.end / bin_size)
 
     gt = PredictionRecords(chrom_sizes, bin_size, set(co_invs.sample_id))
 
     for sample_id, sample_invs in co_invs.groupby('sample_id'):
-        for chrom, n in nbins.items():
+        for chrom, n in gt.nbins.items():
             chrom_invs = sample_invs.query('chrom == @chrom')
             gt[sample_id, chrom] = co_invs_to_gt(chrom_invs, n)
     return gt

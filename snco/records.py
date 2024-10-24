@@ -20,7 +20,7 @@ class BaseRecords:
         self._ndim = None
         self._dim2_shape = None
         self._init_val = None
-        self._nbins = {
+        self.nbins = {
             chrom: int(np.ceil(cs / bin_size)) for chrom, cs in chrom_sizes.items()
         }
         self._records = {}
@@ -36,9 +36,9 @@ class BaseRecords:
         if chrom not in self.chrom_sizes:
             raise KeyError('chrom not in supplied chrom_sizes')
         if self._ndim == 1:
-            shape = (self._nbins[chrom], )
+            shape = (self.nbins[chrom], )
         elif self._ndim == 2:
-            shape = (self._nbins[chrom], self._dim2_shape)
+            shape = (self.nbins[chrom], self._dim2_shape)
         else:
             raise NotImplementedError()
         return shape
@@ -219,7 +219,7 @@ class BaseRecords:
             'bin_size': self.bin_size,
             'chrom_sizes': self.chrom_sizes,
             'cb_whitelist': list(self.cb_whitelist) if self.cb_whitelist is not None else None,
-            'shape': self._nbins,
+            'shape': self.nbins,
             'data': self._records_to_json(self, precision),
             'metadata': self._metadata_to_json(self.metadata, precision)
         })
@@ -265,9 +265,9 @@ class MarkerRecords(BaseRecords):
 
     def _json_to_arr(self, obj, chrom):
         idx, val = obj
-        arr = np.zeros(shape=self._nbins[chrom] * 2, dtype=np.float64)
+        arr = np.zeros(shape=self.nbins[chrom] * 2, dtype=np.float64)
         arr[idx] = val
-        return arr.reshape(self._nbins[chrom], 2)
+        return arr.reshape(self.nbins[chrom], 2)
 
 
 class PredictionRecords(BaseRecords):
