@@ -7,7 +7,7 @@ from .records import MarkerRecords, PredictionRecords
 from .signal import estimate_overall_background_signal, subtract_background
 
 
-def co_invs_to_gt(co_invs, chrom_nbins):
+def co_invs_to_gt(co_invs, bin_size, chrom_nbins):
     '''
     Convert intervals from a bed file representing haplotypes into a binary numpy array
     '''
@@ -18,7 +18,7 @@ def co_invs_to_gt(co_invs, chrom_nbins):
     haplo = co_invs.haplo.values
 
     for s, e, h in zip(start_bin, end_bin, haplo):
-        gt[s: e] = haplo
+        gt[s: e] = h
     if np.isnan(gt).any():
         raise ValueError('Supplied intervals in haplo-bed-fn do not completely cover chromosomes')
     return gt
@@ -40,7 +40,7 @@ def read_ground_truth_haplotypes(co_invs_fn, chrom_sizes, bin_size=25_000):
     for sample_id, sample_invs in co_invs.groupby('sample_id'):
         for chrom, n in gt.nbins.items():
             chrom_invs = sample_invs.query('chrom == @chrom')
-            gt[sample_id, chrom] = co_invs_to_gt(chrom_invs, n)
+            gt[sample_id, chrom] = co_invs_to_gt(chrom_invs, bin_size, n)
     return gt
 
 

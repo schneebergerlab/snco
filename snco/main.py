@@ -137,8 +137,9 @@ def sim(json_fn, output_json_fn, haplo_bed_fn, cb_whitelist_fn, bin_size,
 @click_log.simple_verbosity_option(log)
 def concat(json_fn, output_json_fn, bin_size, cb_whitelist_fn):
     '''
-    Concatenate marker jsons
+    Not implemented, will concatenate marker jsons (avoiding CB collisions)
     '''
+    # todo
     raise NotImplementedError()
 
 
@@ -229,4 +230,8 @@ def stats(marker_json_fn, predict_json_fn, output_tsv_fn, cb_whitelist_fn, bin_s
 @click.argument('marker-json-fn', required=True, nargs=1)
 @click.argument('predict-json-fn', required=True, nargs=1)
 def plot(marker_json_fn, predict_json_fn):
+    '''
+    Not implemented, will provide plotting functionality
+    '''
+    # todo
     raise NotImplementedError()
