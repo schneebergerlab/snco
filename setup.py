@@ -20,9 +20,10 @@ setup(
         'numpy',
         'scipy',
         'pandas',
-        'pomegranate',
+        'pomegranate>=1.0',
         'click',
         'click-log',
+        'joblib',
         'pysam',
     ],
 )
