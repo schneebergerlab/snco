@@ -3,6 +3,7 @@ from copy import copy, deepcopy
 import json
 
 import numpy as np
+import pandas as pd
 
 
 class BaseRecords:
@@ -79,6 +80,7 @@ class BaseRecords:
             if (self._ndim == 2) and (len(arr_idx) == 2):
                 return m[arr_idx[0], arr_idx[1]]
             raise KeyError('Too many indices to array')
+        raise KeyError(index)
 
     def __setitem__(self, index, value):
         if isinstance(index, str):
@@ -287,3 +289,17 @@ class PredictionRecords(BaseRecords):
 
     def _json_to_arr(self, obj, chrom):
         return np.array(obj)
+
+    def to_frame(self):
+        frame = []
+        index = []
+        columns = pd.MultiIndex.from_tuples(
+            [(chrom, i * self.bin_size)
+             for chrom in self.chrom_sizes
+             for i in range(self.nbins[chrom])],
+            names=['chrom', 'pos']
+        )
+        for cb in self.seen_barcodes:
+            index.append(cb)
+            frame.append(np.concatenate([self[cb, chrom] for chrom in self.chrom_sizes]))
+        return pd.DataFrame(frame, index=index, columns=columns)
