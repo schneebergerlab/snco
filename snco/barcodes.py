@@ -44,15 +44,15 @@ class CellBarcodeWhitelist:
         if not all(ln == cb_len[0] for ln in cb_len):
             raise ValueError('Cell barcodes are not all the same length')
 
-    def check_barcode(self, cb):
+    def check_proper_barcode(self, cb):
         if not self.allow_ns and cb.count('N'):
             return False
         if not self.allow_homopolymers and len(set(cb)) == 1:
             return False
-        return self.whitelist is None or cb in self.whitelist
+        return True
 
     def __contains__(self, cb):
-        return self.check_barcode(cb)
+        return self.whitelist is None or cb in self.whitelist
 
     def _find_new_match(self, cb):
         matches = set()
@@ -60,7 +60,7 @@ class CellBarcodeWhitelist:
             if edit_dist(cb, cb_w) == 1:
                 matches.add(cb_w)
                 if len(matches) > 1:
-                    # barcode is within 1 edit of several barcodes, blacklist it
+                    # barcode is within 1 edit of several whitelist barcodes, blacklist it
                     self._blacklist.add(cb)
                     return None
         if matches:
@@ -74,6 +74,8 @@ class CellBarcodeWhitelist:
     def correct(self, cb):
         if cb in self:
             return cb
+        if not self.check_proper_barcode(cb):
+            return None
         if cb in self._blacklist:
             return None
         if self.correction_method == '1mm':

@@ -45,10 +45,10 @@ COMMON_OPTIONS = [
 @click.argument('bam-fn', required=True, nargs=1)
 @click.option('-o', '--output-json-fn', required=True, help='Output JSON file name.')
 @_common_options(COMMON_OPTIONS)
-@click.option('--cb-tag', required=False, default='CB',
-              help='tag representing cell barcode. Should be string type.')
 @click.option('--cb-correction-method', required=False, default='exact',
               type=click.Choice(['exact', '1mm']))
+@click.option('--cb-tag', required=False, default='CB',
+              help='tag representing cell barcode. Should be string type.')
 @click.option('--umi-tag', required=False, default='UB',
               help=('tag representing UMI. '
                     'Should be string type '
