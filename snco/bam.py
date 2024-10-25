@@ -52,11 +52,6 @@ class BAMHaplotypeIntervalReader:
         for chrom, cs in self.chrom_sizes.items():
             self.nbins[chrom] = int(np.ceil(cs / self.bin_size))
 
-    def _barcode_check(self, cb):
-        if self._has_cb_checker:
-            return cb in self.cell_barcode_whitelist
-        return True
-
     def fetch_interval_counts(self, chrom, bin_idx):
         assert bin_idx < self.nbins[chrom]
         bin_start = self.bin_size * bin_idx

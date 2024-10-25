@@ -1,4 +1,3 @@
-import itertools as it
 from functools import reduce
 from joblib import Parallel, delayed
 

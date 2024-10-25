@@ -63,32 +63,32 @@ class CellBarcodeWhitelist:
                     # barcode is within 1 edit of several barcodes, blacklist it
                     self._blacklist.add(cb)
                     return None
+        if matches:
+            assert len(matches) == 1
+            cb_m = matches.pop()
+            self._mapping[cb] = cb_m
+            return cb_m
         else:
-            if len(matches):
-                assert len(matches) == 1
-                cb_m = matches.pop()
-                self._mapping[cb] = cb_m
-                return cb_m
-            else:
-                return None
+            return None
 
     def correct(self, cb):
         if cb in self:
             return cb
-        elif cb in self._blacklist:
+        if cb in self._blacklist:
             return None
-        elif self.correction_method == '1mm':
+        if self.correction_method == '1mm':
             try:
                 return self._mapping[cb]
             except KeyError as e:
                 cb_m = self._find_new_match(cb)
                 return cb_m
-        else:
-            return None
+        return None
 
     def __getitem__(self, idx):
         if not isinstance(idx, (int, np.integer, slice)):
-            raise KeyError(f'CellBarcodeWhitelist indices must be integers or slices, not {type(idx)}')
+            raise KeyError(
+                f'CellBarcodeWhitelist indices must be integers or slices, not {type(idx)}'
+            )
         return self.whitelist_ordered[idx]
 
     def toset(self):

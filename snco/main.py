@@ -46,8 +46,8 @@ COMMON_OPTIONS = [
 @click.option('-o', '--output-json-fn', required=True, help='Output JSON file name.')
 @_common_options(COMMON_OPTIONS)
 @click.option('--cb-tag', required=False, default='CB',
-              help=('tag representing cell barcode. Should be string type.'))
-@click.option('--cb-correction-method', required=False, default='exact', 
+              help='tag representing cell barcode. Should be string type.')
+@click.option('--cb-correction-method', required=False, default='exact',
               type=click.Choice(['exact', '1mm']))
 @click.option('--umi-tag', required=False, default='UB',
               help=('tag representing UMI. '
@@ -114,7 +114,7 @@ def _common_json_load(json_fn, cb_whitelist_fn, bin_size, data_type=MarkerRecord
                          'please modify cli option or rerun snco load')
     if cb_whitelist_fn:
         cb_whitelist = read_cb_whitelist(cb_whitelist_fn).toset()
-        co_markers.set_cb_whitelist(cell_barcode_whitelist)
+        co_markers.set_cb_whitelist(cb_whitelist)
         if not co_markers:
             raise ValueError('No CBs from --cb-whitelist-fn are present in json-fn')
     return co_markers
