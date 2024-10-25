@@ -153,17 +153,18 @@ class RigidHMM:
 
 def create_rhmm(co_markers, cm_per_mb=4.5,
                 segment_size=1_000_000, terminal_segment_size=50_000,
-                model_lambdas='auto'):
+                model_lambdas=None):
     bin_size = co_markers.bin_size
     rfactor = segment_size // bin_size
     term_rfactor = terminal_segment_size // bin_size
     trans_prob = cm_per_mb * (bin_size / 1e8)
     rhmm = RigidHMM(rfactor, term_rfactor, trans_prob)
-    if model_lambdas == 'auto':
+    if model_lambdas is None:
         X = list(co_markers.deep_values())
         rhmm.fit(X)
     else:
-        rhmm.initialise_model(*model_lambdas)
+        bg_lambda, fg_lambda = sorted(model_lambdas)
+        rhmm.initialise_model(fg_lambda, bg_lambda)
     return rhmm
 
 

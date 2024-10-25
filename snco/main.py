@@ -67,7 +67,6 @@ def loadbam(bam_fns, output_json_fn, cb_whitelist_fn, bin_size,
     These can be used to call recombinations using the downstream `predict` command.
     '''
 
-    # todo: implement version from cell-snplite VCFs
     if cb_whitelist_fn:
         cell_barcode_whitelist = set(read_cb_whitelist(cb_whitelist_fn))
     else:
@@ -96,7 +95,6 @@ def loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, cb_whitelist_fn, b
     call recombinations using the downstream `predict` command.
     '''
 
-    # todo: implement version from cell-snplite VCFs
     if cb_whitelist_fn:
         cell_barcode_whitelist = set(read_cb_whitelist(cb_whitelist_fn))
     else:
@@ -205,11 +203,12 @@ def clean(json_fn, output_json_fn, cb_whitelist_fn, bin_size,
 @click.option('-t', '--terminal-segment-size', required=False, default=50_000)
 @click.option('-c', '--cm-per-mb', required=False, default=4.5)
 @click.option('--output-precision', required=False, default=2)
+@click.option('--model-lambdas', required=False, default=None, type=(float, float))
 @click.option('--processes', required=False, default=1)
 @click_log.simple_verbosity_option(log)
 def predict(json_fn, output_json_fn, cb_whitelist_fn, bin_size,
             segment_size, terminal_segment_size, cm_per_mb,
-            output_precision, processes):
+            model_lambdas, output_precision, processes):
     '''
     Uses rigid hidden Markov model to predict the haplotypes of each cell barcode
     at each genomic bin.
@@ -220,7 +219,7 @@ def predict(json_fn, output_json_fn, cb_whitelist_fn, bin_size,
         cm_per_mb=cm_per_mb,
         segment_size=segment_size,
         terminal_segment_size=terminal_segment_size,
-        model_lambdas='auto' # todo, implement cli option with proper type checking
+        model_lambdas=model_lambdas
     )
     co_preds = detect_crossovers(co_markers, rhmm, processes=processes)
     co_preds.write_json(output_json_fn, output_precision)
