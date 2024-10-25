@@ -39,7 +39,7 @@ def single_chrom_co_markers(bam_fn, chrom, **kwargs):
 
 
 def get_co_markers(bam_fn, processes=1, **kwargs):
-    chrom_sizes = get_chrom_sizes_bam(bam_fn)
+    chrom_sizes = get_chrom_sizes_bam(bam_fn, exclude_contigs=kwargs.get('exclude_contigs', None))
     with Parallel(n_jobs=min(processes, len(chrom_sizes)), backend='loky') as pool:
         co_markers = pool(
             delayed(single_chrom_co_markers)(bam_fn, chrom, **kwargs)

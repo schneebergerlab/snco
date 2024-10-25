@@ -3,15 +3,21 @@ from collections import defaultdict, Counter
 import numpy as np
 import pysam
 
-ORGANELLAR_CONTIGS = set(['ChrM', 'ChrC'])
 
-def get_chrom_sizes_bam(bam_fn, organellar_contigs=None):
-    if organellar_contigs is None:
-        organellar_contigs = ORGANELLAR_CONTIGS
+DEFAULT_EXCLUDE_CONTIGS = set([
+    'ChrM', 'ChrC', 'chrC', 'chrM', 'M', 'C', 'Mt', 'Pt',
+    'Mitochondrial', 'mitochondrial', 'mito',
+    'Chloroplast', 'chloroplast', 'plastid',
+])
+
+
+def get_chrom_sizes_bam(bam_fn, exclude_contigs=None):
+    if exclude_contigs is None:
+        exclude_contigs = DEFAULT_EXCLUDE_CONTIGS
     with pysam.AlignmentFile(bam_fn) as bam:
         chrom_sizes = {k: bam.get_reference_length(k)
                        for k in bam.references
-                       if k not in organellar_contigs}
+                       if k not in exclude_contigs}
     return chrom_sizes
 
 
@@ -23,16 +29,16 @@ class BAMHaplotypeIntervalReader:
                  umi_tag='UB',
                  hap_tag='ha',
                  cb_whitelist=None,
-                 organellar_contigs=None):
+                 exclude_contigs=None):
         self._bam_fn = bam_fn
         self.bin_size = bin_size
         self._cb_tag = cb_tag
         self._umi_tag = umi_tag
         self._hap_tag = hap_tag
         self.cb_whitelist = cb_whitelist
-        if organellar_contigs is None:
-            organellar_contigs = ORGANELLAR_CONTIGS
-        self.organellar_contigs = organellar_contigs
+        if exclude_contigs is None:
+            exclude_contigs = DEFAULT_EXCLUDE_CONTIGS
+        self.exclude_contigs = exclude_contigs
         self._open()
 
     def _open(self):
@@ -41,7 +47,7 @@ class BAMHaplotypeIntervalReader:
 
         self.chrom_sizes = {k: self.bam.get_reference_length(k)
                             for k in self.bam.references
-                            if k not in self.organellar_contigs}
+                            if k not in self.exclude_contigs}
         self.nbins = {}
         for chrom, cs in self.chrom_sizes.items():
             self.nbins[chrom] = int(np.ceil(cs / self.bin_size))
@@ -56,6 +62,7 @@ class BAMHaplotypeIntervalReader:
         bin_start = self.bin_size * bin_idx
         bin_end = bin_start + self.bin_size - 1
 
+        # todo: maybe a dataclass to make this neater?
         interval_counts = defaultdict(lambda: defaultdict(Counter))
 
         for aln in self.bam.fetch(chrom, bin_start, bin_end):

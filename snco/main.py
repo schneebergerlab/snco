@@ -47,7 +47,8 @@ COMMON_OPTIONS = [
 @_common_options(COMMON_OPTIONS)
 @click.option('--cb-tag', required=False, default='CB',
               help=('tag representing cell barcode. Should be string type.'))
-@click.option('--cb-correction-method', required=False, default='exact', type=click.Choice(['exact', '1mm']))
+@click.option('--cb-correction-method', required=False, default='exact', 
+              type=click.Choice(['exact', '1mm']))
 @click.option('--umi-tag', required=False, default='UB',
               help=('tag representing UMI. '
                     'Should be string type '
@@ -56,16 +57,20 @@ COMMON_OPTIONS = [
               help=('tag representing haplotype. '
                     'Should be integer type (1: hap1, 2: hap2, 0: both hap1 and hap2) '
                     'as described in STAR diploid documentation.'))
+@click.option('-e', '--exclude-contigs', required=False, default=None, type=str,
+              callback=lambda ctx, param, val: set(val.split(',')) if val is not None else None,
+              help=('comma separated list of contigs to exclude. '
+                    'Default is a set of common organellar contig names'))
 @click.option('--processes', required=False, default=1)
 @click_log.simple_verbosity_option(log)
 def loadbam(bam_fn, output_json_fn, cb_whitelist_fn, bin_size,
-            cb_tag, cb_correction_method, umi_tag, hap_tag, processes):
+            cb_tag, cb_correction_method, umi_tag, hap_tag,
+            exclude_contigs, processes):
     '''
     Read bam file with cell barcode, umi and haplotype tags (aligned with STAR solo+diploid), 
     to generate a json file of binned haplotype marker distributions for each cell barcode. 
     These can be used to call recombinations using the downstream `predict` command.
     '''
-
     cb_whitelist = read_cb_whitelist(cb_whitelist_fn, cb_correction_method)
     co_markers = get_co_markers(
         bam_fn, processes=processes,
@@ -74,6 +79,7 @@ def loadbam(bam_fn, output_json_fn, cb_whitelist_fn, bin_size,
         umi_tag=umi_tag,
         hap_tag=hap_tag,
         cb_whitelist=cb_whitelist,
+        exclude_contigs=exclude_contigs,
     )
     co_markers.write_json(output_json_fn)
 
