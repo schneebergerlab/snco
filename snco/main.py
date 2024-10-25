@@ -46,26 +46,35 @@ COMMON_OPTIONS = [
 @click.option('-o', '--output-json-fn', required=True, help='Output JSON file name.')
 @_common_options(COMMON_OPTIONS)
 @click.option('--cb-correction-method', required=False, default='exact',
-              type=click.Choice(['exact', '1mm']))
+              type=click.Choice(['exact', '1mm'], case_sensitive=False),
+              help=('Method for correcting/matching cell barcodes to whitelist. exact uses '
+                    'exact matching (or keeps all barcodes when no whitelist is provided), '
+                    '1mm allows an edit distance of 1 to one unique whitelisted barcode'))
 @click.option('--cb-tag', required=False, default='CB',
-              help='tag representing cell barcode. Should be string type.')
+              help='bam file tag representing cell barcode. Should be string type.')
+@click.option('--umi-collapse-method', required=False, default='directional',
+              type=click.Choice(['exact', 'directional', 'none'], case_sensitive=False),
+              callback=lambda c, p, v: None if v == 'none' else v,
+              help=('Method for deduplicating/collapsing UMIs. '
+                    'exact uses exact matching, directional uses UMItools directional method'))
 @click.option('--umi-tag', required=False, default='UB',
-              help=('tag representing UMI. '
-                    'Should be string type '
+              callback=lambda c, p, v: None if c.params['umi_collapse_method'] is None else v,
+              help=('bam file tag representing UMI. Should be string type '
                     'These will be corrected using the directional method and deduplicated.'))
 @click.option('--hap-tag', required=False, default='ha',
-              help=('tag representing haplotype. '
+              help=('bam file tag representing haplotype. '
                     'Should be integer type (1: hap1, 2: hap2, 0: both hap1 and hap2) '
                     'as described in STAR diploid documentation.'))
 @click.option('-e', '--exclude-contigs', required=False, default=None, type=str,
-              callback=lambda ctx, param, val: set(val.split(',')) if val is not None else None,
+              callback=lambda c, p, v: set(v.split(',')) if v is not None else None,
               help=('comma separated list of contigs to exclude. '
                     'Default is a set of common organellar contig names'))
 @click.option('--processes', required=False, default=1)
 @click_log.simple_verbosity_option(log)
 def loadbam(bam_fn, output_json_fn, cb_whitelist_fn, bin_size,
-            cb_tag, cb_correction_method, umi_tag, hap_tag,
-            exclude_contigs, processes):
+            cb_tag, cb_correction_method,
+            umi_tag, umi_collapse_method,
+            hap_tag, exclude_contigs, processes):
     '''
     Read bam file with cell barcode, umi and haplotype tags (aligned with STAR solo+diploid), 
     to generate a json file of binned haplotype marker distributions for each cell barcode. 
@@ -77,6 +86,7 @@ def loadbam(bam_fn, output_json_fn, cb_whitelist_fn, bin_size,
         bin_size=bin_size,
         cb_tag=cb_tag,
         umi_tag=umi_tag,
+        umi_collapse_method=umi_collapse_method,
         hap_tag=hap_tag,
         cb_whitelist=cb_whitelist,
         exclude_contigs=exclude_contigs,

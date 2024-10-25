@@ -1,7 +1,11 @@
-from collections import defaultdict, Counter
+from collections import Counter
+from dataclasses import dataclass, field
+from operator import methodcaller
 
 import numpy as np
 import pysam
+
+from .barcodes import umi_dedup_directional
 
 
 DEFAULT_EXCLUDE_CONTIGS = set([
@@ -21,6 +25,73 @@ def get_chrom_sizes_bam(bam_fn, exclude_contigs=None):
     return chrom_sizes
 
 
+@dataclass
+class IntervalCountsDeduped:
+    chrom: str
+    bin_idx: int
+    counts: dict = field(default_factory=dict)
+
+    def __getitem__(self, index):
+        return self.counts[index]
+
+    def __setitem__(self, index, val):
+        self.counts[index] = val
+
+    def deep_items(self):
+        for cb, hap_counts in self.counts.items():
+            for hap, val in hap_counts.items():
+                yield cb, hap, val
+
+
+class IntervalCounts:
+
+    def __init__(self, chrom, bin_idx, umi_collapse_method):
+        self.chrom = chrom
+        self.bin_idx = bin_idx
+        self.umi_collapse_method = umi_collapse_method
+        self.has_umi = umi_collapse_method is not None
+        self._counts = {}
+
+    def __getitem__(self, index):
+        if isinstance(index, str):
+            if index not in self._counts:
+                self._counts[index] = {}
+            return self._counts[index]
+        if len(index) == 2:
+            cb, hap = index
+            cb_counts = self[cb]
+            if hap not in cb_counts:
+                cb_counts[hap] = Counter()
+            return cb_counts[hap]
+        if len(index) == 3:
+            cb, hap, umi = index
+            hap_counts = self[cb, hap]
+            return hap_counts[umi]
+        raise KeyError(index)
+
+    def __setitem__(self, index, val):
+        if isinstance(index, tuple) and len(index) == 3:
+            cb, hap, umi = index
+            hap_counts = self[cb, hap]
+            hap_counts[umi] = val
+        else:
+            raise NotImplementedError(f'Cannot set item with key {index}')
+
+    def __iter__(self):
+        return iter(self._counts)
+
+    def collapse(self):
+        collapsed = IntervalCountsDeduped(self.chrom, self.bin_idx)
+        umi_eval = methodcaller('total') if self.umi_collapse_method is None else len
+        for cb in self:
+            if self.umi_collapse_method == 'directional':
+                deduped = umi_dedup_directional(self[cb])
+            else:
+                deduped = self[cb]
+            collapsed[cb] = {hap: umi_eval(umis) for hap, umis in deduped.items()}
+        return collapsed
+
+
 class BAMHaplotypeIntervalReader:
 
     def __init__(self, bam_fn, *,
@@ -29,6 +100,7 @@ class BAMHaplotypeIntervalReader:
                  umi_tag='UB',
                  hap_tag='ha',
                  cb_whitelist=None,
+                 umi_collapse_method='directional',
                  exclude_contigs=None):
         self._bam_fn = bam_fn
         self.bin_size = bin_size
@@ -36,6 +108,7 @@ class BAMHaplotypeIntervalReader:
         self._umi_tag = umi_tag
         self._hap_tag = hap_tag
         self.cb_whitelist = cb_whitelist
+        self.umi_collapse_method = umi_collapse_method
         if exclude_contigs is None:
             exclude_contigs = DEFAULT_EXCLUDE_CONTIGS
         self.exclude_contigs = exclude_contigs
@@ -57,8 +130,7 @@ class BAMHaplotypeIntervalReader:
         bin_start = self.bin_size * bin_idx
         bin_end = bin_start + self.bin_size - 1
 
-        # todo: maybe a dataclass to make this neater?
-        interval_counts = defaultdict(lambda: defaultdict(Counter))
+        interval_counts = IntervalCounts(chrom, bin_idx, self.umi_collapse_method)
 
         for aln in self.bam.fetch(chrom, bin_start, bin_end):
 
@@ -72,8 +144,11 @@ class BAMHaplotypeIntervalReader:
                     continue
 
             # only keep alignments that unambiguously tag one of the haplotypes
-            hap = aln.get_tag(self._hap_tag)
-            if not hap:
+            try:
+                hap = aln.get_tag(self._hap_tag) - 1
+            except KeyError:
+                raise IOError(f'bam records do not all have the haplotype tag "{self._hap_tag}"')
+            if hap == -1:
                 continue
 
             # only consider reads where the left mapping position is within the bin,
@@ -82,17 +157,26 @@ class BAMHaplotypeIntervalReader:
                 continue
 
             # finally filter for barcodes in the whitelist
-            cb = aln.get_tag(self._cb_tag)
+            try:
+                cb = aln.get_tag(self._cb_tag)
+            except KeyError:
+                raise IOError(f'bam records do not all have the cell barcode tag "{self._cb_tag}"')
             cb = self.cb_whitelist.correct(cb)
 
             if cb is not None:
                 if self._umi_tag is not None:
-                    umi = aln.get_tag(self._umi_tag)
+                    try:
+                        umi = aln.get_tag(self._umi_tag)
+                    except KeyError:
+                        raise IOError(
+                            f'bam records do not all have the UMI tag "{self._umi_tag}". '
+                            'Maybe you meant to run without UMI deduplication?'
+                        )
                 else:
                     umi = None
-                interval_counts[cb][umi][hap] += 1
+                interval_counts[cb, hap, umi] += 1
 
-        return interval_counts
+        return interval_counts.collapse()
 
     def __enter__(self):
         return self

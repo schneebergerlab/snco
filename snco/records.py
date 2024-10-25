@@ -5,6 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 
+from .bam import IntervalCountsDeduped
 
 class BaseRecords:
 
@@ -172,15 +173,23 @@ class BaseRecords:
 
         if not inplace:
             return s
-        return None
+
+    def update(self, interval_counts):
+        chrom, bin_idx = interval_counts.chrom, interval_counts.bin_idx
+        for cb, hap, val in interval_counts.deep_items():
+            self[cb, chrom, bin_idx, hap] += val
+        return self
 
     def __add__(self, other):
-        return self.merge(other, inplace=False)
-
-    def _arr_to_json(self, arr, precision):
+        if isinstance(other, BaseRecords):
+            return self.merge(other, inplace=False)
         raise NotImplementedError()
 
-    def _json_to_arr(self, obj, chrom):
+    def __iadd__(self, other):
+        if isinstance(other, BaseRecords):
+            return self.merge(other, inplace=True)
+        if isinstance(other, IntervalCountsDeduped):
+            return self.update(other)
         raise NotImplementedError()
 
     @classmethod
@@ -214,6 +223,12 @@ class BaseRecords:
         else:
             raise NotImplementedError(f'json serialisation not implemented for type: {type(obj)}')
         return json_serialisable
+
+    def _arr_to_json(self, arr, precision=0):
+        raise NotImplementedError()
+
+    def _json_to_arr(self, obj, chrom):
+        raise NotImplementedError()
 
     def to_json(self, precision: int = 2):
         return json.dumps({

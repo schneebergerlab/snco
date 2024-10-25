@@ -20,6 +20,7 @@ setup(
         'numpy',
         'scipy',
         'pandas',
+        'torch',
         'pomegranate>=1.0',
         'click',
         'click-log',

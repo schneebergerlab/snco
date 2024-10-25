@@ -1,5 +1,7 @@
 from copy import copy, deepcopy
 from collections import defaultdict
+from functools import reduce
+from operator import add
 import itertools as it
 
 import numpy as np
@@ -68,8 +70,7 @@ class CellBarcodeWhitelist:
             cb_m = matches.pop()
             self._mapping[cb] = cb_m
             return cb_m
-        else:
-            return None
+        return None
 
     def correct(self, cb):
         if cb in self:
@@ -81,7 +82,7 @@ class CellBarcodeWhitelist:
         if self.correction_method == '1mm':
             try:
                 return self._mapping[cb]
-            except KeyError as e:
+            except KeyError:
                 cb_m = self._find_new_match(cb)
                 return cb_m
         return None
@@ -113,7 +114,7 @@ def read_cb_whitelist(barcode_fn, cb_correction_method='exact'):
     return CellBarcodeWhitelist(cb_whitelist, cb_correction_method)
 
 
-def umi_dedup_hap(umi_counts):
+def umi_dedup_directional(hap_umi_counts):
     '''
     Deduplicate UMIs using the directional method (UMItools)
     for a collection of UMIs aligning to the same gene/genomic bin,
@@ -121,8 +122,8 @@ def umi_dedup_hap(umi_counts):
     
     Parameters
     ----------
-    umi_counts : dict of dict of int
-        Dictionary of UMI:hap:count information
+    umi_counts : dict of Counter
+        Dictionary of hap:UMI:count information
 
     Returns
     -------
@@ -130,19 +131,21 @@ def umi_dedup_hap(umi_counts):
         Dictionary of deduplicated UMI:hap:count information
     '''
     edges = defaultdict(set)
-    nodes = sorted(umi_counts, key=lambda k: sum(umi_counts[k].values()), reverse=True)
+    umi_counts = reduce(add, hap_umi_counts.values())
+    nodes = sorted(umi_counts, key=umi_counts.__getitem__, reverse=True)
     for umi_i, umi_j in it.combinations(nodes, r=2):
         if edit_dist(umi_i, umi_j) <= 1:
-            umi_i_count = sum(umi_counts[umi_i].values())
-            umi_j_count = sum(umi_counts[umi_j].values())
+            umi_i_count = umi_counts[umi_i]
+            umi_j_count = umi_counts[umi_j]
             if umi_i_count >= (2 * umi_j_count + 1):
                 edges[umi_i].add(umi_j)
-    deduped_umi_counts = deepcopy(umi_counts)
-    for parent in nodes:
-        for child in edges[parent]:
-            try:
-                deduped_umi_counts[parent].update(deduped_umi_counts.pop(child))
-            except KeyError:
-                # umi already merged to a different parent
-                continue
-    return deduped_umi_counts
+    deduped = deepcopy(hap_umi_counts)
+    for umi_counts in deduped.values():
+        for parent in nodes:
+            for child in edges[parent]:
+                try:
+                    umi_counts[parent] += umi_counts.pop(child)
+                except KeyError:
+                    # umi already merged to a different parent
+                    continue
+    return deduped
