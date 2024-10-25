@@ -13,8 +13,8 @@ def co_invs_to_gt(co_invs, bin_size, chrom_nbins):
     '''
     gt = np.full(chrom_nbins, np.nan)
 
-    start_bin = np.ceil(co_invs.start.values / bin_size)
-    end_bin = np.ceil(co_invs.end.values / bin_size)
+    start_bin = np.ceil(co_invs.start.values / bin_size).astype(int)
+    end_bin = np.ceil(co_invs.end.values / bin_size).astype(int)
     haplo = co_invs.haplo.values
 
     for s, e, h in zip(start_bin, end_bin, haplo):

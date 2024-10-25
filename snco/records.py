@@ -45,6 +45,7 @@ class BaseRecords:
         return shape
 
     def _new_arr(self, chrom: str):
+        # todo: implement sparse form
         return np.full(self._get_arr_shape(chrom), self._init_val, dtype=np.float64)
 
     def _check_arr(self, arr: np.ndarray, chrom: str):

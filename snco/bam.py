@@ -17,11 +17,12 @@ def get_chrom_sizes_bam(bam_fn, organellar_contigs=None):
 
 def read_cb_whitelist(barcode_fn):
     '''
-    Read a text file of cell barcodes and return them as a list
+    Read a text file of cell barcodes and return them as a list.
+    In a multi-column file, barcode must be the first column
     '''
     with open(barcode_fn) as f:
         cb_whitelist = [cb.strip().split('\t')[0] for cb in f.readlines()]
-    return set(cb_whitelist)
+    return cb_whitelist
 
 
 class BAMHaplotypeIntervalReader:
@@ -60,7 +61,7 @@ class BAMHaplotypeIntervalReader:
                             if k not in self.organellar_contigs}
         self.nbins = {}
         for chrom, cs in self.chrom_sizes.items():
-            self.nbins[chrom] = int(cs // self.bin_size + bool(cs % self.bin_size))
+            self.nbins[chrom] = int(np.ceil(cs / self.bin_size))
 
     def _barcode_check(self, cb):
         if self._has_cb_checker:
