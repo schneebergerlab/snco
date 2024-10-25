@@ -15,7 +15,7 @@ class BaseRecords:
                  metadata: dict | None = None):
         self.chrom_sizes = chrom_sizes
         self.bin_size = bin_size
-        self.cb_whitelist = set(cb_whitelist) if cb_whitelist is not None else None
+        self.cb_whitelist = cb_whitelist
         self.metadata = metadata if metadata is not None else {}
         self._cmd = []
         self._ndim = None
@@ -144,7 +144,7 @@ class BaseRecords:
         new_instance = cls(
             copy(other.chrom_sizes),
             other.bin_size,
-            copy(other.cb_whitelist),
+            deepcopy(other.cb_whitelist),
             deepcopy(other.metadata)
         )
         new_instance._cmd = other._cmd

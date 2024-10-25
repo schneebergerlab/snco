@@ -5,7 +5,6 @@ import pysam
 
 ORGANELLAR_CONTIGS = set(['ChrM', 'ChrC'])
 
-
 def get_chrom_sizes_bam(bam_fn, organellar_contigs=None):
     if organellar_contigs is None:
         organellar_contigs = ORGANELLAR_CONTIGS
@@ -16,38 +15,21 @@ def get_chrom_sizes_bam(bam_fn, organellar_contigs=None):
     return chrom_sizes
 
 
-def read_cb_whitelist(barcode_fn):
-    '''
-    Read a text file of cell barcodes and return them as a list.
-    In a multi-column file, barcode must be the first column
-    '''
-    with open(barcode_fn) as f:
-        cb_whitelist = [cb.strip().split('\t')[0] for cb in f.readlines()]
-    return cb_whitelist
-
-
 class BAMHaplotypeIntervalReader:
 
     def __init__(self, bam_fn, *,
                  bin_size=25_000,
-                 cb_suffix=None,
                  cb_tag='CB',
                  umi_tag='UB',
                  hap_tag='ha',
-                 cell_barcode_whitelist=None,
+                 cb_whitelist=None,
                  organellar_contigs=None):
         self._bam_fn = bam_fn
         self.bin_size = bin_size
-        self._cb_suffix = cb_suffix
         self._cb_tag = cb_tag
         self._umi_tag = umi_tag
         self._hap_tag = hap_tag
-        self._has_cb_checker = cell_barcode_whitelist is not None
-        if self._has_cb_checker and cb_suffix:
-            cell_barcode_whitelist = [
-                f'{cb}_{cb_suffix}' for cb in cell_barcode_whitelist
-            ]
-        self.cell_barcode_whitelist = set(cell_barcode_whitelist)
+        self.cb_whitelist = cb_whitelist
         if organellar_contigs is None:
             organellar_contigs = ORGANELLAR_CONTIGS
         self.organellar_contigs = organellar_contigs
@@ -99,10 +81,9 @@ class BAMHaplotypeIntervalReader:
 
             # finally filter for barcodes in the whitelist
             cb = aln.get_tag(self._cb_tag)
-            if self._cb_suffix is not None:
-                cb = f'{cb}_{self._cb_suffix}'
+            cb = self.cb_whitelist.correct(cb)
 
-            if self._barcode_check(cb):
+            if cb is not None:
                 if self._umi_tag is not None:
                     umi = aln.get_tag(self._umi_tag)
                 else:

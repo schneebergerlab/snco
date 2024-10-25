@@ -1,9 +1,8 @@
 import os
-import numpy as np
 from scipy.io import mmread
 import pysam
 
-from .bam import read_cb_whitelist
+from .barcodes import read_cb_whitelist
 from .records import MarkerRecords
 
 
@@ -24,7 +23,7 @@ def read_vcf(vcf_fn, bin_size):
         return variants
 
 
-def parse_cellsnp_lite(csl_dir, chrom_sizes_fn, bin_size, cell_barcode_whitelist=None):
+def parse_cellsnp_lite(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist=None):
     dep_fn = os.path.join(csl_dir, 'cellSNP.tag.DP.mtx')
     alt_fn = os.path.join(csl_dir, 'cellSNP.tag.AD.mtx')
     vcf_fn = os.path.join(csl_dir, 'cellSNP.base.vcf')
@@ -36,13 +35,14 @@ def parse_cellsnp_lite(csl_dir, chrom_sizes_fn, bin_size, cell_barcode_whitelist
     barcodes = read_cb_whitelist(barcode_fn)
     variants = read_vcf(vcf_fn, bin_size)
 
-    co_markers = MarkerRecords(chrom_sizes, bin_size, cell_barcode_whitelist)
+    co_markers = MarkerRecords(chrom_sizes, bin_size, cb_whitelist)
 
     for cb_idx, var_idx, tot in zip(dep_mm.col, dep_mm.row, dep_mm.data):
-        alt = alt_mm[var_idx, cb_idx]
-        ref = tot - alt
         cb = barcodes[cb_idx]
-        chrom, bin_idx = variants[var_idx]
-        co_markers[cb, chrom, bin_idx, 0] += ref
-        co_markers[cb, chrom, bin_idx, 1] += alt
+        if cb in cb_whitelist:
+            alt = alt_mm[var_idx, cb_idx]
+            ref = tot - alt
+            chrom, bin_idx = variants[var_idx]
+            co_markers[cb, chrom, bin_idx, 0] += ref
+            co_markers[cb, chrom, bin_idx, 1] += alt
     return co_markers

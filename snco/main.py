@@ -3,7 +3,7 @@ import logging
 import click
 import click_log
 
-from .bam import read_cb_whitelist
+from .barcodes import read_cb_whitelist
 from .csl import parse_cellsnp_lite
 from .records import MarkerRecords, PredictionRecords
 from .markers import get_co_markers
@@ -42,13 +42,12 @@ COMMON_OPTIONS = [
 
 
 @main.command()
-@click.argument('bam-fns', required=True, nargs=-1)
+@click.argument('bam-fn', required=True, nargs=1)
 @click.option('-o', '--output-json-fn', required=True, help='Output JSON file name.')
 @_common_options(COMMON_OPTIONS)
 @click.option('--cb-tag', required=False, default='CB',
-              help=('tag representing cell barcode. '
-                    'Should be string type. '
-                    'These are currently not corrected but are matched to the whitelist.'))
+              help=('tag representing cell barcode. Should be string type.'))
+@click.option('--cb-correction-method', required=False, default='exact', type=click.Choice(['exact', '1mm']))
 @click.option('--umi-tag', required=False, default='UB',
               help=('tag representing UMI. '
                     'Should be string type '
@@ -59,25 +58,22 @@ COMMON_OPTIONS = [
                     'as described in STAR diploid documentation.'))
 @click.option('--processes', required=False, default=1)
 @click_log.simple_verbosity_option(log)
-def loadbam(bam_fns, output_json_fn, cb_whitelist_fn, bin_size,
-            cb_tag, umi_tag, hap_tag, processes):
+def loadbam(bam_fn, output_json_fn, cb_whitelist_fn, bin_size,
+            cb_tag, cb_correction_method, umi_tag, hap_tag, processes):
     '''
-    Read bam files with cell barcode, umi and haplotype tags (aligned with STAR solo+diploid), 
+    Read bam file with cell barcode, umi and haplotype tags (aligned with STAR solo+diploid), 
     to generate a json file of binned haplotype marker distributions for each cell barcode. 
     These can be used to call recombinations using the downstream `predict` command.
     '''
 
-    if cb_whitelist_fn:
-        cell_barcode_whitelist = set(read_cb_whitelist(cb_whitelist_fn))
-    else:
-        cell_barcode_whitelist = None
+    cb_whitelist = read_cb_whitelist(cb_whitelist_fn, cb_correction_method)
     co_markers = get_co_markers(
-        bam_fns, processes=processes,
+        bam_fn, processes=processes,
         bin_size=bin_size,
         cb_tag=cb_tag,
         umi_tag=umi_tag,
         hap_tag=hap_tag,
-        cell_barcode_whitelist=cell_barcode_whitelist,
+        cb_whitelist=cb_whitelist,
     )
     co_markers.write_json(output_json_fn)
 
@@ -95,15 +91,12 @@ def loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, cb_whitelist_fn, b
     call recombinations using the downstream `predict` command.
     '''
 
-    if cb_whitelist_fn:
-        cell_barcode_whitelist = set(read_cb_whitelist(cb_whitelist_fn))
-    else:
-        cell_barcode_whitelist = None
+    cb_whitelist = read_cb_whitelist(cb_whitelist_fn)
     co_markers = parse_cellsnp_lite(
         cellsnp_lite_dir,
         chrom_sizes_fn,
         bin_size=bin_size,
-        cell_barcode_whitelist=cell_barcode_whitelist,
+        cb_whitelist=cb_whitelist,
     )
     co_markers.write_json(output_json_fn)
 
@@ -114,7 +107,7 @@ def _common_json_load(json_fn, cb_whitelist_fn, bin_size, data_type=MarkerRecord
         raise ValueError('"--bin-size" does not match bin size specified in marker json-fn, '
                          'please modify cli option or rerun snco load')
     if cb_whitelist_fn:
-        cell_barcode_whitelist = set(read_cb_whitelist(cb_whitelist_fn))
+        cb_whitelist = read_cb_whitelist(cb_whitelist_fn).toset()
         co_markers.set_cb_whitelist(cell_barcode_whitelist)
         if not co_markers:
             raise ValueError('No CBs from --cb-whitelist-fn are present in json-fn')

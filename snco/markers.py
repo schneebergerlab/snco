@@ -2,12 +2,12 @@ import itertools as it
 from functools import reduce
 from joblib import Parallel, delayed
 
-from .umi import umi_dedup_hap
+from .barcodes import umi_dedup_hap
 from .records import MarkerRecords
 from .bam import BAMHaplotypeIntervalReader, get_chrom_sizes_bam
 
 
-def get_chrom_co_markers(bam_fn, chrom, **kwargs):
+def single_chrom_co_markers(bam_fn, chrom, **kwargs):
     '''
     For a single bam file/chrom combination, create a MarkerRecords object
     storing the haplotype marker information.
@@ -16,7 +16,7 @@ def get_chrom_co_markers(bam_fn, chrom, **kwargs):
         chrom_co_markers = MarkerRecords(
             bam.chrom_sizes,
             bam.bin_size,
-            bam.cell_barcode_whitelist
+            bam.cb_whitelist.toset()
         )
         for bin_idx in range(bam.nbins[chrom]):
             interval_counts = bam.fetch_interval_counts(chrom, bin_idx)
@@ -38,12 +38,12 @@ def get_chrom_co_markers(bam_fn, chrom, **kwargs):
     return chrom_co_markers
 
 
-def get_co_markers(bam_fns, processes=1, **kwargs):
-    chrom_sizes = get_chrom_sizes_bam(bam_fns[0])
-    with Parallel(n_jobs=processes, backend='loky') as pool:
+def get_co_markers(bam_fn, processes=1, **kwargs):
+    chrom_sizes = get_chrom_sizes_bam(bam_fn)
+    with Parallel(n_jobs=min(processes, len(chrom_sizes)), backend='loky') as pool:
         co_markers = pool(
-            delayed(get_chrom_co_markers)(bam_fn, chrom, cb_suffix=cb_suffix, **kwargs)
-            for (cb_suffix, bam_fn), chrom in it.product(enumerate(bam_fns, 1), chrom_sizes)
+            delayed(single_chrom_co_markers)(bam_fn, chrom, **kwargs)
+            for chrom in chrom_sizes
         )
     co_markers = reduce(MarkerRecords.merge, co_markers)
     return co_markers
