@@ -19,6 +19,7 @@ verbosity = click_log.simple_verbosity_option(log)
 
 
 @click.group()
+@click.version_option()
 def main():
     '''
     snco: a toolkit for performing crossover mapping from single nucleus RNA/ATAC sequencing data
