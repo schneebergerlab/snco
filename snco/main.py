@@ -159,7 +159,9 @@ def stats_subcommand(**kwargs):
 
 
 plot_options = [
-    opts.marker_json, opts.pred_json, verbosity
+    opts.cell_barcode, opts.marker_json, opts.pred_json, opts.output_fig,
+    opts.figsize, opts.show_pred, opts.show_co_num, opts.max_yheight,
+    opts.ref_colour, opts.alt_colour, verbosity
 ]
 
 
@@ -167,7 +169,7 @@ plot_options = [
 @apply_options(plot_options)
 def plot_subcommand(**kwargs):
     '''
-    Not implemented, will provide plotting functionality
+    Draw a marker plot for a given cell barcode
     '''
     run_plot(**kwargs)
 

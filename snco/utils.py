@@ -22,7 +22,7 @@ def load_json(json_fn, cb_whitelist_fn, bin_size, data_type='markers'):
         data = PredictionRecords.read_json(json_fn)
     else:
         raise NotImplementedError()
-    if data.bin_size != bin_size:
+    if bin_size is not None and data.bin_size != bin_size:
         raise ValueError('"--bin-size" does not match bin size specified in json-fn, '
                          'please modify cli option or rerun previous snco steps')
     if cb_whitelist_fn:

@@ -47,6 +47,13 @@ pred_json = click.argument(
     type=_input_file_type,
 )
 
+cell_barcode = click.argument(
+    'cell-barcode',
+    required=True,
+    type=str,
+    nargs=1,
+)
+
 output_json = click.option(
     '-o', '--output-json-fn',
     required=True,
@@ -59,6 +66,13 @@ output_tsv = click.option(
     required=True,
     type=_output_file_type,
     help='Output TSV file name.'
+)
+
+output_fig = click.option(
+    '-o', '--output-fig-fn',
+    required=True,
+    type=_output_file_type,
+    help='Output figure file name (filetype automatically determined)'
 )
 
 cb_whitelist = click.option(
@@ -327,4 +341,50 @@ model_lambdas = click.option(
     default=None,
     help=('optional lambda parameters for foreground and background Poisson distributions of '
           'model. Default is to fit to the data')
+)
+
+figsize = click.option(
+    '--figsize',
+    required=False,
+    type=(click.IntRange(8, 30), click.IntRange(2, 10)),
+    default=(18, 4),
+    help='size of generated figure'
+)
+
+show_pred = click.option(
+    '--show-pred/--no-pred',
+    required=False,
+    default=True,
+    help='whether to draw predicted haplotype onto plot as shading'
+)
+
+show_co_num = click.option(
+    '--show-co-num/--no-co-num',
+    required=False,
+    default=True,
+    help='whether to annotate each chromosome with the no. of predicted COs'
+)
+
+max_yheight = click.option(
+    '--max-yheight',
+    required=False,
+    type=click.IntRange(5, 1000),
+    default=20,
+    help='maximum number of markers per bin to plot (higher values are thresholded)'
+)
+
+ref_colour = max_yheight = click.option(
+    '--ref-colour',
+    required=False,
+    type=str,
+    default='#0072b2',
+    help='hex colour to use for reference (hap1) markers'
+)
+
+alt_colour = max_yheight = click.option(
+    '--alt-colour',
+    required=False,
+    type=str,
+    default='#d55e00',
+    help='hex colour to use for alternative (hap2) markers'
 )
