@@ -1,7 +1,6 @@
+import re
 import logging
 import click
-
-import torch
 
 from .bam import DEFAULT_EXCLUDE_CONTIGS
 
@@ -33,8 +32,8 @@ marker_json = click.argument(
     type=_input_file_type
 )
 
-concat_marker_json = click.argument(
-    'marker-json-fn',
+concat_json = click.argument(
+    'json-fn',
     required=True,
     nargs=-1,
     type=_input_file_type,
@@ -129,21 +128,26 @@ precision = click.option(
 
 
 def _check_device(ctx, param, value):
+    import torch
     if value == 'cpu':
         return torch.device(value)
     try:
         device_type, device_number = value.split(':')
         device_number = int(device_number)
     except ValueError as exc:
-        raise ValueError('device format should be device:number e.g. cuda:0') from exc
+        raise click.BadParameter(
+            'device format should be "cpu" or device:number e.g. "cuda:0"'
+        ) from exc
     if device_type not in {'cuda', 'mps'}:
-        raise ValueError(f'unrecognised device type {device_type}')
+        raise click.BadParameter(f'unrecognised device type {device_type}')
 
     n_devices = getattr(torch, device_type).device_count()
     if not n_devices:
-        raise ValueError(f'no devices available of type {device_type}')
+        raise click.BadParameter(f'no devices available of type {device_type}')
     if (device_number + 1) > n_devices:
-        raise ValueError(f'device number is too high, only {n_devices} device of type {device_type} avaiable')
+        raise click.BadParameter(
+            f'device number is too high, only {n_devices} device of type {device_type} avaiable'
+        )
     return torch.device(value)
         
 
@@ -265,6 +269,26 @@ excl_contigs = click.option(
           'Default is a set of common organellar chrom names')
 )
 
+def _parse_merge_suffixes(ctx, param, value):
+    if value is None:
+        return value
+    value = value.strip(',')
+    if not re.match('^[a-zA-Z0-9,]+$', value):
+        raise click.BadParameter('merge suffixes must be alphanumeric only')
+    value = value.split(',')
+    return value
+
+
+merge_suffixes = click.option(
+    '-M', '--merge-suffixes',
+    required=False,
+    type=str,
+    default=None,
+    callback=_parse_merge_suffixes,
+    help=('comma separated list of suffixes to append to cell barcodes from '
+          'each file. Must be alphanumeric with same length as no. json-fns')
+)
+
 bg_marker_rate = click.option(
     '--bg-marker-rate',
     required=False,
@@ -309,7 +333,7 @@ max_imbalance = click.option(
 
 def _validate_seg_size(ctx, param, value):
     if value < ctx.params['bin_size']:
-        raise ValueError(f'{param} cannot be lower than --bin-size')
+        raise click.BadParameter(f'{param} cannot be lower than --bin-size')
     return value
 
 

@@ -20,6 +20,16 @@ def load_json(json_fn, cb_whitelist_fn, bin_size, data_type='markers'):
         data = MarkerRecords.read_json(json_fn)
     elif data_type == 'predictions':
         data = PredictionRecords.read_json(json_fn)
+    elif data_type == 'auto':
+        try:
+            data = MarkerRecords.read_json(json_fn)
+        except ValueError as exc:
+            try:
+                data = PredictionRecords.read_json(json_fn)
+            except ValueError:
+                raise IOError(
+                    f'data type of file {json_fn} could not be determined automatically'
+                ) from exc
     else:
         raise NotImplementedError()
     if bin_size is not None and data.bin_size != bin_size:

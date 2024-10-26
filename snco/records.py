@@ -1,3 +1,4 @@
+import logging
 import sys
 from copy import copy, deepcopy
 import json
@@ -5,7 +6,10 @@ import json
 import numpy as np
 import pandas as pd
 
-from .bam import IntervalCountsDeduped
+from .bam import IntervalMarkerCounts
+
+log = logging.getLogger('snco')
+
 
 class BaseRecords:
 
@@ -163,25 +167,58 @@ class BaseRecords:
         new_instance._records = deepcopy(self._records)
         return new_instance
 
+    def add_cb_suffix(self, suffix, inplace=False):
+        if inplace:
+            s = self
+        else:
+            s = self.copy()
+        if s.cb_whitelist is not None:
+            s.cb_whitelist = {f'{cb}_{suffix}' for cb in s.cb_whitelist}
+        s._records = {f'{cb}_{suffix}': sd for cb, sd in s.items()}
+        if not inplace:
+            return s
+
     def merge(self, other, inplace=False):
+        if (stype := type(self)) != (otype := type(other)):
+            raise ValueError(
+                f'cannot merge {stype.__name__} object with object of type {otype.__name__}'
+            )
         if self.chrom_sizes != other.chrom_sizes:
             raise ValueError('chrom_sizes do not match')
         if self.bin_size != other.bin_size:
             raise ValueError('bin_sizes do not match')
+        if self.seq_type != other.seq_type:
+            log.warn(
+                'merged datasets do not appear to be the same sequencing data type: '
+                f'{self.seq_type} and {other.seq_type}'
+            )
 
         if inplace:
             s = self
         else:
             s = self.copy()
 
+        if s.cb_whitelist is None or other.cb_whitelist is None:
+            # when only one records object has a whitelist, merging may cause issues
+            # solution is to wipe the whitelist
+            s.cb_whitelist = None
+        else:
+            s.cb_whitelist.update(other.cb_whitelist)
+
         for cb, cb_m in other.items():
             for chrom, m in cb_m.items():
                 s[cb, chrom] += m
+
+        s._cmd += other._cmd
 
         if not inplace:
             return s
 
     def update(self, interval_counts):
+        if not isinstance(interval_counts, IntervalMarkerCounts):
+            raise ValueError(
+                f'can only update {type(self).__name__} with IntervalMarkerCounts object'
+            )
         chrom, bin_idx = interval_counts.chrom, interval_counts.bin_idx
         for cb, hap, val in interval_counts.deep_items():
             self[cb, chrom, bin_idx, hap] += val
@@ -195,7 +232,7 @@ class BaseRecords:
     def __iadd__(self, other):
         if isinstance(other, BaseRecords):
             return self.merge(other, inplace=True)
-        if isinstance(other, IntervalCountsDeduped):
+        if isinstance(other, IntervalMarkerCounts):
             return self.update(other)
         raise NotImplementedError()
 

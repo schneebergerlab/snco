@@ -16,7 +16,7 @@ DEFAULT_EXCLUDE_CONTIGS = set([
 
 
 @dataclass
-class IntervalCountsDeduped:
+class IntervalMarkerCounts:
     chrom: str
     bin_idx: int
     counts: dict = field(default_factory=dict)
@@ -33,7 +33,7 @@ class IntervalCountsDeduped:
                 yield cb, hap, val
 
 
-class IntervalCounts:
+class IntervalUMICounts:
 
     def __init__(self, chrom, bin_idx, umi_collapse_method):
         self.chrom = chrom
@@ -120,7 +120,7 @@ class BAMHaplotypeIntervalReader:
         bin_start = self.bin_size * bin_idx
         bin_end = bin_start + self.bin_size - 1
 
-        interval_counts = IntervalCounts(chrom, bin_idx, self.umi_collapse_method)
+        interval_counts = IntervalUMICounts(chrom, bin_idx, self.umi_collapse_method)
 
         for aln in self.bam.fetch(chrom, bin_start, bin_end):
 

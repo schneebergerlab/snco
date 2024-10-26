@@ -92,8 +92,8 @@ def sim_subcommand(**kwargs):
 
 
 concat_options = [
-    opts.concat_marker_json, opts.output_json,
-    opts.cb_whitelist, opts.bin_size,
+    opts.concat_json, opts.output_json,
+    opts.merge_suffixes,
     verbosity
 ]
 
@@ -102,7 +102,8 @@ concat_options = [
 @apply_options(concat_options)
 def concat_subcommand(**kwargs):
     '''
-    Not implemented, will concatenate marker jsons (avoiding CB collisions)
+    Concatenates marker jsons, potentially from different datasets, 
+    adding suffixes to cell barcodes to avoid name collisions
     '''
     run_concat(**kwargs)
 
