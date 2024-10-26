@@ -38,7 +38,7 @@ def apply_options(options_list):
 
 loadbam_options = [
     opts.bam, opts.output_json, opts.cb_whitelist, opts.bin_size,
-    opts.cb_corr_method, opts.cb_tag,
+    opts.seq_type, opts.cb_corr_method, opts.cb_tag,
     opts.umi_collapse_method, opts.umi_tag,
     opts.hap_tag, opts.excl_contigs,
     opts.processes, verbosity
@@ -127,7 +127,7 @@ def clean_subcommand(**kwargs):
 predict_options = [
     opts.marker_json, opts.output_json, opts.cb_whitelist, opts.bin_size,
     opts.seg_size, opts.term_seg_size, opts.cm_per_mb, opts.model_lambdas,
-    opts.precision, opts.processes
+    opts.precision, opts.processes, verbosity
 ]
 
 
@@ -159,7 +159,7 @@ def stats_subcommand(**kwargs):
 
 
 plot_options = [
-    opts.marker_json, opts.pred_json,
+    opts.marker_json, opts.pred_json, verbosity
 ]
 
 

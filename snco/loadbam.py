@@ -51,7 +51,7 @@ def get_co_markers(bam_fn, processes=1, **kwargs):
 
 
 def run_loadbam(bam_fn, output_json_fn, *,
-                cb_whitelist_fn=None, bin_size=25_000,
+                cb_whitelist_fn=None, bin_size=25_000, seq_type=None,
                 cb_tag='CB', cb_correction_method='exact',
                 umi_tag='UB', umi_collapse_method='directional',
                 hap_tag='ha', exclude_contigs=None, processes=1):

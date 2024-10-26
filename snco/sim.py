@@ -72,7 +72,7 @@ def apply_gt_to_markers(gt, m, bg_rate, bg_signal):
 
 
 def generate_simulated_data(ground_truth, co_markers, conv_window_size=2_500_000,
-                            bg_rate='auto', nsim_per_sample=100):
+                            bg_rate=None, nsim_per_sample=100):
     '''
     For a set of crossover markers from real data, estimate the foreground 
     and background signal for each, and then apply the ground truth
@@ -80,7 +80,7 @@ def generate_simulated_data(ground_truth, co_markers, conv_window_size=2_500_000
     These can be used for benchmarking.
     '''
     bg, frac_bg = estimate_overall_background_signal(co_markers, conv_window_size)
-    if bg_rate != 'auto':
+    if bg_rate is not None:
         frac_bg = defaultdict(lambda: bg_rate)
 
     # todo: simulate some doublets
@@ -114,7 +114,7 @@ def ground_truth_from_marker_records(co_markers):
 
 
 def run_sim(json_fn, output_json_fn, haplo_bed_fn, *,
-            cb_whitelist_fn=None, bin_size=25_000, bg_marker_rate='auto',
+            cb_whitelist_fn=None, bin_size=25_000, bg_marker_rate=None,
             bg_window_size=2_500_000, nsim_per_sample=100):
     '''
     Simulate realistic haplotype marker distributions using real data from `load`,
