@@ -1,3 +1,4 @@
+import logging
 from collections import namedtuple
 import numpy as np
 
@@ -9,6 +10,10 @@ from .utils import load_json
 from .records import PredictionRecords
 from .clean import predict_foreground_convolution
 
+DEFAULT_DEVICE = torch.device('cpu')
+
+log = logging.getLogger('snco')
+
 
 class RigidHMM:
 
@@ -19,7 +24,7 @@ class RigidHMM:
         defaults=[0.0, 0.0, 0.0, 0.0, 0.0]
     )
 
-    def __init__(self, rfactor, term_rfactor, trans_prob):
+    def __init__(self, rfactor, term_rfactor, trans_prob, device=DEFAULT_DEVICE):
         self.rfactor = rfactor
         self.term_rfactor = term_rfactor
         self.trans_prob = trans_prob
@@ -31,6 +36,7 @@ class RigidHMM:
         self._model = None
         self._distributions = {}
         self._hap2_states = np.arange(rfactor) + rfactor
+        self._device = device
 
     def _calculate_transition_probs(self):
         for i in range(self.rfactor):
@@ -75,13 +81,13 @@ class RigidHMM:
 
         n = self._model.n_distributions
         self._model.starts = torch.full(
-            (n,), -np.inf, dtype=self._model.dtype, device=self._model.device
+            (n,), -np.inf, dtype=self._model.dtype, device=self._device
         )
         self._model.ends = torch.full(
-            (n,), -np.inf, dtype=self._model.dtype, device=self._model.device
+            (n,), -np.inf, dtype=self._model.dtype, device=self._device
         )
         self._model.edges = torch.full(
-            (n, n), -np.inf, dtype=self._model.dtype, device=self._model.device
+            (n, n), -np.inf, dtype=self._model.dtype, device=self._device
         )
 
         for hap in self.haplotypes:
@@ -120,6 +126,7 @@ class RigidHMM:
     def initialise_model(self, fg_lambda, bg_lambda):
         # todo: implement sparse version for when rfactor is very large
         self._model = pmh.DenseHMM(frozen=True)
+        self._model.to(self._device)
         for haplotype in self.haplotypes:
             params = [fg_lambda, bg_lambda] if haplotype == 0 else [bg_lambda, fg_lambda]
             self._create_rigid_chain(params, haplotype)
@@ -141,24 +148,26 @@ class RigidHMM:
         fg_lambda, bg_lambda = self.estimate_params(X)
         self.initialise_model(fg_lambda, bg_lambda)
 
-    def predict(self, X, batch_size=1_000):
+    def predict(self, X, batch_size=128):
         proba = []
         for X_batch in np.array_split(X, int(np.ceil(len(X) / batch_size))):
             X_batch = torch.from_numpy(X_batch)
+            if self._device is not None:
+                X_batch.to(self._device)
             p_batch = self._model.predict_proba(X_batch)
-            p_batch = p_batch[..., self._hap2_states].sum(axis=2).numpy()
+            p_batch = p_batch[..., self._hap2_states].sum(axis=2).cpu().numpy()
             proba.append(p_batch)
         return np.concatenate(proba, axis=0)
 
 
 def create_rhmm(co_markers, cm_per_mb=4.5,
                 segment_size=1_000_000, terminal_segment_size=50_000,
-                model_lambdas=None):
+                model_lambdas=None, device=DEFAULT_DEVICE):
     bin_size = co_markers.bin_size
     rfactor = segment_size // bin_size
     term_rfactor = terminal_segment_size // bin_size
     trans_prob = cm_per_mb * (bin_size / 1e8)
-    rhmm = RigidHMM(rfactor, term_rfactor, trans_prob)
+    rhmm = RigidHMM(rfactor, term_rfactor, trans_prob, device)
     if model_lambdas is None:
         X = list(co_markers.deep_values())
         rhmm.fit(X)
@@ -168,34 +177,38 @@ def create_rhmm(co_markers, cm_per_mb=4.5,
     return rhmm
 
 
-def detect_crossovers(co_markers, rhmm, processes=1):
+def detect_crossovers(co_markers, rhmm, batch_size=1_000, processes=1):
     seen_barcodes = co_markers.seen_barcodes
     co_preds = PredictionRecords.new_like(co_markers)
     torch.set_num_threads(processes)
     for chrom in co_markers.chrom_sizes:
         X = np.array([co_markers[cb, chrom] for cb in seen_barcodes])
-        X_pred = rhmm.predict(X)
+        X_pred = rhmm.predict(X, batch_size=batch_size)
         for cb, p in zip(seen_barcodes, X_pred):
             co_preds[cb, chrom] = p
     return co_preds
 
 
-def run_predict(json_fn, output_json_fn, *,
+def run_predict(marker_json_fn, output_json_fn, *,
                 cb_whitelist_fn=None, bin_size=25_000,
                 segment_size=1_000_000, terminal_segment_size=50_000,
                 cm_per_mb=4.5, model_lambdas=None,
-                output_precision=2, processes=1):
+                output_precision=2, processes=1,
+                batch_size=1_000, device=DEFAULT_DEVICE):
     '''
     Uses rigid hidden Markov model to predict the haplotypes of each cell barcode
     at each genomic bin.
     '''
-    co_markers = load_json(json_fn, cb_whitelist_fn, bin_size)
+    co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
     rhmm = create_rhmm(
         co_markers,
         cm_per_mb=cm_per_mb,
         segment_size=segment_size,
         terminal_segment_size=terminal_segment_size,
-        model_lambdas=model_lambdas
+        model_lambdas=model_lambdas,
+        device=device,
     )
-    co_preds = detect_crossovers(co_markers, rhmm, processes=processes)
+    co_preds = detect_crossovers(
+        co_markers, rhmm, batch_size=batch_size, processes=processes
+    )
     co_preds.write_json(output_json_fn, output_precision)

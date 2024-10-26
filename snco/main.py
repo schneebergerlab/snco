@@ -127,7 +127,7 @@ def clean_subcommand(**kwargs):
 predict_options = [
     opts.marker_json, opts.output_json, opts.cb_whitelist, opts.bin_size,
     opts.seg_size, opts.term_seg_size, opts.cm_per_mb, opts.model_lambdas,
-    opts.precision, opts.processes, verbosity
+    opts.precision, opts.processes, opts.batch_size, opts.device, verbosity
 ]
 
 

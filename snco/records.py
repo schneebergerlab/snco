@@ -49,7 +49,7 @@ class BaseRecords:
 
     def _new_arr(self, chrom: str):
         # todo: implement sparse form
-        return np.full(self._get_arr_shape(chrom), self._init_val, dtype=np.float64)
+        return np.full(self._get_arr_shape(chrom), self._init_val, dtype=np.float32)
 
     def _check_arr(self, arr: np.ndarray, chrom: str):
         correct_shape = self._get_arr_shape(chrom)
@@ -144,10 +144,12 @@ class BaseRecords:
 
     @classmethod
     def new_like(cls, other):
+        # do not use deepcopy directly, as this will unnecessarily copy _records
         new_instance = cls(
             copy(other.chrom_sizes),
             other.bin_size,
             deepcopy(other.cb_whitelist),
+            copy(other.seq_type),
             deepcopy(other.metadata)
         )
         new_instance._cmd = other._cmd
@@ -273,8 +275,9 @@ class MarkerRecords(BaseRecords):
                  chrom_sizes: dict[str, int],
                  bin_size: int,
                  cb_whitelist: set[str] | None = None,
+                 seq_type: str | None = None,
                  metadata: dict | None = None):
-        super().__init__(chrom_sizes, bin_size, cb_whitelist, metadata)
+        super().__init__(chrom_sizes, bin_size, cb_whitelist, seq_type, metadata)
         self._ndim = 2
         self._dim2_shape = 2
         self._init_val = 0.0
@@ -287,7 +290,7 @@ class MarkerRecords(BaseRecords):
 
     def _json_to_arr(self, obj, chrom):
         idx, val = obj
-        arr = np.zeros(shape=self.nbins[chrom] * 2, dtype=np.float64)
+        arr = np.zeros(shape=self.nbins[chrom] * 2, dtype=np.float32)
         arr[idx] = val
         return arr.reshape(self.nbins[chrom], 2)
 
@@ -298,8 +301,9 @@ class PredictionRecords(BaseRecords):
                  chrom_sizes: dict[str, int],
                  bin_size: int,
                  cb_whitelist: set[str] | None = None,
+                 seq_type: str | None = None,
                  metadata: dict | None = None):
-        super().__init__(chrom_sizes, bin_size, cb_whitelist, metadata)
+        super().__init__(chrom_sizes, bin_size, cb_whitelist, seq_type, metadata)
         self._ndim = 1
         self._dim2_shape = np.nan
         self._init_val = np.nan

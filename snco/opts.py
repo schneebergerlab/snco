@@ -1,6 +1,8 @@
 import logging
 import click
 
+import torch
+
 from .bam import DEFAULT_EXCLUDE_CONTIGS
 
 
@@ -93,7 +95,7 @@ processes = click.option(
     required=False,
     type=click.IntRange(min=1),
     default=1,
-    help='number of processes to use'
+    help='number of cpu processes to use'
 )
 
 precision = click.option(
@@ -105,10 +107,47 @@ precision = click.option(
 )
 
 
-def _replace_other_with_nonetype(*_, val):
-    if val == 'other':
+def _check_device(ctx, param, value):
+    if value == 'cpu':
+        return torch.device(value)
+    try:
+        device_type, device_number = value.split(':')
+        device_number = int(device_number)
+    except ValueError as exc:
+        raise ValueError('device format should be device:number e.g. cuda:0') from exc
+    if device_type not in {'cuda', 'mps'}:
+        raise ValueError(f'unrecognised device type {device_type}')
+
+    n_devices = getattr(torch, device_type).device_count()
+    if not n_devices:
+        raise ValueError(f'no devices available of type {device_type}')
+    if (device_number + 1) > n_devices:
+        raise ValueError(f'device number is too high, only {n_devices} device of type {device_type} avaiable')
+    return torch.device(value)
+        
+
+device = click.option(
+    '-d', '--device',
+    required=False,
+    type=str,
+    default='cpu',
+    callback=_check_device,
+    help='device to compute predictions on (default cpu)'
+)
+
+batch_size = click.option(
+    '--batch-size',
+    required=False,
+    type=click.IntRange(1, 10_000),
+    default=1_000,
+    help='batch size for prediction. larger may be faster but use more memory'
+)
+
+
+def _replace_other_with_nonetype(ctx, param, value):
+    if value == 'other':
         return None
-    return val
+    return value
 
 
 seq_type = click.option(
@@ -129,10 +168,10 @@ cb_corr_method = click.option(
 )
 
 
-def _validate_bam_tag(_, param, val):
-    if not len(val) == 2:
+def _validate_bam_tag(ctx, param, value):
+    if not len(value) == 2:
         raise ValueError(f'{param} is not of length 2')
-    return val
+    return value
 
 
 cb_tag = click.option(
@@ -145,13 +184,13 @@ cb_tag = click.option(
 )
 
 
-def _set_default_umi_collapse_method(ctx, _, val):
-    if val == 'none':
+def _set_default_umi_collapse_method(ctx, param, value):
+    if value == 'none':
         if ctx.params['seq_type'] == '10x_rna':
             log.debug('setting default UMI dedup method to directional for 10x RNA data')
             return 'directional'
         return None
-    return val
+    return value
 
 
 umi_collapse_method = click.option(
@@ -164,10 +203,10 @@ umi_collapse_method = click.option(
 )
 
 
-def _override_umi_tag(ctx, param, val):
+def _override_umi_tag(ctx, param, value):
     if ctx.params['umi_collapse_method'] is None or ctx.params['umi_collapse_method'] == 'none':
         return None
-    return _validate_bam_tag(ctx, param, val)
+    return _validate_bam_tag(ctx, param, value)
 
 
 umi_tag = click.option(
@@ -189,10 +228,10 @@ hap_tag = click.option(
 )
 
 
-def _parse_excl_contigs(*_, val):
-    if val is None:
+def _parse_excl_contigs(ctx, param, value):
+    if value is None:
         return DEFAULT_EXCLUDE_CONTIGS
-    return set(val.split(',')) # todo: check allowed fasta header names
+    return set(value.split(',')) # todo: check allowed fasta header names
 
 
 excl_contigs = click.option(
@@ -247,10 +286,10 @@ max_imbalance = click.option(
 )
 
 
-def _validate_seg_size(ctx, param, val):
-    if val < ctx.params['bin_size']:
+def _validate_seg_size(ctx, param, value):
+    if value < ctx.params['bin_size']:
         raise ValueError(f'{param} cannot be lower than --bin-size')
-    return val
+    return value
 
 
 seg_size = click.option(
@@ -275,9 +314,9 @@ term_seg_size = click.option(
 cm_per_mb = click.option(
     '-C', '--cm-per-mb',
     required=False,
-    type=click.FloatRange(1.0, 10.0),
+    type=click.FloatRange(1.0, 20.0),
     default=4.5,
-    help=('Estimated average centiMorgans per megabase. '
+    help=('Approximate average centiMorgans per megabase. '
           'Used to parameterise the rigid HMM transitions')
 )
 
