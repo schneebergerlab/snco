@@ -26,5 +26,6 @@ setup(
         'click-log',
         'joblib',
         'pysam',
+        'matplotlib' # todo: make this dependency optional
     ],
 )

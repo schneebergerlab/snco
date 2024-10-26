@@ -3,7 +3,6 @@ import re
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.colors import Normalize, LinearSegmentedColormap
-import seaborn as sns
 
 from .utils import load_json
 
@@ -118,18 +117,18 @@ def single_cell_co_plot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
     return fig, axes
 
 
-def run_plot(cell_barcode, marker_json_fn, predict_json_fn,
+def run_plot(cell_barcode, marker_json_fn, plot_json_fn,
              output_fig_fn, figsize=(18, 4),
              show_pred=True, show_co_num=True,
              max_yheight=20,
              ref_colour='#0072b2', alt_colour='#d55e00'):
     co_markers = load_json(marker_json_fn, cb_whitelist_fn=None, bin_size=None)
-    co_preds = load_json(
-        predict_json_fn, cb_whitelist_fn=None, bin_size=None, data_type='predictions'
-    )
-
-    if set(co_preds.seen_barcodes) != set(co_markers.seen_barcodes):
-        raise ValueError('Cell barcodes from marker-json-fn and predict-json-fn do not match')
+    if plot_json_fn is not None:
+        co_preds = load_json(
+            plot_json_fn, cb_whitelist_fn=None, bin_size=None, data_type='predictions'
+        )
+    else:
+        co_preds = None
 
     fig, axes = single_cell_co_plot(
         cell_barcode,

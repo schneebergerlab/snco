@@ -47,6 +47,13 @@ pred_json = click.argument(
     type=_input_file_type,
 )
 
+plot_pred_json = click.argument(
+    'plot-json-fn',
+    required=False,
+    nargs=1,
+    type=_input_file_type,
+)
+
 cell_barcode = click.argument(
     'cell-barcode',
     required=True,

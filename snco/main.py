@@ -159,7 +159,7 @@ def stats_subcommand(**kwargs):
 
 
 plot_options = [
-    opts.cell_barcode, opts.marker_json, opts.pred_json, opts.output_fig,
+    opts.cell_barcode, opts.marker_json, opts.plot_pred_json, opts.output_fig,
     opts.figsize, opts.show_pred, opts.show_co_num, opts.max_yheight,
     opts.ref_colour, opts.alt_colour, verbosity
 ]
