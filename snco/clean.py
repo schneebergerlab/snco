@@ -48,7 +48,8 @@ def estimate_overall_background_signal(co_markers, conv_window_size):
 
 def mask_bg_signal(bg_signal, m):
     bg_signal = np.where(m, bg_signal, 0)
-    bg_signal = bg_signal / bg_signal.sum()
+    if bg_sum := bg_signal.sum():
+        bg_signal = bg_signal / bg_sum
     return bg_signal
 
 

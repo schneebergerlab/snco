@@ -128,6 +128,9 @@ class BaseRecords:
             for chrom, arr in sd.items():
                 yield cb, chrom, arr
 
+    def keys(self):
+        return self._records.keys()
+
     def values(self):
         return self._records.values()
 
@@ -218,7 +221,7 @@ class BaseRecords:
             json_serialisable = []
             for val in obj:
                 json_serialisable.append(cls._metadata_to_json(val, precision))
-        elif isinstance(obj, float):
+        elif isinstance(obj, (float, np.floating)):
             json_serialisable = round(float(obj), precision)
         elif isinstance(obj, (str, int, bool)) or obj is None:
             json_serialisable = obj

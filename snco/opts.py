@@ -9,7 +9,7 @@ from .bam import DEFAULT_EXCLUDE_CONTIGS
 log = logging.getLogger('snco')
 
 _input_file_type = click.Path(exists=True, file_okay=True, dir_okay=False)
-_input_dir_type = click.Path(exists=True, file_okay=True, dir_okay=False)
+_input_dir_type = click.Path(exists=True, file_okay=False, dir_okay=True)
 _output_file_type = click.Path(exists=False)
 
 bam = click.argument(
