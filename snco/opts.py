@@ -57,7 +57,7 @@ output_json = click.option(
 output_tsv = click.option(
     '-o', '--output-tsv-fn',
     required=True,
-    type=_input_file_type,
+    type=_output_file_type,
     help='Output TSV file name.'
 )
 
@@ -102,7 +102,7 @@ precision = click.option(
     '--output-precision',
     required=False,
     type=click.IntRange(1, 10),
-    default=2,
+    default=3,
     help='floating point precision in output files'
 )
 

@@ -157,11 +157,11 @@ def calculate_score_metrics(co_markers, co_preds, ground_truth, max_phred_score=
 def write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics=None, precision=3):
     if score_metrics is not None:
         qual_metrics = qual_metrics.merge(score_metrics, on='cb', how='outer')
-    qual_metrics.to_csv(output_tsv_fn, sep='\t', index=False, float_format=f'%.{precision}f')
+    qual_metrics.to_csv(output_tsv_fn, sep='\t', index=False, float_format=f'%.{precision}g')
 
 
 def run_stats(marker_json_fn, predict_json_fn, output_tsv_fn, *,
-          cb_whitelist_fn=None, bin_size=25_000):
+          cb_whitelist_fn=None, bin_size=25_000, output_precision=3):
     '''
     Scores the quality of data and predictions for a set of haplotype calls
     generated with `predict`.
@@ -181,4 +181,4 @@ def run_stats(marker_json_fn, predict_json_fn, output_tsv_fn, *,
     else:
         score_metrics = None
 
-    write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics)
+    write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics, precision=output_precision)
