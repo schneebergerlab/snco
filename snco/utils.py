@@ -1,0 +1,33 @@
+from .barcodes import CellBarcodeWhitelist
+from .records import MarkerRecords, PredictionRecords
+
+
+def read_cb_whitelist(barcode_fn, cb_correction_method='exact'):
+    '''
+    Read a text file of cell barcodes and return them as a list.
+    In a multi-column file, barcode must be the first column
+    '''
+    if barcode_fn is not None:
+        with open(barcode_fn) as f:
+            cb_whitelist = [cb.strip().split('\t')[0] for cb in f.readlines()]
+    else:
+        cb_whitelist = None
+    return CellBarcodeWhitelist(cb_whitelist, cb_correction_method)
+
+
+def load_json(json_fn, cb_whitelist_fn, bin_size, data_type='markers'):
+    if data_type == 'markers':
+        data = MarkerRecords.read_json(json_fn)
+    elif data_type == 'predictions':
+        data = PredictionRecords.read_json(json_fn)
+    else:
+        raise NotImplementedError()
+    if data.bin_size != bin_size:
+        raise ValueError('"--bin-size" does not match bin size specified in json-fn, '
+                         'please modify cli option or rerun previous snco steps')
+    if cb_whitelist_fn:
+        cb_whitelist = read_cb_whitelist(cb_whitelist_fn).toset()
+        data.set_cb_whitelist(cb_whitelist)
+        if not data:
+            raise ValueError('No CBs from --cb-whitelist-fn are present in json-fn')
+    return data

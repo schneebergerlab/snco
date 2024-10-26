@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.ndimage import convolve1d
 
+from .utils import load_json
 
 def total_markers(cb_co_markers):
     tot = 0
@@ -157,3 +158,27 @@ def write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics=None, precision=
     if score_metrics is not None:
         qual_metrics = qual_metrics.merge(score_metrics, on='cb', how='outer')
     qual_metrics.to_csv(output_tsv_fn, sep='\t', index=False, float_format=f'%.{precision}f')
+
+
+def run_stats(marker_json_fn, predict_json_fn, output_tsv_fn, *,
+          cb_whitelist_fn=None, bin_size=25_000):
+    '''
+    Scores the quality of data and predictions for a set of haplotype calls
+    generated with `predict`.
+    '''
+    co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
+    co_preds = load_json(
+        predict_json_fn, cb_whitelist_fn, bin_size, data_type='predictions'
+    )
+
+    if set(co_preds.seen_barcodes) != set(co_markers.seen_barcodes):
+        raise ValueError('Cell barcodes from marker-json-fn and predict-json-fn do not match')
+
+    qual_metrics = calculate_quality_metrics(co_markers, co_preds)
+    if 'ground_truth' in co_markers.metadata:
+        ground_truth_haplotypes = ground_truth_from_marker_records(co_markers)
+        score_metrics = calculate_score_metrics(co_markers, co_preds, ground_truth_haplotypes)
+    else:
+        score_metrics = None
+
+    write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics)

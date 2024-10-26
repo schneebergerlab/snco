@@ -1,274 +1,175 @@
 import logging
-
 import click
 import click_log
 
-from .barcodes import read_cb_whitelist
-from .csl import parse_cellsnp_lite
-from .records import MarkerRecords, PredictionRecords
-from .markers import get_co_markers
-from .signal import (
-    clean_marker_background, apply_haplotype_imbalance_mask, apply_marker_threshold
-)
-from .sim import (
-    read_ground_truth_haplotypes, generate_simulated_data, ground_truth_from_marker_records
-)
-from .predict import create_rhmm, detect_crossovers
-from .stats import calculate_quality_metrics, calculate_score_metrics, write_metric_tsv
+from . import opts
+from .loadbam import run_loadbam
+from .loadcsl import run_loadcsl
+from .sim import run_sim
+from .concat import run_concat
+from .clean import run_clean
+from .predict import run_predict
+from .stats import run_stats
+from .plot import run_plot
+
 
 log = logging.getLogger('snco')
 click_log.basic_config(log)
+verbosity = click_log.simple_verbosity_option(log)
 
 
 @click.group()
 def main():
+    '''
+    snco: a toolkit for performing crossover mapping from single nucleus RNA/ATAC sequencing data
+    '''
     pass
 
 
-def _common_options(common_options):
-    def _apply_common_options(func):
-        for option in reversed(common_options):
+def apply_options(options_list):
+    'decorator to apply a list of click options at once'
+    def _apply_options(func):
+        for option in reversed(options_list):
             func = option(func)
         return func
-    return _apply_common_options
+    return _apply_options
 
 
-COMMON_OPTIONS = [
-    click.option('-c', '--cb-whitelist-fn', required=False,
-                 help='Text file containing whitelisted cell barcodes, one per line'),
-    click.option('-n', '--bin-size', required=False, default=25_000,
-                 help='Bin size for marker distribution'),
+loadbam_options = [
+    opts.bam, opts.output_json, opts.cb_whitelist, opts.bin_size,
+    opts.cb_corr_method, opts.cb_tag,
+    opts.umi_collapse_method, opts.umi_tag,
+    opts.hap_tag, opts.excl_contigs,
+    opts.processes, verbosity
 ]
 
-
-@main.command()
-@click.argument('bam-fn', required=True, nargs=1)
-@click.option('-o', '--output-json-fn', required=True, help='Output JSON file name.')
-@_common_options(COMMON_OPTIONS)
-@click.option('--cb-correction-method', required=False, default='exact',
-              type=click.Choice(['exact', '1mm'], case_sensitive=False),
-              help=('Method for correcting/matching cell barcodes to whitelist. exact uses '
-                    'exact matching (or keeps all barcodes when no whitelist is provided), '
-                    '1mm allows an edit distance of 1 to one unique whitelisted barcode'))
-@click.option('--cb-tag', required=False, default='CB',
-              help='bam file tag representing cell barcode. Should be string type.')
-@click.option('--umi-collapse-method', required=False, default='directional',
-              type=click.Choice(['exact', 'directional', 'none'], case_sensitive=False),
-              callback=lambda c, p, v: None if v == 'none' else v,
-              help=('Method for deduplicating/collapsing UMIs. '
-                    'exact uses exact matching, directional uses UMItools directional method'))
-@click.option('--umi-tag', required=False, default='UB',
-              callback=lambda c, p, v: None if c.params['umi_collapse_method'] is None else v,
-              help=('bam file tag representing UMI. Should be string type '
-                    'These will be corrected using the directional method and deduplicated.'))
-@click.option('--hap-tag', required=False, default='ha',
-              help=('bam file tag representing haplotype. '
-                    'Should be integer type (1: hap1, 2: hap2, 0: both hap1 and hap2) '
-                    'as described in STAR diploid documentation.'))
-@click.option('-e', '--exclude-contigs', required=False, default=None, type=str,
-              callback=lambda c, p, v: set(v.split(',')) if v is not None else None,
-              help=('comma separated list of contigs to exclude. '
-                    'Default is a set of common organellar contig names'))
-@click.option('--processes', required=False, default=1)
-@click_log.simple_verbosity_option(log)
-def loadbam(bam_fn, output_json_fn, cb_whitelist_fn, bin_size,
-            cb_tag, cb_correction_method,
-            umi_tag, umi_collapse_method,
-            hap_tag, exclude_contigs, processes):
+@main.command('loadbam')
+@apply_options(loadbam_options)
+def loadbam_subcommand(**kwargs):
     '''
     Read bam file with cell barcode, umi and haplotype tags (aligned with STAR solo+diploid), 
     to generate a json file of binned haplotype marker distributions for each cell barcode. 
     These can be used to call recombinations using the downstream `predict` command.
     '''
-    cb_whitelist = read_cb_whitelist(cb_whitelist_fn, cb_correction_method)
-    co_markers = get_co_markers(
-        bam_fn, processes=processes,
-        bin_size=bin_size,
-        cb_tag=cb_tag,
-        umi_tag=umi_tag,
-        umi_collapse_method=umi_collapse_method,
-        hap_tag=hap_tag,
-        cb_whitelist=cb_whitelist,
-        exclude_contigs=exclude_contigs,
-    )
-    co_markers.write_json(output_json_fn)
+    run_loadbam(**kwargs)
 
 
-@main.command()
-@click.argument('cellsnp-lite-dir', required=True, nargs=1)
-@click.option('-s', '--chrom-sizes-fn', required=True, help='chrom sizes or faidx file')
-@click.option('-o', '--output-json-fn', required=True, help='Output JSON file name.')
-@_common_options(COMMON_OPTIONS)
-@click_log.simple_verbosity_option(log)
-def loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, cb_whitelist_fn, bin_size):
+loadcsl_options = [
+    opts.csl_dir, opts.chrom_sizes, opts.output_json,
+    opts.cb_whitelist, opts.bin_size,
+    verbosity
+]
+
+
+@main.command('loadcsl')
+@apply_options(loadcsl_options)
+def loadcsl_subcommand(**kwargs):
     '''
     Read matrix files generated by cell snp lite to generate a json file of binned
     haplotype marker distributions for each cell barcode. These can be used to
     call recombinations using the downstream `predict` command.
     '''
-
-    cb_whitelist = read_cb_whitelist(cb_whitelist_fn)
-    co_markers = parse_cellsnp_lite(
-        cellsnp_lite_dir,
-        chrom_sizes_fn,
-        bin_size=bin_size,
-        cb_whitelist=cb_whitelist,
-    )
-    co_markers.write_json(output_json_fn)
+    run_loadcsl(**kwargs)
 
 
-def _common_json_load(json_fn, cb_whitelist_fn, bin_size, data_type=MarkerRecords):
-    co_markers = data_type.read_json(json_fn)
-    if co_markers.bin_size != bin_size:
-        raise ValueError('"--bin-size" does not match bin size specified in marker json-fn, '
-                         'please modify cli option or rerun snco load')
-    if cb_whitelist_fn:
-        cb_whitelist = read_cb_whitelist(cb_whitelist_fn).toset()
-        co_markers.set_cb_whitelist(cb_whitelist)
-        if not co_markers:
-            raise ValueError('No CBs from --cb-whitelist-fn are present in json-fn')
-    return co_markers
-
-
-JSON_COMMON_OPTIONS = [
-    click.argument('json-fn', required=True, nargs=1),
-    click.option('-o', '--output-json-fn', required=True, help='Output JSON file name.')
+sim_options = [
+    opts.marker_json, opts.haplo_bed, opts.output_json,
+    opts.cb_whitelist, opts.bin_size,
+    opts.bg_marker_rate, opts.bg_window_size, opts.nsim_per_samp,
+    verbosity
 ]
 
-@main.command()
-@_common_options(JSON_COMMON_OPTIONS)
-@click.option('-b', '--haplo-bed-fn', required=True,
-              help=('bed file (6 column) containing haplotype intervals to simulate. '
-                    'Sample ids should be listed in column 4, haplotype (0 or 1) in column 5. '
-                    'Haplotype intervals for each sample id should cover the '
-                    'entire genome without gaps.'))
-@_common_options(COMMON_OPTIONS)
-@click.option('--background-marker-rate', required=False, default='auto')
-@click.option('--bg-window-size', required=False, default=2_500_000)
-@click.option('--nsim-per-sample', required=False, default=100)
-@click_log.simple_verbosity_option(log)
-def sim(json_fn, output_json_fn, haplo_bed_fn, cb_whitelist_fn, bin_size,
-        background_marker_rate, bg_window_size, nsim_per_sample):
+
+@main.command('sim')
+@apply_options(sim_options)
+def sim_subcommand(**kwargs):
     '''
     Simulate realistic haplotype marker distributions using real data from `load`,
     with known haplotypes/crossovers supplied from a bed file.
     '''
-    co_markers = _common_json_load(json_fn, cb_whitelist_fn, bin_size)
-    ground_truth_haplotypes = read_ground_truth_haplotypes(
-        haplo_bed_fn, co_markers.chrom_sizes, bin_size
-    )
-    sim_co_markers = generate_simulated_data(
-        ground_truth_haplotypes,
-        co_markers,
-        bg_rate=background_marker_rate,
-        conv_window_size=bg_window_size,
-        nsim_per_sample=nsim_per_sample,
-    )
-    sim_co_markers.write_json(output_json_fn)
+    run_sim(**kwargs)
 
 
-@main.command()
-@_common_options(JSON_COMMON_OPTIONS)
-@_common_options(COMMON_OPTIONS)
-@click_log.simple_verbosity_option(log)
-def concat(json_fn, output_json_fn, bin_size, cb_whitelist_fn):
+concat_options = [
+    opts.concat_marker_json, opts.output_json,
+    opts.cb_whitelist, opts.bin_size,
+    verbosity
+]
+
+
+@main.command('concat')
+@apply_options(concat_options)
+def concat_subcommand(**kwargs):
     '''
     Not implemented, will concatenate marker jsons (avoiding CB collisions)
     '''
-    # todo
-    raise NotImplementedError()
+    run_concat(**kwargs)
 
 
-@main.command()
-@_common_options(JSON_COMMON_OPTIONS)
-@_common_options(COMMON_OPTIONS)
-@click.option('--max-bin-count', required=False, default=20)
-@click.option('--bg-window-size', required=False, default=2_500_000)
-@click.option('--max-marker-imbalance', required=False, default=0.9)
-@click_log.simple_verbosity_option(log)
-def clean(json_fn, output_json_fn, cb_whitelist_fn, bin_size,
-          max_bin_count, bg_window_size, max_marker_imbalance):
+clean_options = [
+    opts.marker_json, opts.output_json, opts.cb_whitelist, opts.bin_size,
+    opts.max_bin_count, opts.bg_window_size, opts.max_imbalance,
+    verbosity
+]
+
+
+@main.command('clean')
+@apply_options(clean_options)
+def clean_subcommand(**kwargs):
     '''
     Removes predicted background markers, that result from ambient nucleic acids, 
     from each cell barcode.
     '''
-    co_markers = _common_json_load(json_fn, cb_whitelist_fn, bin_size)
-
-    # first estimate ambient marker rate for each CB and try to scrub common background markers
-    co_markers_c = clean_marker_background(co_markers, bg_window_size)
-    # next mask any bins that still have extreme imbalance
-    # (e.g. due to extreme allele-specific expression differences)
-    co_markers_m = apply_haplotype_imbalance_mask(co_markers_c, max_marker_imbalance)
-    # finally threshold bins that have a large number of reads
-    co_markers_t = apply_marker_threshold(co_markers_m, max_bin_count)
-
-    co_markers_t.write_json(output_json_fn)
+    run_clean(**kwargs)
 
 
-@main.command()
-@_common_options(JSON_COMMON_OPTIONS)
-@_common_options(COMMON_OPTIONS)
-@click.option('-r', '--segment-size', required=False, default=1_000_000)
-@click.option('-t', '--terminal-segment-size', required=False, default=50_000)
-@click.option('-c', '--cm-per-mb', required=False, default=4.5)
-@click.option('--output-precision', required=False, default=2)
-@click.option('--model-lambdas', required=False, default=None, type=(float, float))
-@click.option('--processes', required=False, default=1)
-@click_log.simple_verbosity_option(log)
-def predict(json_fn, output_json_fn, cb_whitelist_fn, bin_size,
-            segment_size, terminal_segment_size, cm_per_mb,
-            model_lambdas, output_precision, processes):
+predict_options = [
+    opts.marker_json, opts.output_json, opts.cb_whitelist, opts.bin_size,
+    opts.seg_size, opts.term_seg_size, opts.cm_per_mb, opts.model_lambdas,
+    opts.precision, opts.processes
+]
+
+
+@main.command('predict')
+@apply_options(predict_options)
+def predict_subcommand(**kwargs):
     '''
     Uses rigid hidden Markov model to predict the haplotypes of each cell barcode
     at each genomic bin.
     '''
-    co_markers = _common_json_load(json_fn, cb_whitelist_fn, bin_size)
-    rhmm = create_rhmm(
-        co_markers,
-        cm_per_mb=cm_per_mb,
-        segment_size=segment_size,
-        terminal_segment_size=terminal_segment_size,
-        model_lambdas=model_lambdas
-    )
-    co_preds = detect_crossovers(co_markers, rhmm, processes=processes)
-    co_preds.write_json(output_json_fn, output_precision)
+    run_predict(**kwargs)
 
 
-@main.command()
-@click.argument('marker-json-fn', required=True, nargs=1)
-@click.argument('predict-json-fn', required=True, nargs=1)
-@click.option('-o', '--output-tsv-fn', required=True, help='Output TSV file name.')
-@_common_options(COMMON_OPTIONS)
-@click_log.simple_verbosity_option(log)
-def stats(marker_json_fn, predict_json_fn, output_tsv_fn, cb_whitelist_fn, bin_size):
+stats_options = [
+    opts.marker_json, opts.pred_json, opts.output_tsv,
+    opts.cb_whitelist, opts.bin_size,
+    opts.precision, verbosity
+]
+
+
+@main.command('stats')
+@apply_options(stats_options)
+def stats_subcommand(**kwargs):
     '''
     Scores the quality of data and predictions for a set of haplotype calls
     generated with `predict`.
     '''
-    co_markers = _common_json_load(marker_json_fn, cb_whitelist_fn, bin_size)
-    co_preds = _common_json_load(
-        predict_json_fn, cb_whitelist_fn, bin_size, data_type=PredictionRecords
-    )
-
-    if set(co_preds.seen_barcodes) != set(co_markers.seen_barcodes):
-        raise ValueError('Cell barcodes from marker-json-fn and predict-json-fn do not match')
-
-    qual_metrics = calculate_quality_metrics(co_markers, co_preds)
-    if 'ground_truth' in co_markers.metadata:
-        ground_truth_haplotypes = ground_truth_from_marker_records(co_markers)
-        score_metrics = calculate_score_metrics(co_markers, co_preds, ground_truth_haplotypes)
-    else:
-        score_metrics = None
-
-    write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics)
+    run_stats(**kwargs)
 
 
-@main.command()
-@click.argument('marker-json-fn', required=True, nargs=1)
-@click.argument('predict-json-fn', required=True, nargs=1)
-def plot(marker_json_fn, predict_json_fn):
+plot_options = [
+    opts.marker_json, opts.pred_json,
+]
+
+
+@main.command('plot')
+@apply_options(plot_options)
+def plot_subcommand(**kwargs):
     '''
     Not implemented, will provide plotting functionality
     '''
-    # todo
-    raise NotImplementedError()
+    run_plot(**kwargs)
+
+
+if __name__ == '__main__':
+    main()

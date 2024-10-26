@@ -1,7 +1,9 @@
 import numpy as np
 from scipy.ndimage import convolve1d
 
+from .utils import load_json
 from .records import MarkerRecords
+
 
 def predict_foreground_convolution(m, ws=100):
     rs = convolve1d(m, np.ones(ws), axis=0, mode='constant', cval=0)
@@ -102,3 +104,24 @@ def apply_marker_threshold(co_markers, max_marker_threshold):
     for cb, chrom, m in co_markers.deep_items():
         co_markers_t[cb, chrom] = np.minimum(m, max_marker_threshold)
     return co_markers_t
+
+
+def run_clean(json_fn, output_json_fn, *,
+              cb_whitelist_fn=None, bin_size=25_000,
+              max_bin_count=20, bg_window_size=2_500_000,
+              max_marker_imbalance=0.9):
+    '''
+    Removes predicted background markers, that result from ambient nucleic acids, 
+    from each cell barcode.
+    '''
+    co_markers = load_json(json_fn, cb_whitelist_fn, bin_size)
+
+    # first estimate ambient marker rate for each CB and try to scrub common background markers
+    co_markers_c = clean_marker_background(co_markers, bg_window_size)
+    # next mask any bins that still have extreme imbalance
+    # (e.g. due to extreme allele-specific expression differences)
+    co_markers_m = apply_haplotype_imbalance_mask(co_markers_c, max_marker_imbalance)
+    # finally threshold bins that have a large number of reads
+    co_markers_t = apply_marker_threshold(co_markers_m, max_bin_count)
+
+    co_markers_t.write_json(output_json_fn)

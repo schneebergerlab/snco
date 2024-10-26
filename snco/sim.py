@@ -3,8 +3,9 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
+from .utils import load_json
 from .records import MarkerRecords, PredictionRecords
-from .signal import estimate_overall_background_signal, subtract_background
+from .clean import estimate_overall_background_signal, subtract_background
 
 
 def co_invs_to_gt(co_invs, bin_size, chrom_nbins):
@@ -110,3 +111,24 @@ def ground_truth_from_marker_records(co_markers):
         for chrom, arr in sd.items():
             ground_truth[cb, chrom] = np.array(arr)
     return ground_truth
+
+
+def run_sim(json_fn, output_json_fn, haplo_bed_fn, *,
+            cb_whitelist_fn=None, bin_size=25_000, bg_marker_rate='auto',
+            bg_window_size=2_500_000, nsim_per_sample=100):
+    '''
+    Simulate realistic haplotype marker distributions using real data from `load`,
+    with known haplotypes/crossovers supplied from a bed file.
+    '''
+    co_markers = load_json(json_fn, cb_whitelist_fn, bin_size)
+    ground_truth_haplotypes = read_ground_truth_haplotypes(
+        haplo_bed_fn, co_markers.chrom_sizes, bin_size
+    )
+    sim_co_markers = generate_simulated_data(
+        ground_truth_haplotypes,
+        co_markers,
+        bg_rate=bg_marker_rate,
+        conv_window_size=bg_window_size,
+        nsim_per_sample=nsim_per_sample,
+    )
+    sim_co_markers.write_json(output_json_fn)

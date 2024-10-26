@@ -101,19 +101,6 @@ class CellBarcodeWhitelist:
         return copy(self.whitelist_ordered)
 
 
-def read_cb_whitelist(barcode_fn, cb_correction_method='exact'):
-    '''
-    Read a text file of cell barcodes and return them as a list.
-    In a multi-column file, barcode must be the first column
-    '''
-    if barcode_fn is not None:
-        with open(barcode_fn) as f:
-            cb_whitelist = [cb.strip().split('\t')[0] for cb in f.readlines()]
-    else:
-        cb_whitelist = None
-    return CellBarcodeWhitelist(cb_whitelist, cb_correction_method)
-
-
 def umi_dedup_directional(hap_umi_counts):
     '''
     Deduplicate UMIs using the directional method (UMItools)

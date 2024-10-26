@@ -5,8 +5,9 @@ import torch
 from pomegranate import distributions as pmd
 from pomegranate import hmm as pmh
 
+from .utils import load_json
 from .records import PredictionRecords
-from .signal import predict_foreground_convolution
+from .clean import predict_foreground_convolution
 
 
 class RigidHMM:
@@ -17,7 +18,6 @@ class RigidHMM:
         ['self_loop', 'rigid', 'co', 'start', 'end'],
         defaults=[0.0, 0.0, 0.0, 0.0, 0.0]
     )
-
 
     def __init__(self, rfactor, term_rfactor, trans_prob):
         self.rfactor = rfactor
@@ -178,3 +178,24 @@ def detect_crossovers(co_markers, rhmm, processes=1):
         for cb, p in zip(seen_barcodes, X_pred):
             co_preds[cb, chrom] = p
     return co_preds
+
+
+def run_predict(json_fn, output_json_fn, *,
+                cb_whitelist_fn=None, bin_size=25_000,
+                segment_size=1_000_000, terminal_segment_size=50_000,
+                cm_per_mb=4.5, model_lambdas=None,
+                output_precision=2, processes=1):
+    '''
+    Uses rigid hidden Markov model to predict the haplotypes of each cell barcode
+    at each genomic bin.
+    '''
+    co_markers = load_json(json_fn, cb_whitelist_fn, bin_size)
+    rhmm = create_rhmm(
+        co_markers,
+        cm_per_mb=cm_per_mb,
+        segment_size=segment_size,
+        terminal_segment_size=terminal_segment_size,
+        model_lambdas=model_lambdas
+    )
+    co_preds = detect_crossovers(co_markers, rhmm, processes=processes)
+    co_preds.write_json(output_json_fn, output_precision)

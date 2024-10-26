@@ -15,16 +15,6 @@ DEFAULT_EXCLUDE_CONTIGS = set([
 ])
 
 
-def get_chrom_sizes_bam(bam_fn, exclude_contigs=None):
-    if exclude_contigs is None:
-        exclude_contigs = DEFAULT_EXCLUDE_CONTIGS
-    with pysam.AlignmentFile(bam_fn) as bam:
-        chrom_sizes = {k: bam.get_reference_length(k)
-                       for k in bam.references
-                       if k not in exclude_contigs}
-    return chrom_sizes
-
-
 @dataclass
 class IntervalCountsDeduped:
     chrom: str
@@ -146,8 +136,10 @@ class BAMHaplotypeIntervalReader:
             # only keep alignments that unambiguously tag one of the haplotypes
             try:
                 hap = aln.get_tag(self._hap_tag) - 1
-            except KeyError:
-                raise IOError(f'bam records do not all have the haplotype tag "{self._hap_tag}"')
+            except KeyError as exc:
+                raise IOError(
+                    f'bam records do not all have the haplotype tag "{self._hap_tag}"'
+                ) from exc
             if hap == -1:
                 continue
 
@@ -159,19 +151,21 @@ class BAMHaplotypeIntervalReader:
             # finally filter for barcodes in the whitelist
             try:
                 cb = aln.get_tag(self._cb_tag)
-            except KeyError:
-                raise IOError(f'bam records do not all have the cell barcode tag "{self._cb_tag}"')
+            except KeyError as exc:
+                raise IOError(
+                    f'bam records do not all have the cell barcode tag "{self._cb_tag}"'
+                ) from exc
             cb = self.cb_whitelist.correct(cb)
 
             if cb is not None:
                 if self._umi_tag is not None:
                     try:
                         umi = aln.get_tag(self._umi_tag)
-                    except KeyError:
+                    except KeyError as exc:
                         raise IOError(
                             f'bam records do not all have the UMI tag "{self._umi_tag}". '
                             'Maybe you meant to run without UMI deduplication?'
-                        )
+                        ) from exc
                 else:
                     umi = None
                 interval_counts[cb, hap, umi] += 1
