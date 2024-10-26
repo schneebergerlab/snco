@@ -18,7 +18,7 @@ def get_chrom_sizes_bam(bam_fn, exclude_contigs=None):
     return chrom_sizes
 
 
-def single_chrom_co_markers(bam_fn, chrom, **kwargs):
+def single_chrom_co_markers(bam_fn, chrom, seq_type=None, **kwargs):
     '''
     For a single bam file/chrom combination, create a MarkerRecords object
     storing the haplotype marker information.
@@ -27,7 +27,8 @@ def single_chrom_co_markers(bam_fn, chrom, **kwargs):
         chrom_co_markers = MarkerRecords(
             bam.chrom_sizes,
             bam.bin_size,
-            bam.cb_whitelist.toset()
+            bam.cb_whitelist.toset(),
+            seq_type=seq_type,
         )
         for bin_idx in range(bam.nbins[chrom]):
             chrom_co_markers += bam.fetch_interval_counts(chrom, bin_idx)
@@ -64,6 +65,7 @@ def run_loadbam(bam_fn, output_json_fn, *,
     co_markers = get_co_markers(
         bam_fn, processes=processes,
         bin_size=bin_size,
+        seq_type=seq_type,
         cb_tag=cb_tag,
         umi_tag=umi_tag,
         umi_collapse_method=umi_collapse_method,

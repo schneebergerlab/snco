@@ -13,10 +13,12 @@ class BaseRecords:
                  chrom_sizes: dict[str, int],
                  bin_size: int,
                  cb_whitelist: set[str] | None = None,
+                 seq_type: str | None = None,
                  metadata: dict | None = None):
         self.chrom_sizes = chrom_sizes
         self.bin_size = bin_size
         self.cb_whitelist = cb_whitelist
+        self.seq_type = seq_type
         self.metadata = metadata if metadata is not None else {}
         self._cmd = []
         self._ndim = None
@@ -235,6 +237,7 @@ class BaseRecords:
             'dtype': self.__class__.__name__,
             'cmd': self._cmd + [' '.join(sys.argv)],
             'bin_size': self.bin_size,
+            'sequencing_data_type': self.seq_type,
             'chrom_sizes': self.chrom_sizes,
             'cb_whitelist': list(self.cb_whitelist) if self.cb_whitelist is not None else None,
             'shape': self.nbins,
@@ -255,7 +258,8 @@ class BaseRecords:
         new_instance = cls(obj['chrom_sizes'],
                            obj['bin_size'],
                            obj['cb_whitelist'],
-                           obj['metadata'])
+                           seq_type=obj['sequencing_data_type'],
+                           metadata=obj['metadata'])
         new_instance._cmd = obj['cmd']
         for cb, sd in obj['data'].items():
             for chrom, d in sd.items():

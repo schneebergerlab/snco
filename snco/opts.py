@@ -1,4 +1,3 @@
-import os
 import logging
 import click
 
@@ -21,7 +20,7 @@ bam = click.argument(
 csl_dir = click.argument(
     'cellsnp-lite-dir',
     required=True,
-    nargs=1, 
+    nargs=1,
     type=_input_dir_type
 )
 
@@ -106,7 +105,7 @@ precision = click.option(
 )
 
 
-def _replace_other_with_nonetype(ctx, param, val):
+def _replace_other_with_nonetype(*_, val):
     if val == 'other':
         return None
     return val
@@ -130,7 +129,7 @@ cb_corr_method = click.option(
 )
 
 
-def _validate_bam_tag(ctx, param, val):
+def _validate_bam_tag(_, param, val):
     if not len(val) == 2:
         raise ValueError(f'{param} is not of length 2')
     return val
@@ -146,14 +145,13 @@ cb_tag = click.option(
 )
 
 
-def _set_default_umi_collapse_method(ctx, param, val):
+def _set_default_umi_collapse_method(ctx, _, val):
     if val == 'none':
         if ctx.params['seq_type'] == '10x_rna':
             log.debug('setting default UMI dedup method to directional for 10x RNA data')
             return 'directional'
         return None
-    else:
-        return val
+    return val
 
 
 umi_collapse_method = click.option(
@@ -191,11 +189,10 @@ hap_tag = click.option(
 )
 
 
-def _parse_excl_contigs(ctx, param, val):
+def _parse_excl_contigs(*_, val):
     if val is None:
         return DEFAULT_EXCLUDE_CONTIGS
-    else:
-        return set(val.split(',')) # todo: check allowed fasta header names
+    return set(val.split(',')) # todo: check allowed fasta header names
 
 
 excl_contigs = click.option(
