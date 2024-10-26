@@ -102,7 +102,9 @@ def single_cell_co_plot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
             co_markers.chrom_sizes[chrom],
             co_markers.bin_size,
             ax=ax,
-            max_yheight=max_yheight
+            max_yheight=max_yheight,
+            ref_colour=ref_colour,
+            alt_colour=alt_colour,
         )
         if co_preds is not None:
             hp = co_preds[cb, chrom]
