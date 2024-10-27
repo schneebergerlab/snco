@@ -1,6 +1,7 @@
 import logging
 import click
 
+from . import logger
 from . import opts
 from .loadbam import run_loadbam
 from .loadcsl import run_loadcsl
@@ -38,7 +39,7 @@ loadbam_options = [
     opts.seq_type, opts.cb_corr_method, opts.cb_tag,
     opts.umi_collapse_method, opts.umi_tag,
     opts.hap_tag, opts.excl_contigs,
-    opts.processes, opts.verbosity
+    opts.processes, logger.verbosity
 ]
 
 @main.command('loadbam')
@@ -55,7 +56,7 @@ def loadbam_subcommand(**kwargs):
 loadcsl_options = [
     opts.csl_dir, opts.chrom_sizes, opts.output_json,
     opts.cb_whitelist, opts.bin_size,
-    opts.verbosity
+    logger.verbosity
 ]
 
 
@@ -74,7 +75,7 @@ sim_options = [
     opts.marker_json, opts.haplo_bed, opts.output_json,
     opts.cb_whitelist, opts.bin_size,
     opts.bg_marker_rate, opts.bg_window_size, opts.nsim_per_samp,
-    opts.verbosity
+    logger.verbosity
 ]
 
 
@@ -91,7 +92,7 @@ def sim_subcommand(**kwargs):
 concat_options = [
     opts.concat_json, opts.output_json,
     opts.merge_suffixes,
-    opts.verbosity
+    logger.verbosity
 ]
 
 
@@ -110,7 +111,7 @@ clean_options = [
     opts.min_markers, opts.max_bin_count,
     opts.clean_bg, opts.bg_window_size,
     opts.mask_imbalanced, opts.max_imbalance,
-    opts.verbosity
+    logger.verbosity
 ]
 
 
@@ -127,7 +128,8 @@ def clean_subcommand(**kwargs):
 predict_options = [
     opts.marker_json, opts.output_json, opts.cb_whitelist, opts.bin_size,
     opts.seg_size, opts.term_seg_size, opts.cm_per_mb, opts.model_lambdas,
-    opts.precision, opts.processes, opts.batch_size, opts.device, opts.verbosity
+    opts.precision, opts.processes, opts.batch_size, opts.device,
+    logger.verbosity
 ]
 
 
@@ -144,7 +146,7 @@ def predict_subcommand(**kwargs):
 stats_options = [
     opts.marker_json, opts.pred_json, opts.output_tsv,
     opts.cb_whitelist, opts.bin_size,
-    opts.precision, opts.verbosity
+    opts.precision, logger.verbosity
 ]
 
 
@@ -161,7 +163,8 @@ def stats_subcommand(**kwargs):
 plot_options = [
     opts.cell_barcode, opts.marker_json, opts.plot_pred_json, opts.output_fig,
     opts.figsize, opts.show_pred, opts.show_co_num, opts.max_yheight,
-    opts.ref_colour, opts.alt_colour, opts.verbosity
+    opts.ref_colour, opts.alt_colour,
+    logger.verbosity
 ]
 
 

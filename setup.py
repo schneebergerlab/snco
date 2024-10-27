@@ -23,7 +23,6 @@ setup(
         'torch',
         'pomegranate>=1.0',
         'click',
-        'click-log',
         'joblib',
         'pysam',
         'matplotlib' # todo: make this dependency optional

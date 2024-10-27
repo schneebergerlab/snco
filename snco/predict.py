@@ -6,8 +6,7 @@ import torch
 from pomegranate import distributions as pmd
 from pomegranate import hmm as pmh
 
-import click
-
+from .logger import progress_bar
 from .utils import load_json
 from .records import PredictionRecords
 from .clean import predict_foreground_convolution
@@ -191,7 +190,7 @@ def detect_crossovers(co_markers, rhmm, batch_size=1_000, processes=1):
     seen_barcodes = co_markers.seen_barcodes
     co_preds = PredictionRecords.new_like(co_markers)
     torch.set_num_threads(processes)
-    chrom_progress = click.progressbar(
+    chrom_progress = progress_bar(
         co_markers.chrom_sizes,
         label='Predicting COs',
         item_show_func=str,
