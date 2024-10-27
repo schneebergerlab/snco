@@ -6,6 +6,8 @@ import torch
 from pomegranate import distributions as pmd
 from pomegranate import hmm as pmh
 
+import click
+
 from .utils import load_json
 from .records import PredictionRecords
 from .clean import predict_foreground_convolution
@@ -126,11 +128,15 @@ class RigidHMM:
     def initialise_model(self, fg_lambda, bg_lambda):
         # todo: implement sparse version for when rfactor is very large
         self._model = pmh.DenseHMM(frozen=True)
+        log.debug(f'moving model to device: {self._device}')
         self._model.to(self._device)
         for haplotype in self.haplotypes:
             params = [fg_lambda, bg_lambda] if haplotype == 0 else [bg_lambda, fg_lambda]
             self._create_rigid_chain(params, haplotype)
         self._add_transitions()
+        log.debug(
+            f'Finished initialising model with {self._model.n_distributions} distributions'
+        )
 
     def estimate_params(self, X):
         X_fg = []
@@ -146,6 +152,9 @@ class RigidHMM:
 
     def fit(self, X):
         fg_lambda, bg_lambda = self.estimate_params(X)
+        log.debug(
+            f'Estimated model parameters from data: fg_lambda {fg_lambda:.2g}, bg_lambda {bg_lambda:.2g}'
+        )
         self.initialise_model(fg_lambda, bg_lambda)
 
     def predict(self, X, batch_size=128):
@@ -181,11 +190,17 @@ def detect_crossovers(co_markers, rhmm, batch_size=1_000, processes=1):
     seen_barcodes = co_markers.seen_barcodes
     co_preds = PredictionRecords.new_like(co_markers)
     torch.set_num_threads(processes)
-    for chrom in co_markers.chrom_sizes:
-        X = np.array([co_markers[cb, chrom] for cb in seen_barcodes])
-        X_pred = rhmm.predict(X, batch_size=batch_size)
-        for cb, p in zip(seen_barcodes, X_pred):
-            co_preds[cb, chrom] = p
+    chrom_progress = click.progressbar(
+        co_markers.chrom_sizes,
+        label='Predicting COs',
+        item_show_func=str,
+    )
+    with chrom_progress:
+        for chrom in chrom_progress:
+            X = np.array([co_markers[cb, chrom] for cb in seen_barcodes])
+            X_pred = rhmm.predict(X, batch_size=batch_size)
+            for cb, p in zip(seen_barcodes, X_pred):
+                co_preds[cb, chrom] = p
     return co_preds
 
 
@@ -211,4 +226,5 @@ def run_predict(marker_json_fn, output_json_fn, *,
     co_preds = detect_crossovers(
         co_markers, rhmm, batch_size=batch_size, processes=processes
     )
+    log.info(f'Writing predictions to {output_json_fn}')
     co_preds.write_json(output_json_fn, output_precision)

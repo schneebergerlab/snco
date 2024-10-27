@@ -1,6 +1,5 @@
 import logging
 import click
-import click_log
 
 from . import opts
 from .loadbam import run_loadbam
@@ -14,8 +13,6 @@ from .plot import run_plot
 
 
 log = logging.getLogger('snco')
-click_log.basic_config(log)
-verbosity = click_log.simple_verbosity_option(log)
 
 
 @click.group()
@@ -41,7 +38,7 @@ loadbam_options = [
     opts.seq_type, opts.cb_corr_method, opts.cb_tag,
     opts.umi_collapse_method, opts.umi_tag,
     opts.hap_tag, opts.excl_contigs,
-    opts.processes, verbosity
+    opts.processes, opts.verbosity
 ]
 
 @main.command('loadbam')
@@ -58,7 +55,7 @@ def loadbam_subcommand(**kwargs):
 loadcsl_options = [
     opts.csl_dir, opts.chrom_sizes, opts.output_json,
     opts.cb_whitelist, opts.bin_size,
-    verbosity
+    opts.verbosity
 ]
 
 
@@ -77,7 +74,7 @@ sim_options = [
     opts.marker_json, opts.haplo_bed, opts.output_json,
     opts.cb_whitelist, opts.bin_size,
     opts.bg_marker_rate, opts.bg_window_size, opts.nsim_per_samp,
-    verbosity
+    opts.verbosity
 ]
 
 
@@ -94,7 +91,7 @@ def sim_subcommand(**kwargs):
 concat_options = [
     opts.concat_json, opts.output_json,
     opts.merge_suffixes,
-    verbosity
+    opts.verbosity
 ]
 
 
@@ -110,8 +107,10 @@ def concat_subcommand(**kwargs):
 
 clean_options = [
     opts.marker_json, opts.output_json, opts.cb_whitelist, opts.bin_size,
-    opts.max_bin_count, opts.bg_window_size, opts.max_imbalance,
-    verbosity
+    opts.min_markers, opts.max_bin_count,
+    opts.clean_bg, opts.bg_window_size,
+    opts.mask_imbalanced, opts.max_imbalance,
+    opts.verbosity
 ]
 
 
@@ -128,7 +127,7 @@ def clean_subcommand(**kwargs):
 predict_options = [
     opts.marker_json, opts.output_json, opts.cb_whitelist, opts.bin_size,
     opts.seg_size, opts.term_seg_size, opts.cm_per_mb, opts.model_lambdas,
-    opts.precision, opts.processes, opts.batch_size, opts.device, verbosity
+    opts.precision, opts.processes, opts.batch_size, opts.device, opts.verbosity
 ]
 
 
@@ -145,7 +144,7 @@ def predict_subcommand(**kwargs):
 stats_options = [
     opts.marker_json, opts.pred_json, opts.output_tsv,
     opts.cb_whitelist, opts.bin_size,
-    opts.precision, verbosity
+    opts.precision, opts.verbosity
 ]
 
 
@@ -162,7 +161,7 @@ def stats_subcommand(**kwargs):
 plot_options = [
     opts.cell_barcode, opts.marker_json, opts.plot_pred_json, opts.output_fig,
     opts.figsize, opts.show_pred, opts.show_co_num, opts.max_yheight,
-    opts.ref_colour, opts.alt_colour, verbosity
+    opts.ref_colour, opts.alt_colour, opts.verbosity
 ]
 
 

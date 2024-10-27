@@ -1,12 +1,18 @@
+'''functions for converting cellsnp-lite output into snco.MarkerRecords format'''
 import os
+import logging
 from scipy.io import mmread
-import pysam
 
 from .utils import read_cb_whitelist
 from .records import MarkerRecords
 
+log = logging.getLogger('snco')
+
 
 def read_chrom_sizes(chrom_sizes_fn):
+    '''
+    load dict of chromosome lengths from a 2 column text file or faidx file
+    '''
     chrom_sizes = {}
     with open(chrom_sizes_fn) as f:
         for record in f:
@@ -16,14 +22,24 @@ def read_chrom_sizes(chrom_sizes_fn):
 
 
 def read_vcf(vcf_fn, bin_size):
-    with pysam.VariantFile(vcf_fn) as vcf:
+    '''
+    read variant chromosomes and bin positions from cellsnp-lite vcf file
+    '''
+    with open(vcf_fn) as vcf:
         variants = []
-        for snp in vcf.fetch():
-            variants.append((snp.contig, snp.pos // bin_size))
-        return variants
+        for record in vcf:
+            if record.startswith('#'):
+                continue
+            chrom, pos = record.split('\t')[:2]
+            variants.append((chrom, int(pos) // bin_size))
+    log.info(f'Read {len(variants)} from vcf file {vcf_fn}')
+    return variants
 
 
 def parse_cellsnp_lite(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist=None):
+    '''
+    read data from cellsnp-lite output into a MarkerRecords object
+    '''
     dep_fn = os.path.join(csl_dir, 'cellSNP.tag.DP.mtx')
     alt_fn = os.path.join(csl_dir, 'cellSNP.tag.AD.mtx')
     vcf_fn = os.path.join(csl_dir, 'cellSNP.base.vcf')
@@ -50,6 +66,7 @@ def parse_cellsnp_lite(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist=None):
             chrom, bin_idx = variants[var_idx]
             co_markers[cb, chrom, bin_idx, 0] += ref
             co_markers[cb, chrom, bin_idx, 1] += alt
+
     return co_markers
 
 
@@ -68,4 +85,5 @@ def run_loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, *,
         bin_size=bin_size,
         cb_whitelist=cb_whitelist,
     )
+    log.info(f'Writing markers to {output_json_fn}')
     co_markers.write_json(output_json_fn)

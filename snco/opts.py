@@ -1,11 +1,14 @@
 import re
 import logging
 import click
+import click_log
 
 from .bam import DEFAULT_EXCLUDE_CONTIGS
 
 
 log = logging.getLogger('snco')
+click_log.basic_config(log)
+verbosity = click_log.simple_verbosity_option(log)
 
 _input_file_type = click.Path(exists=True, file_okay=True, dir_okay=False)
 _input_dir_type = click.Path(exists=True, file_okay=False, dir_okay=True)
@@ -313,12 +316,34 @@ nsim_per_samp = click.option(
     help='the number of randomly selected cell barcodes to simulate per ground truth sample'
 )
 
+min_markers = click.option(
+    '--min-markers-per-cb',
+    required=False,
+    type=click.IntRange(0, 1000),
+    default=0,
+    help='minimum total number of markers per cb (cb with lower are filtered'
+)
+
 max_bin_count = click.option(
     '--max-bin-count',
     required=False,
     type=click.IntRange(5, 1000),
     default=20,
     help='maximum number of markers per cell per bin (higher values are thresholded)'
+)
+
+clean_bg = click.option(
+    '--clean-bg/--no-clean-bg',
+    required=False,
+    default=True,
+    help='whether to estimate and remove background markers'
+)
+
+mask_imbalanced = click.option(
+    '--mask-imbalanced/--no-mask-imbalanced',
+    required=False,
+    default=True,
+    help='whether to max bins with extreme allelic imbalance'
 )
 
 max_imbalance = click.option(

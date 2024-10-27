@@ -1,3 +1,8 @@
+'''
+functions for aggregating marker information from a bam file containing cell barcode, haplotype 
+and optionally UMI tags, into the snco.MarkerRecords format.
+'''
+import logging
 from functools import reduce
 from joblib import Parallel, delayed
 
@@ -7,8 +12,13 @@ from .utils import read_cb_whitelist
 from .records import MarkerRecords
 from .bam import BAMHaplotypeIntervalReader, DEFAULT_EXCLUDE_CONTIGS
 
+log = logging.getLogger('snco')
+
 
 def get_chrom_sizes_bam(bam_fn, exclude_contigs=None):
+    '''
+    load dict of chromosome lengths from the header of a bam file
+    '''
     if exclude_contigs is None:
         exclude_contigs = DEFAULT_EXCLUDE_CONTIGS
     with pysam.AlignmentFile(bam_fn) as bam:
@@ -42,7 +52,9 @@ def get_co_markers(bam_fn, processes=1, **kwargs):
     '''
     chrom_sizes = get_chrom_sizes_bam(bam_fn, exclude_contigs=kwargs.get('exclude_contigs', None))
     # todo: better parallelisation (by bin not just by chromosome)
-    with Parallel(n_jobs=min(processes, len(chrom_sizes)), backend='loky') as pool:
+    processes = min(processes, len(chrom_sizes))
+    log.debug(f'Starting job pool to process bam with {processes} processes')
+    with Parallel(n_jobs=processes, backend='loky') as pool:
         co_markers = pool(
             delayed(single_chrom_co_markers)(bam_fn, chrom, **kwargs)
             for chrom in chrom_sizes
@@ -73,4 +85,6 @@ def run_loadbam(bam_fn, output_json_fn, *,
         cb_whitelist=cb_whitelist,
         exclude_contigs=exclude_contigs,
     )
+    log.info(f'Identified {len(co_markers)} cell barcodes from bam file')
+    log.info(f'Writing markers to {output_json_fn}')
     co_markers.write_json(output_json_fn)

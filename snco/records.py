@@ -13,6 +13,10 @@ log = logging.getLogger('snco')
 
 class BaseRecords:
 
+    '''
+    base class for MarkerRecords and PredictionRecords classes
+    '''
+
     def __init__(self,
                  chrom_sizes: dict[str, int],
                  bin_size: int,
@@ -90,6 +94,9 @@ class BaseRecords:
             raise KeyError('Too many indices to array')
         raise KeyError(index)
 
+    def _ipython_key_completions_(self):
+        return self._records.keys()
+
     def __setitem__(self, index, value):
         if isinstance(index, str):
             self._check_whitelist(index, raise_error=True)
@@ -125,32 +132,45 @@ class BaseRecords:
         return list(self._records.keys())
 
     def items(self):
+        '''shallow items i.e. pairs of cb and dict[chrom: marker array]'''
         return self._records.items()
 
     def deep_items(self):
+        '''deep items, i.e. triples of cb, chrom, and marker arrays'''
         for cb, sd in self.items():
             for chrom, arr in sd.items():
                 yield cb, chrom, arr
 
     def keys(self):
+        '''iterable of top level keys (i.e. cell barcodes)'''
         return self._records.keys()
 
     def values(self):
+        '''iterable of top level values (i.e. dict[chrom: marker array])'''
         return self._records.values()
 
     def deep_values(self):
+        '''iterable of low level values (i.e. marker arrays)'''
         for sd in self._records.values():
             yield from sd.values()
 
     def set_cb_whitelist(self, new_whitelist):
-        self.cb_whitelist = new_whitelist
-        self._records = {
-            cb: val for cb, val in self.items()
-            if self._check_whitelist(cb)
-        }
+        '''replace the current cell barcode whitelist and filter records to match'''
+        if new_whitelist is not None:
+            self.cb_whitelist = set(new_whitelist)
+            self._records = {
+                cb: val for cb, val in self.items()
+                if self._check_whitelist(cb)
+            }
+        else:
+            self.cb_whitelist = None
+
+    def pop(self, cb):
+        return self._records.pop(cb)
 
     @classmethod
     def new_like(cls, other):
+        '''create an empty records object with metadata properties from other'''
         # do not use deepcopy directly, as this will unnecessarily copy _records
         new_instance = cls(
             copy(other.chrom_sizes),
@@ -163,11 +183,13 @@ class BaseRecords:
         return new_instance
 
     def copy(self):
+        '''create a copy of a records object'''
         new_instance = self.new_like(self)
         new_instance._records = deepcopy(self._records)
         return new_instance
 
     def add_cb_suffix(self, suffix, inplace=False):
+        '''append a suffix to the cell barcodes in a records object'''
         if inplace:
             s = self
         else:
@@ -179,6 +201,11 @@ class BaseRecords:
             return s
 
     def merge(self, other, inplace=False):
+        '''
+        merge records from other into self.
+        Cell barcodes in other that are not present in self will be created.
+        where barcodes are present in both, the marker arrays will be added together. 
+        '''
         if (stype := type(self)) != (otype := type(other)):
             raise ValueError(
                 f'cannot merge {stype.__name__} object with object of type {otype.__name__}'
@@ -201,6 +228,10 @@ class BaseRecords:
         if s.cb_whitelist is None or other.cb_whitelist is None:
             # when only one records object has a whitelist, merging may cause issues
             # solution is to wipe the whitelist
+            log.debug(
+                f'one or both of merged {stype.__name__} objects has no whitelist, '
+                'whitelist of merged object will also be set to None'
+            )
             s.cb_whitelist = None
         else:
             s.cb_whitelist.update(other.cb_whitelist)
@@ -213,16 +244,6 @@ class BaseRecords:
 
         if not inplace:
             return s
-
-    def update(self, interval_counts):
-        if not isinstance(interval_counts, IntervalMarkerCounts):
-            raise ValueError(
-                f'can only update {type(self).__name__} with IntervalMarkerCounts object'
-            )
-        chrom, bin_idx = interval_counts.chrom, interval_counts.bin_idx
-        for cb, hap, val in interval_counts.deep_items():
-            self[cb, chrom, bin_idx, hap] += val
-        return self
 
     def __add__(self, other):
         if isinstance(other, BaseRecords):
@@ -275,6 +296,7 @@ class BaseRecords:
         raise NotImplementedError()
 
     def to_json(self, precision: int = 2):
+        '''dump records obejct to a json string'''
         return json.dumps({
             'dtype': self.__class__.__name__,
             'cmd': self._cmd + [' '.join(sys.argv)],
@@ -288,11 +310,13 @@ class BaseRecords:
         })
 
     def write_json(self, fp: str, precision: int = 2):
+        '''write json representation of a MarkerRecords obejct to a file'''
         with open(fp, 'w') as f:
             f.write(self.to_json(precision=precision))
 
     @classmethod
     def read_json(cls, fp: str):
+        '''read records object from a json file'''
         with open(fp) as f:
             obj = json.load(f)
         if obj['dtype'] != cls.__name__:
@@ -321,6 +345,25 @@ class MarkerRecords(BaseRecords):
         self._ndim = 2
         self._dim2_shape = 2
         self._init_val = 0.0
+
+    def update(self, interval_counts):
+        '''
+        update MarkerRecords object with values from a IntervalMarkerCounts object.
+        '''
+        if not isinstance(interval_counts, IntervalMarkerCounts):
+            raise ValueError(
+                f'can only update {type(self).__name__} with IntervalMarkerCounts object'
+            )
+        chrom, bin_idx = interval_counts.chrom, interval_counts.bin_idx
+        for cb, hap, val in interval_counts.deep_items():
+            self[cb, chrom, bin_idx, hap] += val
+        return self
+
+    def total_marker_count(self, cb):
+        tot = 0
+        for m in self[cb].values():
+            tot += m.sum(axis=None)
+        return tot
 
     def _arr_to_json(self, arr, precision=0):
         idx = np.nonzero(arr.ravel())[0]
@@ -355,6 +398,7 @@ class PredictionRecords(BaseRecords):
         return np.array(obj)
 
     def to_frame(self):
+        '''Convert PredictionRecords object to a pandas.DataFrame'''
         frame = []
         index = []
         columns = pd.MultiIndex.from_tuples(

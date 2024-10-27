@@ -1,3 +1,4 @@
+'''classes for reading bam files and aggregating count information'''
 from collections import Counter
 from dataclasses import dataclass, field
 from operator import methodcaller
@@ -17,6 +18,12 @@ DEFAULT_EXCLUDE_CONTIGS = set([
 
 @dataclass
 class IntervalMarkerCounts:
+
+    '''
+    dataclass to store deduplicated count information
+    for a single bin/interval
+    '''
+
     chrom: str
     bin_idx: int
     counts: dict = field(default_factory=dict)
@@ -35,6 +42,11 @@ class IntervalMarkerCounts:
 
 class IntervalUMICounts:
 
+    '''
+    class to store count information for a single bin/interval
+    prior to UMI deduplication
+    '''
+    
     def __init__(self, chrom, bin_idx, umi_collapse_method):
         self.chrom = chrom
         self.bin_idx = bin_idx
@@ -71,6 +83,10 @@ class IntervalUMICounts:
         return iter(self._counts)
 
     def collapse(self):
+        '''
+        Deduplicate UMIs in the interval using one of three methods and
+        return as an IntervalMarkerCounts object
+        '''
         collapsed = IntervalMarkerCounts(self.chrom, self.bin_idx)
         umi_eval = methodcaller('total') if self.umi_collapse_method is None else len
         for cb in self:
@@ -83,6 +99,10 @@ class IntervalUMICounts:
 
 
 class BAMHaplotypeIntervalReader:
+
+    '''
+    File wrapper class for reading aggregated bin counts for each cell barcode/haplotype
+    '''
 
     def __init__(self, bam_fn, *,
                  bin_size=25_000,
@@ -116,6 +136,11 @@ class BAMHaplotypeIntervalReader:
             self.nbins[chrom] = int(np.ceil(cs / self.bin_size))
 
     def fetch_interval_counts(self, chrom, bin_idx):
+        '''
+        for a specific bin index (positions determined by bin_size)
+        read bam file and aggregate alignments into IntervalMarkerCounts
+        object.
+        '''
         assert bin_idx < self.nbins[chrom]
         bin_start = self.bin_size * bin_idx
         bin_end = bin_start + self.bin_size - 1
