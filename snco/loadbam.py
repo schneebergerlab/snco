@@ -6,6 +6,7 @@ import logging
 from functools import reduce
 from joblib import Parallel, delayed
 
+import numpy as np
 import pysam
 
 from .utils import read_cb_whitelist
@@ -28,7 +29,7 @@ def get_chrom_sizes_bam(bam_fn, exclude_contigs=None):
     return chrom_sizes
 
 
-def single_chrom_co_markers(bam_fn, chrom, seq_type=None, **kwargs):
+def single_chrom_co_markers(bam_fn, chrom, bin_start, bin_end, seq_type=None, **kwargs):
     '''
     For a single bam file/chrom combination, create a MarkerRecords object
     storing the haplotype marker information.
@@ -40,9 +41,27 @@ def single_chrom_co_markers(bam_fn, chrom, seq_type=None, **kwargs):
             bam.cb_whitelist.toset(),
             seq_type=seq_type,
         )
-        for bin_idx in range(bam.nbins[chrom]):
+        for bin_idx in range(bin_start, bin_end):
             chrom_co_markers += bam.fetch_interval_counts(chrom, bin_idx)
     return chrom_co_markers
+
+
+def chrom_chunks(chrom_sizes, bin_size, nchunks):
+    '''produce approximately nchunks slices covering all the bins in chrom_nbins'''
+    tot = 0
+    chrom_nbins = {}
+    for chrom, cs in chrom_sizes.items():
+        nbins = int(np.ceil(cs / bin_size))
+        tot += nbins
+        chrom_nbins[chrom] = nbins
+
+    chunk_size = tot // nchunks
+    for chrom, nbins in chrom_nbins.items():
+        start = 0
+        while start < nbins:
+            end = min(start + chunk_size, nbins)
+            yield chrom, start, end
+            start = end
 
 
 def get_co_markers(bam_fn, processes=1, **kwargs):
@@ -51,13 +70,12 @@ def get_co_markers(bam_fn, processes=1, **kwargs):
     and summarise into a MarkerRecords object.
     '''
     chrom_sizes = get_chrom_sizes_bam(bam_fn, exclude_contigs=kwargs.get('exclude_contigs', None))
-    # todo: better parallelisation (by bin not just by chromosome)
-    processes = min(processes, len(chrom_sizes))
+    bin_size = kwargs.get('bin_size')
     log.debug(f'Starting job pool to process bam with {processes} processes')
     with Parallel(n_jobs=processes, backend='loky') as pool:
         co_markers = pool(
-            delayed(single_chrom_co_markers)(bam_fn, chrom, **kwargs)
-            for chrom in chrom_sizes
+            delayed(single_chrom_co_markers)(bam_fn, chrom, start, end, **kwargs)
+            for chrom, start, end in chrom_chunks(chrom_sizes, bin_size, processes)
         )
     co_markers = reduce(MarkerRecords.merge, co_markers)
     return co_markers
