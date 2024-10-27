@@ -46,7 +46,7 @@ class IntervalUMICounts:
     class to store count information for a single bin/interval
     prior to UMI deduplication
     '''
-    
+
     def __init__(self, chrom, bin_idx, umi_collapse_method):
         self.chrom = chrom
         self.bin_idx = bin_idx

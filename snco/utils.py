@@ -14,7 +14,7 @@ def read_cb_whitelist(barcode_fn, cb_correction_method='exact'):
     if barcode_fn is not None:
         with open(barcode_fn) as f:
             cb_whitelist = [cb.strip().split('\t')[0] for cb in f.readlines()]
-        log.info(f'Read {len(cb_whitelist)} cell barcodes from cb whitelist file {barcode_fn}') 
+        log.info(f'Read {len(cb_whitelist)} cell barcodes from cb whitelist file {barcode_fn}')
     else:
         cb_whitelist = None
     return CellBarcodeWhitelist(cb_whitelist, cb_correction_method)

@@ -164,7 +164,7 @@ def run_clean(marker_json_fn, output_json_fn, *,
             f'Masked {n_masked:d}/{tot_bins} bins with '
             f'marker imbalance greater than {max_marker_imbalance}'
         )
-        
+
     # threshold bins that have a large number of reads
     co_markers = apply_marker_threshold(co_markers, max_bin_count)
     log.info(f'Thresholded bins with >{max_bin_count} markers')

@@ -153,7 +153,8 @@ class RigidHMM:
     def fit(self, X):
         fg_lambda, bg_lambda = self.estimate_params(X)
         log.debug(
-            f'Estimated model parameters from data: fg_lambda {fg_lambda:.2g}, bg_lambda {bg_lambda:.2g}'
+            'Estimated model parameters from data: '
+            f'fg_lambda {fg_lambda:.2g}, bg_lambda {bg_lambda:.2g}'
         )
         self.initialise_model(fg_lambda, bg_lambda)
 

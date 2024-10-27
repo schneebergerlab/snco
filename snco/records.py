@@ -253,8 +253,6 @@ class BaseRecords:
     def __iadd__(self, other):
         if isinstance(other, BaseRecords):
             return self.merge(other, inplace=True)
-        if isinstance(other, IntervalMarkerCounts):
-            return self.update(other)
         raise NotImplementedError()
 
     @classmethod
@@ -358,6 +356,13 @@ class MarkerRecords(BaseRecords):
         for cb, hap, val in interval_counts.deep_items():
             self[cb, chrom, bin_idx, hap] += val
         return self
+
+    def __iadd__(self, other):
+        if isinstance(other, BaseRecords):
+            return self.merge(other, inplace=True)
+        if isinstance(other, IntervalMarkerCounts):
+            return self.update(other)
+        raise NotImplementedError()
 
     def total_marker_count(self, cb):
         tot = 0
