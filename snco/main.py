@@ -34,6 +34,75 @@ def apply_options(options_list):
     return _apply_options
 
 
+def get_kwarg_subset(kw_list, kwargs):
+    return {kw: kwargs[kw] for kw in kw_list}
+
+
+bam2preds_options = [
+    opts.bam, opts.output_prefix, opts.cb_whitelist, opts.bin_size,
+    opts.seq_type, opts.cb_corr_method, opts.cb_tag,
+    opts.umi_collapse_method, opts.umi_tag,
+    opts.hap_tag, opts.excl_contigs,
+    opts.min_markers, opts.max_bin_count,
+    opts.run_clean, opts.clean_bg, opts.bg_window_size,
+    opts.mask_imbalanced, opts.max_imbalance,
+    opts.seg_size, opts.term_seg_size, opts.cm_per_mb, opts.model_lambdas,
+    opts.precision, opts.processes, opts.batch_size, opts.device,
+    opts.processes, logger.verbosity
+]
+
+
+@main.command('bam2pred')
+@apply_options(bam2preds_options)
+def bam_pipeline_subcommand(**kwargs):
+    '''
+    Pipeline chaining together the loadbam, clean and predict commands
+    '''
+
+    output_prefix = kwargs.pop('output_prefix')
+    loadbam_kwargs = [
+        'bam_fn', 'cb_whitelist_fn', 'bin_size', 'seq_type',
+        'cb_correction_method', 'cb_tag',
+        'umi_collapse_method', 'umi_tag', 'hap_tag',
+        'exclude_contigs', 'processes'
+    ]
+    loadbam_kwargs = get_kwarg_subset(loadbam_kwargs, kwargs)
+    loadbam_output = f'{output_prefix}.markers.json'
+    loadbam_kwargs['output_json_fn'] = loadbam_output
+
+    run_loadbam(**loadbam_kwargs)
+
+    if kwargs['run_clean']:
+
+        clean_kwargs = [
+            'bin_size', 'min_markers_per_cb', 'max_bin_count',
+            'clean_bg', 'bg_window_size',
+            'mask_imbalanced', 'max_marker_imbalance',
+        ]
+
+        clean_kwargs = get_kwarg_subset(clean_kwargs, kwargs)
+        clean_kwargs['marker_json_fn'] = loadbam_output
+        clean_output = f'{output_prefix}.cmarkers.json'
+        clean_kwargs['output_json_fn'] = clean_output
+
+        run_clean(**clean_kwargs)
+
+    else:
+        clean_output = loadbam_output
+
+    predict_kwargs = [
+        'bin_size', 'segment_size', 'terminal_segment_size',
+        'cm_per_mb', 'model_lambdas', 'output_precision',
+        'processes', 'batch_size', 'device',
+    ]
+    predict_kwargs = get_kwarg_subset(predict_kwargs, kwargs)
+    predict_kwargs['marker_json_fn'] = clean_output
+    predict_output = f'{output_prefix}.pred.json'
+    predict_kwargs['output_json_fn'] = predict_output
+
+    run_predict(**predict_kwargs)
+
+
 loadbam_options = [
     opts.bam, opts.output_json, opts.cb_whitelist, opts.bin_size,
     opts.seq_type, opts.cb_corr_method, opts.cb_tag,
@@ -141,7 +210,6 @@ def predict_subcommand(**kwargs):
     at each genomic bin.
     '''
     run_predict(**kwargs)
-
 
 stats_options = [
     opts.marker_json, opts.pred_json, opts.output_tsv,

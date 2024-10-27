@@ -149,22 +149,23 @@ class BAMHaplotypeIntervalReader:
 
         for aln in self.bam.fetch(chrom, bin_start, bin_end):
 
-            # only keep primary, unduplicated alignments
+            # only keep primary, unduplicated alignments, as multimappers may cause artefacts
             if aln.is_secondary or aln.is_supplementary or aln.is_duplicate:
                 continue
 
-            # only consider fwd mapping read of properly paired 2xreads
+            # only consider fwd mapping of properly paired 2xreads, prevents double counting
             if aln.is_paired:
                 if aln.is_reverse or not aln.is_proper_pair:
                     continue
 
-            # only keep alignments that unambiguously tag one of the haplotypes
             try:
                 hap = aln.get_tag(self._hap_tag) - 1
             except KeyError as exc:
                 raise IOError(
                     f'bam records do not all have the haplotype tag "{self._hap_tag}"'
                 ) from exc
+
+            # only keep alignments that unambiguously tag one of the haplotypes
             if hap == -1:
                 continue
 
@@ -173,13 +174,15 @@ class BAMHaplotypeIntervalReader:
             if aln.reference_start < bin_start:
                 continue
 
-            # finally filter for barcodes in the whitelist
             try:
                 cb = aln.get_tag(self._cb_tag)
             except KeyError as exc:
                 raise IOError(
                     f'bam records do not all have the cell barcode tag "{self._cb_tag}"'
                 ) from exc
+
+            # finally filter for barcodes in the whitelist
+            # use 1mm correction to match cbs with no more than 1 mismatch to the whitelist
             cb = self.cb_whitelist.correct(cb)
 
             if cb is not None:

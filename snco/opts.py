@@ -61,6 +61,13 @@ cell_barcode = click.argument(
     nargs=1,
 )
 
+output_prefix = click.option(
+    '-o', '--output-prefix',
+    required=True,
+    type=_output_file_type,
+    help='Output prefix'
+)
+
 output_json = click.option(
     '-o', '--output-json-fn',
     required=True,
@@ -289,6 +296,15 @@ merge_suffixes = click.option(
     help=('comma separated list of suffixes to append to cell barcodes from '
           'each file. Must be alphanumeric with same length as no. json-fns')
 )
+
+
+run_clean = click.option(
+    '--run-clean/--no-run-clean',
+    required=False,
+    default=True,
+    help='whether to run clean step in pipeline'
+)
+
 
 bg_marker_rate = click.option(
     '--bg-marker-rate',

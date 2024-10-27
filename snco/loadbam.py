@@ -104,5 +104,8 @@ def run_loadbam(bam_fn, output_json_fn, *,
         exclude_contigs=exclude_contigs,
     )
     log.info(f'Identified {len(co_markers)} cell barcodes from bam file')
-    log.info(f'Writing markers to {output_json_fn}')
-    co_markers.write_json(output_json_fn)
+
+    if output_json_fn is not None:
+        log.info(f'Writing markers to {output_json_fn}')
+        co_markers.write_json(output_json_fn)
+    return co_markers
