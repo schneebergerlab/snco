@@ -188,7 +188,7 @@ class BaseRecords:
         if self.bin_size != other.bin_size:
             raise ValueError('bin_sizes do not match')
         if self.seq_type != other.seq_type:
-            log.warn(
+            log.warning(
                 'merged datasets do not appear to be the same sequencing data type: '
                 f'{self.seq_type} and {other.seq_type}'
             )

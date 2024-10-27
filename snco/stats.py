@@ -3,6 +3,7 @@ import pandas as pd
 from scipy.ndimage import convolve1d
 
 from .utils import load_json
+from .sim import ground_truth_from_marker_records
 
 def total_markers(cb_co_markers):
     tot = 0

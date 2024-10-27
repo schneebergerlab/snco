@@ -71,7 +71,7 @@ class IntervalUMICounts:
         return iter(self._counts)
 
     def collapse(self):
-        collapsed = IntervalCountsDeduped(self.chrom, self.bin_idx)
+        collapsed = IntervalMarkerCounts(self.chrom, self.bin_idx)
         umi_eval = methodcaller('total') if self.umi_collapse_method is None else len
         for cb in self:
             if self.umi_collapse_method == 'directional':

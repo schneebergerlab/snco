@@ -59,7 +59,7 @@ def chrom_markerplot(co_markers, chrom_size, bin_size, ax=None, max_yheight=20,
     base = np.repeat(0, nbins)
 
     if ax is None:
-        fig, ax = plt.subplots(figsize=(8, 5))
+        _, ax = plt.subplots(figsize=(8, 5))
 
     ax.vlines(pos, base, ref_markers, color=ref_colour, zorder=0)
     ax.vlines(pos, base, alt_markers, color=alt_colour, zorder=0)
@@ -132,7 +132,7 @@ def run_plot(cell_barcode, marker_json_fn, plot_json_fn,
     else:
         co_preds = None
 
-    fig, axes = single_cell_co_plot(
+    single_cell_co_plot(
         cell_barcode,
         co_markers,
         co_preds=co_preds,

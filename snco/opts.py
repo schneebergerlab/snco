@@ -149,7 +149,7 @@ def _check_device(ctx, param, value):
             f'device number is too high, only {n_devices} device of type {device_type} avaiable'
         )
     return torch.device(value)
-        
+
 
 device = click.option(
     '-d', '--device',
