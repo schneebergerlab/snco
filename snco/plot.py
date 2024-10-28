@@ -83,9 +83,9 @@ def _add_co_prob_colormesh(ax, hp, chrom_size, bin_size, ylims, cmap):
     return ax
 
 
-def single_cell_co_plot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
-                        show_mesh_prob=True, annotate_co_number=True,
-                        max_yheight=20, ref_colour='#0072b2', alt_colour='#d55e00'):
+def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
+                           show_mesh_prob=True, annotate_co_number=True,
+                           max_yheight=20, ref_colour='#0072b2', alt_colour='#d55e00'):
 
     fig, axes = chrom_subplots(co_markers.chrom_sizes, figsize=figsize)
     axes[0].set_ylabel('Marker coverage')
@@ -132,7 +132,7 @@ def run_plot(cell_barcode, marker_json_fn, plot_json_fn,
     else:
         co_preds = None
 
-    single_cell_co_plot(
+    single_cell_markerplot(
         cell_barcode,
         co_markers,
         co_preds=co_preds,
