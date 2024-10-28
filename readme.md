@@ -1,4 +1,4 @@
-## **snco**: <u>s</u>ingle <u>n</u>ucleus <u>c</u>ross<u>o</u>ver analysis
+## **snco**: <ins>s</ins>ingle <ins>n</ins>ucleus <ins>c</ins>ross<ins>o</ins>ver analysis
 
 `snco` is a set of tools for identifying recombination events at the single nucleus/cell level, using read alignments and/or SNP data from single nucleus sequencing experiments of recombinant haploid gametes. Reads alignments or SNPs are summarised into a per-cell barcode "marker" dataset which can then be used to perform crossover analysis with a hidden Markov model. `snco` also provides commands for generating per-barcode summary statistics, plotting marker and crossover profiles, and simulating ground truth datasets using marker distributions from real data.
 
