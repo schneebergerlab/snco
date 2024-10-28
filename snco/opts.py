@@ -4,8 +4,17 @@ import click
 
 from .bam import DEFAULT_EXCLUDE_CONTIGS
 
-
 log = logging.getLogger('snco')
+
+
+def apply_options(options_list):
+    'decorator to apply a list of click options at once'
+    def _apply_options(func):
+        for option in reversed(options_list):
+            func = option(func)
+        return func
+    return _apply_options
+
 
 _input_file_type = click.Path(exists=True, file_okay=True, dir_okay=False)
 _input_dir_type = click.Path(exists=True, file_okay=False, dir_okay=True)

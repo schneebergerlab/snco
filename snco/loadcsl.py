@@ -32,7 +32,7 @@ def read_vcf(vcf_fn, bin_size):
                 continue
             chrom, pos = record.split('\t')[:2]
             variants.append((chrom, int(pos) // bin_size))
-    log.info(f'Read {len(variants)} from vcf file {vcf_fn}')
+    log.info(f'Read {len(variants)} variants from vcf file {vcf_fn}')
     return variants
 
 
