@@ -452,7 +452,7 @@ max_yheight = click.option(
     help='maximum number of markers per bin to plot (higher values are thresholded)'
 )
 
-ref_colour = max_yheight = click.option(
+ref_colour = click.option(
     '--ref-colour',
     required=False,
     type=str,
@@ -460,7 +460,7 @@ ref_colour = max_yheight = click.option(
     help='hex colour to use for reference (hap1) markers'
 )
 
-alt_colour = max_yheight = click.option(
+alt_colour = click.option(
     '--alt-colour',
     required=False,
     type=str,

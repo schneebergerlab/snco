@@ -46,24 +46,19 @@ from snco.plot import single_cell_markerplot
 co_markers = MarkerRecords.read_json('markers.json')
 co_preds = PredictionRecords.read_json('pred.json')
 
-co_markers.seen_barcodes[:10]
+co_markers.seen_barcodes[:5]
 
     ['TGGTTAGGTAGATTGA',
      'ACGTAGTTCATCAGTG',
      'GACCAATCAACAAAGT',
      'CTATAGGGTTACCTTT',
-     'AGAGAATCAGACAATA',
-     'GCCAGCAGTGCCCTTT',
-     'AACGAAAAGCGACAGT',
-     'GATTTCTTCCCATAAG',
-     'TCATGAGTCAGTCACA',
-     'AGATGCTTCGTGGGTC']
+     'AGAGAATCAGACAATA']
 ```
 
 Plotting functions can also accessed both from the command line using `snco plot` and also in python using the `snco.plot`
 
 ```
-single_cell_co_plot('TGGTTAGGTAGATTGA', co_markers, co_preds=co_preds, max_yheight=100);
+single_cell_co_plot('TGGTTAGGTAGATTGA', co_markers, co_preds=co_preds, max_yheight=10);
 ```
 
 ![single nucleus marker plot](images/sn_markerplot_example.png)
