@@ -79,7 +79,6 @@ def bam_pipeline_subcommand(**kwargs):
             'clean_bg', 'bg_window_size',
             'mask_imbalanced', 'max_marker_imbalance',
         ]
-
         clean_kwargs = get_kwarg_subset(clean_kwargs, kwargs)
         clean_kwargs['marker_json_fn'] = loadbam_output
         clean_output = f'{output_prefix}.cmarkers.json'
