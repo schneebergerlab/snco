@@ -17,6 +17,7 @@ def hdr_to_shv(hdr_record, open_pen=26, extend_pen=1, match_score=1, mismatch_sc
     Resolve a region called as highly diverged by syri into SNPs and indels
     '''
     ref_hdr, alt_hdr = hdr_record.alleles
+    assert len(ref_hdr) > 1 and len(alt_hdr) > 1
     ref_start = hdr_record.pos
     hdr_id = hdr_record.id
     
@@ -99,15 +100,16 @@ def convert_syri_output(syri_vcf_fn, output_vcf_fn, max_hdr_length, min_score, m
                         filt_chrom = r.chrom
                         filt_end = r.stop
                 if r.info['VarType'] ==  'ShV' and r.ref != 'N' and re.match('(SYN\d+)|(INV\d+)', r.info['Parent']) and not (r.pos <= filt_end and r.chrom == filt_chrom):
-                    allele_size = max(len(a for a in r.alleles))
-                    if not r.id.startswith('HDR') and allele_size <= max_indel_length:
-                        outrecord = (
-                            f'{r.chrom}\t{r.pos}\t{r.id}\t{r.alleles[0]}\t{r.alleles[1]}\t'
-                            f'.\tPASS\tMTD=syri\tGT\t0|1\n'
-                        )
-                        o.write(outrecord)
+                    allele_size = max(len(a) for a in r.alleles)
+                    if not r.id.startswith('HDR'):
+                        if allele_size <= max_indel_length:
+                            outrecord = (
+                                f'{r.chrom}\t{r.pos}\t{r.id}\t{r.alleles[0]}\t{r.alleles[1]}\t'
+                                f'.\tPASS\tMTD=syri\tGT\t0|1\n'
+                            )
+                            o.write(outrecord)
                     else:
-                        if allele_size <= max_hdr_size:
+                        if allele_size <= max_hdr_length:
                             for pos, ref, alt, id_ in hdr_to_shv(r, min_score=min_score):
                                 if max(len(ref), len(alt)) <= max_indel_length:
                                     outrecord = (
