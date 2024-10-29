@@ -161,7 +161,7 @@ def write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics=None, precision=
     qual_metrics.to_csv(output_tsv_fn, sep='\t', index=False, float_format=f'%.{precision}g')
 
 
-def run_stats(marker_json_fn, predict_json_fn, output_tsv_fn, *,
+def run_stats(marker_json_fn, pred_json_fn, output_tsv_fn, *,
           cb_whitelist_fn=None, bin_size=25_000, output_precision=3):
     '''
     Scores the quality of data and predictions for a set of haplotype calls
@@ -169,7 +169,7 @@ def run_stats(marker_json_fn, predict_json_fn, output_tsv_fn, *,
     '''
     co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
     co_preds = load_json(
-        predict_json_fn, cb_whitelist_fn, bin_size, data_type='predictions'
+        pred_json_fn, cb_whitelist_fn, bin_size, data_type='predictions'
     )
 
     if set(co_preds.seen_barcodes) != set(co_markers.seen_barcodes):

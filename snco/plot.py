@@ -119,15 +119,15 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
     return fig, axes
 
 
-def run_plot(cell_barcode, marker_json_fn, plot_json_fn,
+def run_plot(cell_barcode, marker_json_fn, pred_json_fn,
              output_fig_fn, figsize=(18, 4),
              show_pred=True, show_co_num=True,
              max_yheight=20,
              ref_colour='#0072b2', alt_colour='#d55e00'):
     co_markers = load_json(marker_json_fn, cb_whitelist_fn=None, bin_size=None)
-    if plot_json_fn is not None:
+    if pred_json_fn is not None:
         co_preds = load_json(
-            plot_json_fn, cb_whitelist_fn=None, bin_size=None, data_type='predictions'
+            pred_json_fn, cb_whitelist_fn=None, bin_size=None, data_type='predictions'
         )
     else:
         co_preds = None

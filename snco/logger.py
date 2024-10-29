@@ -44,7 +44,7 @@ class ClickLogHandler(logging.Handler):
             self.handleError(record)
 
 
-def click_logger_callback(ctx, params, value):
+def click_logger(ctx, params, value):
     log = logging.getLogger('snco')
     log.setLevel(value)
     log_handler = ClickLogHandler()
@@ -52,21 +52,6 @@ def click_logger_callback(ctx, params, value):
     log.handlers = [log_handler]
     log.propagate = False
     return log
-
-
-verbosity = click.option(
-    '-v', '--verbosity',
-    required=False,
-    expose_value=False,
-    metavar='LVL',
-    type=click.Choice(
-        ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-        case_sensitive=False
-    ),
-    default='info',
-    callback=click_logger_callback,
-    help='Logging level, either debug, info, warning, error or critical'
-)
 
 
 def progress_bar(iterable, label=None, **kwargs):
