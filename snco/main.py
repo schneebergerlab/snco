@@ -99,7 +99,7 @@ def plot_subcommand(**kwargs):
     run_plot(**kwargs)
 
 
-def _clean_predict_pipeline(output_prefix, load_output, kwargs):
+def _clean_predict_pipeline(co_markers, output_prefix, kwargs):
 
     from .clean import run_clean
     from .predict import run_predict
@@ -107,19 +107,16 @@ def _clean_predict_pipeline(output_prefix, load_output, kwargs):
     if kwargs['run_clean']:
 
         clean_kwargs = snco_opts.get_kwarg_subset('clean', kwargs)
-        clean_kwargs['marker_json_fn'] = load_output
-        clean_output = f'{output_prefix}.cmarkers.json'
-        clean_kwargs['output_json_fn'] = clean_output
+        clean_kwargs['marker_json_fn'] = None
+        clean_kwargs['co_markers'] = co_markers
+        clean_kwargs['output_json_fn'] = None
+        co_markers = run_clean(**clean_kwargs)
 
-        run_clean(**clean_kwargs)
-
-    else:
-        clean_output = load_output
-
+    co_markers.write_json(f'{output_prefix}.markers.json')
     predict_kwargs = snco_opts.get_kwarg_subset('predict', kwargs)
-    predict_kwargs['marker_json_fn'] = clean_output
-    predict_output = f'{output_prefix}.pred.json'
-    predict_kwargs['output_json_fn'] = predict_output
+    predict_kwargs['marker_json_fn'] = None
+    predict_kwargs['co_markers'] = co_markers
+    predict_kwargs['output_json_fn'] = f'{output_prefix}.pred.json'
 
     run_predict(**predict_kwargs)
 
@@ -134,11 +131,10 @@ def bam_pipeline_subcommand(**kwargs):
 
     output_prefix = kwargs.pop('output_prefix')
     loadbam_kwargs = snco_opts.get_kwarg_subset('loadbam', kwargs)
-    loadbam_output = f'{output_prefix}.markers.json'
-    loadbam_kwargs['output_json_fn'] = loadbam_output
+    loadbam_kwargs['output_json_fn'] = None
+    co_markers = run_loadbam(**loadbam_kwargs)
 
-    run_loadbam(**loadbam_kwargs)
-    _clean_predict_pipeline(output_prefix, loadbam_output, kwargs)
+    _clean_predict_pipeline(co_markers, output_prefix, kwargs)
 
 
 @main.command('csl2pred')
@@ -151,8 +147,7 @@ def csl_pipeline_subcommand(**kwargs):
 
     output_prefix = kwargs.pop('output_prefix')
     loadcsl_kwargs = snco_opts.get_kwarg_subset('loadcsl', kwargs)
-    loadcsl_output = f'{output_prefix}.markers.json'
-    loadcsl_kwargs['output_json_fn'] = loadcsl_output
+    loadcsl_kwargs['output_json_fn'] = None
 
-    run_loadcsl(**loadcsl_kwargs)
-    _clean_predict_pipeline(output_prefix, loadcsl_output, kwargs)
+    co_markers = run_loadcsl(**loadcsl_kwargs)
+    _clean_predict_pipeline(co_markers, output_prefix, kwargs)

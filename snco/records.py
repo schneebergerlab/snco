@@ -313,7 +313,7 @@ class BaseRecords:
             f.write(self.to_json(precision=precision))
 
     @classmethod
-    def read_json(cls, fp: str):
+    def read_json(cls, fp: str, subset: list | set | None = None):
         '''read records object from a json file'''
         with open(fp) as f:
             obj = json.load(f)
@@ -325,9 +325,17 @@ class BaseRecords:
                            seq_type=obj['sequencing_data_type'],
                            metadata=obj['metadata'])
         new_instance._cmd = obj['cmd']
-        for cb, sd in obj['data'].items():
+        if subset is None:
+            subset = obj['data'].keys()
+        for cb in subset:
+            try:
+                sd = obj['data'][cb]
+            except KeyError as exc:
+                raise KeyError(f'Cell barcode {cb} not in {fp}') from exc
+            # directly access self._records for speed
+            new_instance._records[cb] = {}
             for chrom, d in sd.items():
-                new_instance[cb, chrom] = new_instance._json_to_arr(d, chrom)
+                new_instance._records[cb][chrom] = new_instance._json_to_arr(d, chrom)
         return new_instance
 
 

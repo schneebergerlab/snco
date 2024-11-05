@@ -20,17 +20,17 @@ def read_cb_whitelist(barcode_fn, cb_correction_method='exact'):
     return CellBarcodeWhitelist(cb_whitelist, cb_correction_method)
 
 
-def load_json(json_fn, cb_whitelist_fn, bin_size, data_type='markers'):
+def load_json(json_fn, cb_whitelist_fn, bin_size, data_type='markers', subset=None):
     if data_type == 'markers':
-        data = MarkerRecords.read_json(json_fn)
+        data = MarkerRecords.read_json(json_fn, subset=subset)
     elif data_type == 'predictions':
-        data = PredictionRecords.read_json(json_fn)
+        data = PredictionRecords.read_json(json_fn, subset=subset)
     elif data_type == 'auto':
         try:
-            data = MarkerRecords.read_json(json_fn)
+            data = MarkerRecords.read_json(json_fn, subset=subset)
         except ValueError as exc:
             try:
-                data = PredictionRecords.read_json(json_fn)
+                data = PredictionRecords.read_json(json_fn, subset=subset)
             except ValueError:
                 raise IOError(
                     f'data type of file {json_fn} could not be determined automatically'

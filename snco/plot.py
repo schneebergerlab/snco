@@ -124,7 +124,7 @@ def run_plot(cell_barcode, marker_json_fn, pred_json_fn,
              show_pred=True, show_co_num=True,
              max_yheight=20,
              ref_colour='#0072b2', alt_colour='#d55e00'):
-    co_markers = load_json(marker_json_fn, cb_whitelist_fn=None, bin_size=None)
+    co_markers = load_json(marker_json_fn, cb_whitelist_fn=None, bin_size=None, subset=[cell_barcode])
     if pred_json_fn is not None:
         co_preds = load_json(
             pred_json_fn, cb_whitelist_fn=None, bin_size=None, data_type='predictions'

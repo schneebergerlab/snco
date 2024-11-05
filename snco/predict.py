@@ -205,6 +205,7 @@ def detect_crossovers(co_markers, rhmm, batch_size=1_000, processes=1):
 
 
 def run_predict(marker_json_fn, output_json_fn, *,
+                co_markers=None,
                 cb_whitelist_fn=None, bin_size=25_000,
                 segment_size=1_000_000, terminal_segment_size=50_000,
                 cm_per_mb=4.5, model_lambdas=None,
@@ -214,7 +215,8 @@ def run_predict(marker_json_fn, output_json_fn, *,
     Uses rigid hidden Markov model to predict the haplotypes of each cell barcode
     at each genomic bin.
     '''
-    co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
+    if co_markers is None:
+        co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
     rhmm = create_rhmm(
         co_markers,
         cm_per_mb=cm_per_mb,
@@ -226,5 +228,7 @@ def run_predict(marker_json_fn, output_json_fn, *,
     co_preds = detect_crossovers(
         co_markers, rhmm, batch_size=batch_size, processes=processes
     )
-    log.info(f'Writing predictions to {output_json_fn}')
-    co_preds.write_json(output_json_fn, output_precision)
+    if output_json_fn is not None:
+        log.info(f'Writing predictions to {output_json_fn}')
+        co_preds.write_json(output_json_fn, output_precision)
+    return co_preds

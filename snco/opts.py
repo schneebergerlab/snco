@@ -83,6 +83,15 @@ snco_opts.argument(
 )
 
 snco_opts.argument(
+    'cell-barcode',
+    subcommands=['plot'],
+    required=True,
+    type=str,
+    nargs=1,
+    callback=_log_callback,
+)
+
+snco_opts.argument(
     'marker-json-fn',
     subcommands=['sim', 'clean', 'predict', 'stats', 'plot'],
     required=True,
@@ -115,15 +124,6 @@ snco_opts.argument(
     required=False,
     nargs=1,
     type=_input_file_type,
-    callback=_log_callback,
-)
-
-snco_opts.argument(
-    'cell-barcode',
-    subcommands=['plot'],
-    required=True,
-    type=str,
-    nargs=1,
     callback=_log_callback,
 )
 
@@ -273,7 +273,7 @@ snco_opts.option(
 
 def _override_umi_tag(ctx, param, value):
     if ctx.params['umi_collapse_method'] is None or ctx.params['umi_collapse_method'] == 'none':
-        return None
+        return _log_callback(ctx, param , None)
     return _validate_bam_tag(ctx, param, value)
 
 
@@ -381,12 +381,12 @@ snco_opts.option(
 
 snco_opts.option(
     '--min-markers-per-cb',
-    subcommands=['clean', 'bam2pred', 'csl2pred'],
+    subcommands=['loadbam', 'loadcsl', 'clean', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.IntRange(0, 1000),
-    default=0,
+    default=100,
     callback=_log_callback,
-    help='minimum total number of markers per cb (cb with lower are filtered'
+    help='minimum total number of markers per cb (cb with lower are filtered)'
 )
 
 snco_opts.option(

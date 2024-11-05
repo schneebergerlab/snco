@@ -12,6 +12,7 @@ import pysam
 from .utils import read_cb_whitelist
 from .records import MarkerRecords
 from .bam import BAMHaplotypeIntervalReader, DEFAULT_EXCLUDE_CONTIGS
+from .clean import filter_low_coverage_barcodes
 
 log = logging.getLogger('snco')
 
@@ -85,7 +86,7 @@ def run_loadbam(bam_fn, output_json_fn, *,
                 cb_whitelist_fn=None, bin_size=25_000, seq_type=None,
                 cb_tag='CB', cb_correction_method='exact',
                 umi_tag='UB', umi_collapse_method='directional',
-                hap_tag='ha', exclude_contigs=None, processes=1):
+                hap_tag='ha', min_markers_per_cb=50, exclude_contigs=None, processes=1):
     '''
     Read bam file with cell barcode, umi and haplotype tags (aligned with STAR solo+diploid), 
     to generate a json file of binned haplotype marker distributions for each cell barcode. 
@@ -103,8 +104,13 @@ def run_loadbam(bam_fn, output_json_fn, *,
         cb_whitelist=cb_whitelist,
         exclude_contigs=exclude_contigs,
     )
-    log.info(f'Identified {len(co_markers)} cell barcodes from bam file')
-
+    n = len(co_markers)
+    log.info(f'Identified {n} cell barcodes from bam file')
+    if min_markers_per_cb:
+        co_markers = filter_low_coverage_barcodes(co_markers, min_markers_per_cb)
+        log.info(
+            f'Removed {n - len(co_markers)} barcodes with fewer than {min_markers_per_cb} markers'
+        )
     if output_json_fn is not None:
         log.info(f'Writing markers to {output_json_fn}')
         co_markers.write_json(output_json_fn)

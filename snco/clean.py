@@ -127,6 +127,7 @@ def apply_marker_threshold(co_markers, max_marker_threshold):
 
 
 def run_clean(marker_json_fn, output_json_fn, *,
+              co_markers=None,
               cb_whitelist_fn=None, bin_size=25_000,
               min_markers_per_cb=0, max_bin_count=20,
               clean_bg=True, bg_window_size=2_500_000,
@@ -135,7 +136,8 @@ def run_clean(marker_json_fn, output_json_fn, *,
     Removes predicted background markers, that result from ambient nucleic acids, 
     from each cell barcode.
     '''
-    co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
+    if co_markers is None:
+        co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
     n = len(co_markers)
 
     if min_markers_per_cb:
