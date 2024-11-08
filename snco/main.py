@@ -135,6 +135,7 @@ def bam_pipeline_subcommand(**kwargs):
     loadbam_kwargs['output_json_fn'] = None
     # only filter during clean
     loadbam_kwargs['min_markers_per_cb'] = 0
+    loadbam_kwargs['min_markers_per_chrom'] = 0
     co_markers = run_loadbam(**loadbam_kwargs)
 
     _clean_predict_pipeline(co_markers, output_prefix, kwargs)
@@ -153,5 +154,6 @@ def csl_pipeline_subcommand(**kwargs):
     loadcsl_kwargs['output_json_fn'] = None
     # only filter during clean
     loadcsl_kwargs['min_markers_per_cb'] = 0
+    loadbam_kwargs['min_markers_per_chrom'] = 0
     co_markers = run_loadcsl(**loadcsl_kwargs)
     _clean_predict_pipeline(co_markers, output_prefix, kwargs)
