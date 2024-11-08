@@ -11,7 +11,7 @@ log = logging.getLogger('snco')
 
 def filter_low_coverage_barcodes(co_markers, min_cov=0):
     co_markers_f = co_markers.copy()
-    for cb in co_markers_f.seen_barcodes:
+    for cb in co_markers_f.barcodes:
         if co_markers_f.total_marker_count(cb) < min_cov:
             co_markers_f.pop(cb)
     return co_markers_f
@@ -30,11 +30,12 @@ def _estimate_marker_background(m, ws=100):
     return fg_masked
 
 
-def estimate_overall_background_signal(co_markers, conv_window_size):
+def estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg):
     conv_bins = conv_window_size // co_markers.bin_size
     bg_signal = {}
     frac_bg = {}
-    for cb, cb_co_markers in co_markers.items():
+    for cb in co_markers.barcodes:
+        cb_co_markers = co_markers[cb]
         bg_count = 0
         tot_count = 0
         for chrom, m in cb_co_markers.items():
@@ -48,6 +49,8 @@ def estimate_overall_background_signal(co_markers, conv_window_size):
             bg_count += bg.sum(axis=None)
             tot_count += m.sum(axis=None)
         frac_bg[cb] = bg_count / tot_count
+        if frac_bg[cb] > max_frac_bg:
+            co_markers.pop(cb)
 
     bg_signal = {
         chrom: sig / sig.sum(axis=None)
@@ -55,29 +58,34 @@ def estimate_overall_background_signal(co_markers, conv_window_size):
     }
     co_markers.metadata['background_signal'] = bg_signal
     co_markers.metadata['estimated_background_fraction'] = frac_bg
-    return bg_signal, frac_bg
+    return co_markers
 
 
-def mask_bg_signal(bg_signal, m):
-    bg_signal = np.where(m, bg_signal, 0)
-    if bg_sum := bg_signal.sum():
-        bg_signal = bg_signal / bg_sum
-    return bg_signal
+def random_bg_sample(m, bg_signal, n_bg):
+    bg_idx = np.nonzero(m)
+    m_valid = m[bg_idx]
+    p = m_valid * bg_signal[bg_idx]
+    p = p / p.sum(axis=None)
+    n_p = p.shape[0]
+    bg_c = np.bincount(np.random.choice(np.arange(n_p), size=n_bg, replace=True, p=p), minlength=n_p)
+    bg = np.zeros_like(m)
+    bg[bg_idx] = np.minimum(bg_c, m_valid)
+    return bg
 
 
 def subtract_background(m, bg_signal, frac_bg, return_bg=False):
     tot = m.sum(axis=None)
     n_bg = round(tot * frac_bg)
-    bg = mask_bg_signal(bg_signal, m) * n_bg
-    bg = np.round(np.minimum(m, bg))
+    bg = random_bg_sample(m, bg_signal, n_bg)
     m_sub = m - bg
     if not return_bg:
         return m_sub
     return m_sub, bg
 
 
-def clean_marker_background(co_markers, conv_filter_size):
-    bg_signal, frac_bg = estimate_overall_background_signal(co_markers, conv_filter_size)
+def clean_marker_background(co_markers):
+    bg_signal = co_markers.metadata['background_signal']
+    frac_bg = co_markers.metadata['estimated_background_fraction']
     co_markers_c = MarkerRecords.new_like(co_markers)
     for cb, chrom, m in co_markers.deep_items():
         co_markers_c[cb, chrom] = subtract_background(m, bg_signal[chrom], frac_bg[cb])
@@ -130,7 +138,7 @@ def run_clean(marker_json_fn, output_json_fn, *,
               co_markers=None,
               cb_whitelist_fn=None, bin_size=25_000,
               min_markers_per_cb=0, max_bin_count=20,
-              clean_bg=True, bg_window_size=2_500_000,
+              clean_bg=True, bg_window_size=2_500_000, max_frac_bg=0.2,
               mask_imbalanced=True, max_marker_imbalance=0.9):
     '''
     Removes predicted background markers, that result from ambient nucleic acids, 
@@ -146,14 +154,21 @@ def run_clean(marker_json_fn, output_json_fn, *,
             f'Removed {n - len(co_markers)} barcodes with fewer than {min_markers_per_cb} markers'
         )
 
+    n = len(co_markers)
+    # estimate ambient marker rate for each CB and try to scrub common background markers
+    log.info('Estimating background marker rates.')
+    co_markers = estimate_overall_background_signal(co_markers, bg_window_size, max_frac_bg)
+    log.info(
+        f'Removed {n - len(co_markers)} barcodes with greater than {max_frac_bg * 100}%'
+        ' background contamination'
+    )
+    av_bg = np.mean(
+        list(co_markers.metadata['estimated_background_fraction'].values())
+    )
+    log.info(f'Average estimated background fraction is {av_bg:.3f}')
     if clean_bg:
-        # estimate ambient marker rate for each CB and try to scrub common background markers
-        co_markers = clean_marker_background(co_markers, bg_window_size)
-        log.info('Estimated and subtracted background markers.')
-        av_bg = np.mean(
-            list(co_markers.metadata['estimated_background_fraction'].values())
-        )
-        log.info(f'Average estimated background fraction is {av_bg:.3f}')
+        log.info('Attempting to filter likely background markers')
+        co_markers = clean_marker_background(co_markers)
 
     if mask_imbalanced:
         # mask any bins that still have extreme imbalance

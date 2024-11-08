@@ -39,7 +39,6 @@ def single_chrom_co_markers(bam_fn, chrom, bin_start, bin_end, seq_type=None, **
         chrom_co_markers = MarkerRecords(
             bam.chrom_sizes,
             bam.bin_size,
-            bam.cb_whitelist.toset(),
             seq_type=seq_type,
         )
         for bin_idx in range(bin_start, bin_end):

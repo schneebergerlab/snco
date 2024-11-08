@@ -43,7 +43,7 @@ def load_json(json_fn, cb_whitelist_fn, bin_size, data_type='markers', subset=No
     log.info(f'Read {len(data)} cell barcodes from json file {json_fn}')
     if cb_whitelist_fn:
         cb_whitelist = read_cb_whitelist(cb_whitelist_fn).toset()
-        data.set_cb_whitelist(cb_whitelist)
+        data.filter(cb_whitelist)
         if not data:
             raise ValueError('No CBs from --cb-whitelist-fn are present in json-fn')
         log.info(f'{len(data)} barcodes remain after cb whitelist filtering')

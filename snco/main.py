@@ -31,6 +31,7 @@ def loadcsl_subcommand(**kwargs):
     haplotype marker distributions for each cell barcode. These can be used to
     call recombinations using the downstream `predict` command.
     '''
+    from .loadcsl import run_loadcsl
     run_loadcsl(**kwargs)
 
 
@@ -41,7 +42,7 @@ def sim_subcommand(**kwargs):
     Simulate realistic haplotype marker distributions using real data from `load`,
     with known haplotypes/crossovers supplied from a bed file.
     '''
-    from .loadcsl import run_loadcsl
+    from .sim import run_sim
     run_sim(**kwargs)
 
 
@@ -132,6 +133,8 @@ def bam_pipeline_subcommand(**kwargs):
     output_prefix = kwargs.pop('output_prefix')
     loadbam_kwargs = snco_opts.get_kwarg_subset('loadbam', kwargs)
     loadbam_kwargs['output_json_fn'] = None
+    # only filter during clean
+    loadbam_kwargs['min_markers_per_cb'] = 0
     co_markers = run_loadbam(**loadbam_kwargs)
 
     _clean_predict_pipeline(co_markers, output_prefix, kwargs)
@@ -148,6 +151,7 @@ def csl_pipeline_subcommand(**kwargs):
     output_prefix = kwargs.pop('output_prefix')
     loadcsl_kwargs = snco_opts.get_kwarg_subset('loadcsl', kwargs)
     loadcsl_kwargs['output_json_fn'] = None
-
+    # only filter during clean
+    loadcsl_kwargs['min_markers_per_cb'] = 0
     co_markers = run_loadcsl(**loadcsl_kwargs)
     _clean_predict_pipeline(co_markers, output_prefix, kwargs)

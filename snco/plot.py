@@ -83,13 +83,33 @@ def _add_co_prob_colormesh(ax, hp, chrom_size, bin_size, ylims, cmap):
     return ax
 
 
+def _add_gt_vlines(ax, gt, bin_size, ylims, colour='#eeeeee'):
+    gt_pos = (np.where(np.diff(gt))[0] + 1) * bin_size
+    if len(gt_pos):
+        ax.vlines(
+            gt_pos,
+            np.repeat(ylims[0], len(gt_pos)),
+            np.repeat(ylims[1], len(gt_pos)),
+            ls='--',
+            colors=colour,
+            zorder=-1,
+        )
+
+
 def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
-                           show_mesh_prob=True, annotate_co_number=True,
+                           show_mesh_prob=True, annotate_co_number=True, show_gt=True,
                            max_yheight=20, ref_colour='#0072b2', alt_colour='#d55e00'):
 
     fig, axes = chrom_subplots(co_markers.chrom_sizes, figsize=figsize)
     axes[0].set_ylabel('Marker coverage')
     cmap = LinearSegmentedColormap.from_list('hap_cmap', [ref_colour, alt_colour])
+
+    if show_gt:
+        try:
+            gt = co_markers.metadata['ground_truth'][cb]
+        except KeyError:
+            show_gt = False
+            gt = None
 
     for chrom, ax in zip(co_markers.chrom_sizes, axes):
 
@@ -115,13 +135,17 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
             if annotate_co_number:
                 n_co = np.abs(np.diff(hp)).sum()
                 ax.annotate(text=f'{n_co.sum():.2f} COs', xy=(0.05, 0.05), xycoords='axes fraction')
+        if show_gt:
+            _add_gt_vlines(
+                ax, gt[chrom], co_markers.bin_size, ylims
+            )
     plt.tight_layout()
     return fig, axes
 
 
 def run_plot(cell_barcode, marker_json_fn, pred_json_fn,
              output_fig_fn, figsize=(18, 4),
-             show_pred=True, show_co_num=True,
+             show_pred=True, show_co_num=True, show_gt=True,
              max_yheight=20,
              ref_colour='#0072b2', alt_colour='#d55e00'):
     co_markers = load_json(marker_json_fn, cb_whitelist_fn=None, bin_size=None, subset=[cell_barcode])

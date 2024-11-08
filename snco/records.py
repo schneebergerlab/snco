@@ -20,12 +20,10 @@ class BaseRecords:
     def __init__(self,
                  chrom_sizes: dict[str, int],
                  bin_size: int,
-                 cb_whitelist: set[str] | None = None,
                  seq_type: str | None = None,
                  metadata: dict | None = None):
         self.chrom_sizes = chrom_sizes
         self.bin_size = bin_size
-        self.cb_whitelist = cb_whitelist
         self.seq_type = seq_type
         self.metadata = metadata if metadata is not None else {}
         self._cmd = []
@@ -36,13 +34,6 @@ class BaseRecords:
             chrom: int(np.ceil(cs / bin_size)) for chrom, cs in chrom_sizes.items()
         }
         self._records = {}
-
-    def _check_whitelist(self, cb: str, raise_error: bool = False):
-        if self.cb_whitelist is None or cb in self.cb_whitelist:
-            return True
-        if raise_error:
-            raise KeyError(f'{cb} not in supplied whitelist')
-        return False
 
     def _get_arr_shape(self, chrom: str):
         if chrom not in self.chrom_sizes:
@@ -74,19 +65,24 @@ class BaseRecords:
 
     def __getitem__(self, index):
         if isinstance(index, str):
-            self._check_whitelist(index, raise_error=True)
             if index not in self._records:
                 self._records[index] = {}
             return self._records[index]
         if len(index) == 2:
             cb, chrom = index
-            cb_record = self[cb]
+            try:
+                cb_record = self._records[cb]
+            except KeyError:
+                cb_record = self[cb]
             if chrom not in cb_record:
                 cb_record[chrom] = self._new_arr(chrom)
             return cb_record[chrom]
         if len(index) > 2:
             cb, chrom, *arr_idx = index
-            m = self[cb, chrom]
+            try:
+                m = self._records[cb][chrom]
+            except KeyError:
+                m = self[cb, chrom]
             if len(arr_idx) == 1:
                 return m[arr_idx[0]]
             if (self._ndim == 2) and (len(arr_idx) == 2):
@@ -99,23 +95,27 @@ class BaseRecords:
 
     def __setitem__(self, index, value):
         if isinstance(index, str):
-            self._check_whitelist(index, raise_error=True)
             self._check_subdict(value)
             self._records[index] = value
         elif isinstance(index, tuple):
             if len(index) == 2:
                 cb, chrom = index
-                self._check_whitelist(cb, raise_error=True)
                 self._check_arr(value, chrom)
-                cb_m = self[cb]
-                cb_m[chrom] = value
+                try:
+                    cb_record = self._records[cb]
+                except KeyError:
+                    cb_record = self[cb]
+                cb_record[chrom] = value
             elif len(index) > 2:
                 cb, chrom, *arr_idx = index
-                arr = self[cb, chrom]
+                try:
+                    m = self._records[cb][chrom]
+                except KeyError:
+                    m = self[cb, chrom]
                 if len(arr_idx) == 1:
-                    arr[arr_idx[0]] = value
+                    m[arr_idx[0]] = value
                 elif (self._ndim == 2) and (len(arr_idx) == 2):
-                    arr[arr_idx[0], arr_idx[1]] = value
+                    m[arr_idx[0], arr_idx[1]] = value
                 else:
                     raise KeyError('Too many indices to array')
         else:
@@ -128,7 +128,7 @@ class BaseRecords:
         return len(self._records)
 
     @property
-    def seen_barcodes(self):
+    def barcodes(self):
         return list(self._records.keys())
 
     def items(self):
@@ -154,17 +154,6 @@ class BaseRecords:
         for sd in self._records.values():
             yield from sd.values()
 
-    def set_cb_whitelist(self, new_whitelist):
-        '''replace the current cell barcode whitelist and filter records to match'''
-        if new_whitelist is not None:
-            self.cb_whitelist = set(new_whitelist)
-            self._records = {
-                cb: val for cb, val in self.items()
-                if self._check_whitelist(cb)
-            }
-        else:
-            self.cb_whitelist = None
-
     def pop(self, cb):
         return self._records.pop(cb)
 
@@ -175,7 +164,6 @@ class BaseRecords:
         new_instance = cls(
             copy(other.chrom_sizes),
             other.bin_size,
-            deepcopy(other.cb_whitelist),
             copy(other.seq_type),
             deepcopy(other.metadata)
         )
@@ -194,8 +182,6 @@ class BaseRecords:
             s = self
         else:
             s = self.copy()
-        if s.cb_whitelist is not None:
-            s.cb_whitelist = {f'{cb}_{suffix}' for cb in s.cb_whitelist}
         s._records = {f'{cb}_{suffix}': sd for cb, sd in s.items()}
         if not inplace:
             return s
@@ -225,17 +211,6 @@ class BaseRecords:
         else:
             s = self.copy()
 
-        if s.cb_whitelist is None or other.cb_whitelist is None:
-            # when only one records object has a whitelist, merging may cause issues
-            # solution is to wipe the whitelist
-            log.debug(
-                f'one or both of merged {stype.__name__} objects has no whitelist, '
-                'whitelist of merged object will also be set to None'
-            )
-            s.cb_whitelist = None
-        else:
-            s.cb_whitelist.update(other.cb_whitelist)
-
         for cb, cb_m in other.items():
             for chrom, m in cb_m.items():
                 s[cb, chrom] += m
@@ -244,6 +219,12 @@ class BaseRecords:
 
         if not inplace:
             return s
+
+    def filter(self, cb_whitelist):
+        cb_whitelist = set(cb_whitelist)
+        for cb in self.barcodes:
+            if cb not in cb_whitelist:
+                self._records.pop(cb)
 
     def __add__(self, other):
         if isinstance(other, BaseRecords):
@@ -301,7 +282,6 @@ class BaseRecords:
             'bin_size': self.bin_size,
             'sequencing_data_type': self.seq_type,
             'chrom_sizes': self.chrom_sizes,
-            'cb_whitelist': list(self.cb_whitelist) if self.cb_whitelist is not None else None,
             'shape': self.nbins,
             'data': self._records_to_json(self, precision),
             'metadata': self._metadata_to_json(self.metadata, precision)
@@ -321,7 +301,6 @@ class BaseRecords:
             raise ValueError(f'json file does not match signature for {cls.__name__}')
         new_instance = cls(obj['chrom_sizes'],
                            obj['bin_size'],
-                           obj['cb_whitelist'],
                            seq_type=obj['sequencing_data_type'],
                            metadata=obj['metadata'])
         new_instance._cmd = obj['cmd']
@@ -344,10 +323,9 @@ class MarkerRecords(BaseRecords):
     def __init__(self,
                  chrom_sizes: dict[str, int],
                  bin_size: int,
-                 cb_whitelist: set[str] | None = None,
                  seq_type: str | None = None,
                  metadata: dict | None = None):
-        super().__init__(chrom_sizes, bin_size, cb_whitelist, seq_type, metadata)
+        super().__init__(chrom_sizes, bin_size, seq_type, metadata)
         self._ndim = 2
         self._dim2_shape = 2
         self._init_val = 0.0
@@ -396,10 +374,9 @@ class PredictionRecords(BaseRecords):
     def __init__(self,
                  chrom_sizes: dict[str, int],
                  bin_size: int,
-                 cb_whitelist: set[str] | None = None,
                  seq_type: str | None = None,
                  metadata: dict | None = None):
-        super().__init__(chrom_sizes, bin_size, cb_whitelist, seq_type, metadata)
+        super().__init__(chrom_sizes, bin_size, seq_type, metadata)
         self._ndim = 1
         self._dim2_shape = np.nan
         self._init_val = np.nan
@@ -420,7 +397,7 @@ class PredictionRecords(BaseRecords):
              for i in range(self.nbins[chrom])],
             names=['chrom', 'pos']
         )
-        for cb in self.seen_barcodes:
+        for cb in self.barcodes:
             index.append(cb)
             frame.append(np.concatenate([self[cb, chrom] for chrom in self.chrom_sizes]))
         return pd.DataFrame(frame, index=index, columns=columns)

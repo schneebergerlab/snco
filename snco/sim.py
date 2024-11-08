@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 
 import numpy as np
@@ -6,6 +7,9 @@ import pandas as pd
 from .utils import load_json
 from .records import MarkerRecords, PredictionRecords
 from .clean import estimate_overall_background_signal, subtract_background
+
+
+log = logging.getLogger('snco')
 
 
 def co_invs_to_gt(co_invs, bin_size, chrom_nbins):
@@ -86,11 +90,9 @@ def generate_simulated_data(ground_truth, co_markers, conv_window_size=2_500_000
     # todo: simulate some doublets
 
     sim_co_markers = MarkerRecords.new_like(co_markers)
-    sim_co_markers.set_cb_whitelist(None)
     sim_co_markers.metadata['ground_truth'] = PredictionRecords.new_like(co_markers)
-    sim_co_markers.metadata['ground_truth'].set_cb_whitelist(None)
-    for sample_id in ground_truth.seen_barcodes:
-        cbs_to_sim = np.random.choice(co_markers.seen_barcodes, replace=False, size=nsim_per_sample)
+    for sample_id in ground_truth.barcodes:
+        cbs_to_sim = np.random.choice(co_markers.barcodes, replace=False, size=nsim_per_sample)
         for cb in cbs_to_sim:
             sim_id = f'{sample_id}:{cb}'
             for chrom in ground_truth.chrom_sizes:
@@ -124,6 +126,7 @@ def run_sim(marker_json_fn, output_json_fn, haplo_bed_fn, *,
     ground_truth_haplotypes = read_ground_truth_haplotypes(
         haplo_bed_fn, co_markers.chrom_sizes, bin_size
     )
+    log.info(f'Read {len(ground_truth_haplotypes)} ground truth samples from {haplo_bed_fn}')
     sim_co_markers = generate_simulated_data(
         ground_truth_haplotypes,
         co_markers,
@@ -131,8 +134,8 @@ def run_sim(marker_json_fn, output_json_fn, haplo_bed_fn, *,
         conv_window_size=bg_window_size,
         nsim_per_sample=nsim_per_sample,
     )
-
+    log.info(f'Simulated {len(sim_co_markers)} cells')
     if output_json_fn is not None:
         log.info(f'Writing markers to {output_json_fn}')
-        co_markers.write_json(output_json_fn)
-    return co_markers
+        sim_co_markers.write_json(output_json_fn)
+    return sim_co_markers

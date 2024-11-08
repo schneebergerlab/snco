@@ -55,8 +55,7 @@ def parse_cellsnp_lite(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist=None):
     co_markers = MarkerRecords(
         chrom_sizes,
         bin_size,
-        cb_whitelist.toset(),
-        seq_type='csl_snps'
+        seq_type='csl_snps',
     )
 
     for cb_idx, var_idx, tot in zip(dep_mm.col, dep_mm.row, dep_mm.data):

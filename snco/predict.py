@@ -187,7 +187,7 @@ def create_rhmm(co_markers, cm_per_mb=4.5,
 
 
 def detect_crossovers(co_markers, rhmm, batch_size=1_000, processes=1):
-    seen_barcodes = co_markers.seen_barcodes
+    seen_barcodes = co_markers.barcodes
     co_preds = PredictionRecords.new_like(co_markers)
     torch.set_num_threads(processes)
     chrom_progress = progress_bar(

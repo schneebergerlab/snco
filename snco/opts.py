@@ -348,6 +348,14 @@ snco_opts.option(
     help='whether to run clean step in pipeline',
 )
 
+snco_opts.option(
+    '--clean-bg/--no-clean-bg',
+    subcommands=['clean', 'bam2pred', 'csl2pred'],
+    required=False,
+    default=True,
+    callback=_log_callback,
+    help='whether to estimate and remove background markers'
+)
 
 snco_opts.option(
     '--bg-marker-rate',
@@ -356,7 +364,8 @@ snco_opts.option(
     type=click.FloatRange(0.0, 0.49),
     default=None,
     callback=_log_callback,
-    help='set uniform background marker rate. Default is to estimate per cell barcode from markers'
+    help=('set uniform background marker rate for simulations. '
+          'Default is to estimate per cell barcode from markers')
 )
 
 snco_opts.option(
@@ -370,11 +379,21 @@ snco_opts.option(
 )
 
 snco_opts.option(
+    '--max-frac-bg',
+    subcommands=['sim', 'clean', 'bam2pred', 'csl2pred'],
+    required=False,
+    type=click.FloatRange(1e-3, 0.5),
+    default=0.25,
+    callback=_log_callback,
+    help='the estimated background marker rate to allow before filtering'
+)
+
+snco_opts.option(
     '--nsim-per-sample',
     subcommands=['sim'],
     required=False,
     type=click.IntRange(1, 1000),
-    default=100,
+    default=10,
     callback=_log_callback,
     help='the number of randomly selected cell barcodes to simulate per ground truth sample'
 )
@@ -396,15 +415,6 @@ snco_opts.option(
     default=20,
     callback=_log_callback,
     help='maximum number of markers per cell per bin (higher values are thresholded)'
-)
-
-snco_opts.option(
-    '--clean-bg/--no-clean-bg',
-    subcommands=['clean', 'bam2pred', 'csl2pred'],
-    required=False,
-    default=True,
-    callback=_log_callback,
-    help='whether to estimate and remove background markers'
 )
 
 snco_opts.option(
@@ -503,6 +513,15 @@ snco_opts.option(
     default=True,
     callback=_log_callback,
     help='whether to annotate each chromosome with the no. of predicted COs'
+)
+
+snco_opts.option(
+    '--show-gt/--no-gt',
+    subcommands=['plot'],
+    required=False,
+    default=True,
+    callback=_log_callback,
+    help='when ground truth is present (i.e. sim data), show expected CO positions'
 )
 
 snco_opts.option(
