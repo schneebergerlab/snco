@@ -9,10 +9,11 @@ from .records import MarkerRecords
 log = logging.getLogger('snco')
 
 
-def filter_low_coverage_barcodes(co_markers, min_cov=0):
+def filter_low_coverage_barcodes(co_markers, min_cov=0, min_cov_per_chrom=0):
     co_markers_f = co_markers.copy()
     for cb in co_markers_f.barcodes:
-        if co_markers_f.total_marker_count(cb) < min_cov:
+        m_counts = [m.sum(axis=None) for m in co_markers_f[cb].values()]
+        if (sum(m_counts) < min_cov) | (min(m_counts) < min_cov_per_chrom):
             co_markers_f.pop(cb)
     return co_markers_f
 
@@ -137,7 +138,7 @@ def apply_marker_threshold(co_markers, max_marker_threshold):
 def run_clean(marker_json_fn, output_json_fn, *,
               co_markers=None,
               cb_whitelist_fn=None, bin_size=25_000,
-              min_markers_per_cb=0, max_bin_count=20,
+              min_markers_per_cb=0, min_markers_per_chrom=0, max_bin_count=20,
               clean_bg=True, bg_window_size=2_500_000, max_frac_bg=0.2,
               mask_imbalanced=True, max_marker_imbalance=0.9):
     '''
@@ -149,9 +150,10 @@ def run_clean(marker_json_fn, output_json_fn, *,
     n = len(co_markers)
 
     if min_markers_per_cb:
-        co_markers = filter_low_coverage_barcodes(co_markers, min_markers_per_cb)
+        co_markers = filter_low_coverage_barcodes(co_markers, min_markers_per_cb, min_markers_per_chrom)
         log.info(
-            f'Removed {n - len(co_markers)} barcodes with fewer than {min_markers_per_cb} markers'
+            f'Removed {n - len(co_markers)} barcodes with fewer than {min_markers_per_cb} markers '
+            f'or fewer than {min_markers_per_chrom} markers per chromosome'
         )
 
     n = len(co_markers)

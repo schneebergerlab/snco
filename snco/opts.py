@@ -409,6 +409,16 @@ snco_opts.option(
 )
 
 snco_opts.option(
+    '--min-markers-per-chrom',
+    subcommands=['loadbam', 'loadcsl', 'clean', 'bam2pred', 'csl2pred'],
+    required=False,
+    type=click.IntRange(0, 1000),
+    default=20,
+    callback=_log_callback,
+    help='minimum total number of markers per chrom, per cb (cb with lower are filtered)'
+)
+
+snco_opts.option(
     '--max-bin-count',
     subcommands=['clean', 'bam2pred', 'csl2pred'],
     type=click.IntRange(5, 1000),
