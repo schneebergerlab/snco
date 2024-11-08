@@ -46,7 +46,7 @@ from snco.plot import single_cell_markerplot
 co_markers = MarkerRecords.read_json('markers.json')
 co_preds = PredictionRecords.read_json('pred.json')
 
-co_markers.seen_barcodes[:5]
+co_markers.barcodes[:5]
 
     ['TGGTTAGGTAGATTGA',
      'ACGTAGTTCATCAGTG',
