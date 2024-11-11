@@ -136,17 +136,22 @@ def calculate_score_metrics(co_markers, co_preds, ground_truth, max_phred_score=
     score_metrics = []
     for cb, cb_co_preds in co_preds.items():
         cb_co_markers = co_markers[cb]
-        cb_co_gt = ground_truth[cb]
-        score_metrics.append([
-            cb,
-            int(n_crossovers(cb_co_gt)),
-            gt_max_detectable_cos(cb_co_markers, cb_co_gt),
-            gt_haplotype_accuracy_score(cb_co_preds, cb_co_gt, max_score=max_phred_score),
-            gt_haplotype_accuracy_score(
-                cb_co_preds, cb_co_gt, thresholded=True, max_score=max_phred_score
-            ),
-            gt_co_score(cb_co_preds, cb_co_gt),
-        ])
+        if cb.split(':')[0] != 'doublet':
+            cb_co_gt = ground_truth[cb]
+            score_metrics.append([
+                cb,
+                int(n_crossovers(cb_co_gt)),
+                gt_max_detectable_cos(cb_co_markers, cb_co_gt),
+                gt_haplotype_accuracy_score(cb_co_preds, cb_co_gt, max_score=max_phred_score),
+                gt_haplotype_accuracy_score(
+                    cb_co_preds, cb_co_gt, thresholded=True, max_score=max_phred_score
+                ),
+                gt_co_score(cb_co_preds, cb_co_gt),
+            ])
+        else:
+            score_metrics.append([
+                cb, np.nan, np.nan, np.nan, np.nan, np.nan
+            ])
     score_metrics = pd.DataFrame(
         score_metrics,
         columns=['cb', 'gt_n_crossovers', 'gt_detectable_cos',
@@ -172,7 +177,7 @@ def run_stats(marker_json_fn, pred_json_fn, output_tsv_fn, *,
         pred_json_fn, cb_whitelist_fn, bin_size, data_type='predictions'
     )
 
-    if set(co_preds.seen_barcodes) != set(co_markers.seen_barcodes):
+    if set(co_preds.barcodes) != set(co_markers.barcodes):
         raise ValueError('Cell barcodes from marker-json-fn and predict-json-fn do not match')
 
     qual_metrics = calculate_quality_metrics(co_markers, co_preds)

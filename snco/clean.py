@@ -76,8 +76,13 @@ def random_bg_sample(m, bg_signal, n_bg):
 
 def subtract_background(m, bg_signal, frac_bg, return_bg=False):
     tot = m.sum(axis=None)
-    n_bg = round(tot * frac_bg)
-    bg = random_bg_sample(m, bg_signal, n_bg)
+    if tot:
+        n_bg = round(tot * frac_bg)
+        bg = random_bg_sample(m, bg_signal, n_bg)
+    else:
+        # no markers on this chromosome
+        log.warn('Saw chromosome with no markers when estimating background signal')
+        bg = m.copy()
     m_sub = m - bg
     if not return_bg:
         return m_sub
@@ -147,8 +152,8 @@ def run_clean(marker_json_fn, output_json_fn, *,
     '''
     if co_markers is None:
         co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
-    n = len(co_markers)
 
+    n = len(co_markers)
     if min_markers_per_cb:
         co_markers = filter_low_coverage_barcodes(co_markers, min_markers_per_cb, min_markers_per_chrom)
         log.info(
@@ -183,6 +188,16 @@ def run_clean(marker_json_fn, output_json_fn, *,
             f'Masked {n_masked:d}/{tot_bins} bins with '
             f'marker imbalance greater than {max_marker_imbalance}'
         )
+
+
+    n = len(co_markers)
+    co_markers = filter_low_coverage_barcodes(
+        co_markers, min_cov=0, min_cov_per_chrom=1
+    )
+    log.info(
+        f'Removed {n - len(co_markers)} barcodes with at least '
+        'one chromosome without markers after cleaning'
+    )
 
     # threshold bins that have a large number of reads
     co_markers = apply_marker_threshold(co_markers, max_bin_count)

@@ -215,8 +215,6 @@ class BaseRecords:
             for chrom, m in cb_m.items():
                 s[cb, chrom] += m
 
-        s._cmd += other._cmd
-
         if not inplace:
             return s
 

@@ -6,7 +6,7 @@ import pandas as pd
 
 from .utils import load_json
 from .records import MarkerRecords, PredictionRecords
-from .clean import estimate_overall_background_signal, subtract_background
+from .clean import estimate_overall_background_signal, subtract_background, random_bg_sample
 
 
 log = logging.getLogger('snco')
@@ -75,20 +75,10 @@ def apply_gt_to_markers(gt, m, bg_rate, bg_signal):
     return sim
 
 
-def generate_simulated_data(ground_truth, co_markers, conv_window_size=2_500_000,
-                            bg_rate=None, nsim_per_sample=100):
+def simulate_singlets(co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sample):
     '''
-    For a set of crossover markers from real data, estimate the foreground 
-    and background signal for each, and then apply the ground truth
-    haplotypes to create a simulated marker set for known crossovers. 
-    These can be used for benchmarking.
+    Simulate barcodes with crossovers from ground truth
     '''
-    bg, frac_bg = estimate_overall_background_signal(co_markers, conv_window_size)
-    if bg_rate is not None:
-        frac_bg = defaultdict(lambda: bg_rate)
-
-    # todo: simulate some doublets
-
     sim_co_markers = MarkerRecords.new_like(co_markers)
     sim_co_markers.metadata['ground_truth'] = PredictionRecords.new_like(co_markers)
     for sample_id in ground_truth.barcodes:
@@ -98,9 +88,54 @@ def generate_simulated_data(ground_truth, co_markers, conv_window_size=2_500_000
             for chrom in ground_truth.chrom_sizes:
                 gt = ground_truth[sample_id, chrom]
                 sim_co_markers[sim_id, chrom] = apply_gt_to_markers(
-                    gt, co_markers[cb, chrom], frac_bg[cb], bg[chrom]
+                    gt, co_markers[cb, chrom], frac_bg[cb], bg_signal[chrom]
                 )
                 sim_co_markers.metadata['ground_truth'][sim_id, chrom] = gt
+    return sim_co_markers
+
+
+def simulate_doublets(co_markers, n_doublets):
+    '''
+    Simulate barcodes with doublets.
+    '''
+    sim_co_markers_doublets = MarkerRecords.new_like(co_markers)
+    barcodes = np.random.choice(co_markers.barcodes, size=n_doublets * 2, replace=True)
+    for cb_i, cb_j in zip(barcodes[:n_doublets], barcodes[n_doublets:]):
+        sim_id = f'doublet:{cb_i}_{cb_j}'
+        for chrom in sim_co_markers_doublets.chrom_sizes:
+            m_i = co_markers[cb_i, chrom]
+            m_j = co_markers[cb_j, chrom]
+            m_i_tot = m_i.sum(axis=None)
+            m_j_tot = m_j.sum(axis=None)
+            doublet = np.round(((m_i / m_i_tot) + (m_j / m_j_tot)) * (m_i_tot + m_j_tot))
+            sim_co_markers_doublets[sim_id, chrom] = doublet
+    return sim_co_markers_doublets
+
+
+def generate_simulated_data(ground_truth, co_markers, conv_window_size=2_500_000,
+                            bg_rate=None, nsim_per_sample=100,
+                            doublet_rate=0.5):
+    '''
+    For a set of crossover markers from real data, estimate the foreground 
+    and background signal for each, and then apply the ground truth
+    haplotypes to create a simulated marker set for known crossovers. 
+    These can be used for benchmarking.
+    '''
+    estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg=1.0)
+    bg_signal = co_markers.metadata['background_signal']
+    frac_bg = co_markers.metadata['estimated_background_fraction']
+    if bg_rate is not None:
+        frac_bg = defaultdict(lambda: bg_rate)
+
+    sim_co_markers = simulate_singlets(
+        co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sample
+    )
+
+    sim_co_markers.merge(
+        simulate_doublets(
+            co_markers, int(len(sim_co_markers) * doublet_rate)),
+        inplace=True
+    )
     return sim_co_markers
 
 

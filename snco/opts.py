@@ -380,7 +380,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--max-frac-bg',
-    subcommands=['sim', 'clean', 'bam2pred', 'csl2pred'],
+    subcommands=['clean', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.FloatRange(1e-3, 0.5),
     default=0.25,
@@ -412,7 +412,7 @@ snco_opts.option(
     '--min-markers-per-chrom',
     subcommands=['loadbam', 'loadcsl', 'clean', 'bam2pred', 'csl2pred'],
     required=False,
-    type=click.IntRange(0, 1000),
+    type=click.IntRange(1, 1000),
     default=20,
     callback=_log_callback,
     help='minimum total number of markers per chrom, per cb (cb with lower are filtered)'
@@ -495,6 +495,27 @@ snco_opts.option(
     callback=_log_callback,
     help=('optional lambda parameters for foreground and background Poisson distributions of '
           'model. Default is to fit to the data')
+)
+
+snco_opts.option(
+    '--predict-doublets/--no-predict-doublets',
+    subcommands=['predict', 'bam2pred', 'csl2pred'],
+    required=False,
+    default=True,
+    callback=_log_callback,
+    help='whether to use synthetic doublet scoring to predict likely doublets in the data'
+)
+
+snco_opts.option(
+    '--n-doublets',
+    subcommands=['predict', 'bam2pred', 'csl2pred'],
+    required=False,
+    type=click.FloatRange(0.01, 10_000),
+    default=0.25,
+    callback=_log_callback,
+    metavar='INTEGER OR FLOAT',
+    help=('number of doublets to simulate. If >1, treated as integer number of doublets. '
+          'If <1, treated as a fraction of the total dataset')
 )
 
 snco_opts.option(

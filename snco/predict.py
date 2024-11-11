@@ -1,15 +1,20 @@
 import logging
 from collections import namedtuple
 import numpy as np
+import pandas as pd
 
 import torch
 from pomegranate import distributions as pmd
-from pomegranate import hmm as pmh
+from pomegranate.hmm import DenseHMM
+from pomegranate.bayes_classifier import BayesClassifier
 
 from .logger import progress_bar
 from .utils import load_json
 from .records import PredictionRecords
 from .clean import predict_foreground_convolution
+from .sim import simulate_doublets
+from . import stats
+
 
 DEFAULT_DEVICE = torch.device('cpu')
 
@@ -126,7 +131,7 @@ class RigidHMM:
 
     def initialise_model(self, fg_lambda, bg_lambda):
         # todo: implement sparse version for when rfactor is very large
-        self._model = pmh.DenseHMM(frozen=True)
+        self._model = DenseHMM(frozen=True)
         log.debug(f'moving model to device: {self._device}')
         self._model.to(self._device)
         for haplotype in self.haplotypes:
@@ -163,8 +168,10 @@ class RigidHMM:
             X_batch = torch.from_numpy(X_batch)
             if self._device is not None:
                 X_batch.to(self._device)
-            p_batch = self._model.predict_proba(X_batch)
-            p_batch = p_batch[..., self._hap2_states].sum(axis=2).cpu().numpy()
+            p_batch = self._model.predict_proba(X_batch).cpu().numpy()
+            # fix nans introduced by pomegranate on extremely tiny probabilities (I think...)
+            p_batch[np.isnan(p_batch)] = 0.0
+            p_batch = p_batch[..., self._hap2_states].sum(axis=2)
             proba.append(p_batch)
         return np.concatenate(proba, axis=0)
 
@@ -204,11 +211,58 @@ def detect_crossovers(co_markers, rhmm, batch_size=1_000, processes=1):
     return co_preds
 
 
+def predict_doublet_barcodes(true_co_markers, true_co_preds, sim_co_markers, sim_co_preds):
+    X_true = []
+    cb_true = []
+    for cb, cb_co_markers in true_co_markers.items():
+        cb_co_preds = true_co_preds[cb]
+        X_true.append([
+            stats.accuracy_score(cb_co_markers, cb_co_preds),
+            stats.uncertainty_score(cb_co_preds),
+        ])
+        cb_true.append(cb)
+    X_true = np.array(X_true).astype(np.float32)
+    X_doublet = []
+    for cb, cb_co_markers in sim_co_markers.items():
+        cb_co_preds = sim_co_preds[cb]
+        X_doublet.append([
+            stats.accuracy_score(cb_co_markers, cb_co_preds),
+            stats.uncertainty_score(cb_co_preds),
+        ])
+    X_train = np.concatenate([X_true, X_doublet], axis=0)
+    y_train = np.repeat(
+        [0, 1],
+        [len(X_true), len(X_doublet)]
+    )
+    sample_weight = np.repeat(
+        [0.5 * (1 / len(X_true)), 0.5 * (1 / len(X_doublet))],
+        [len(X_true), len(X_doublet)]
+    )
+    bc = BayesClassifier([pmd.Normal(covariance_type='diag') for _ in range(2)])
+    bc = bc.fit(
+        torch.from_numpy(X_train.astype(np.float32)),
+        torch.from_numpy(y_train.astype(np.float32)),
+        sample_weight=torch.from_numpy(sample_weight.astype(np.float32))
+    )
+    doublet_pred = bc.predict_proba(X_true)[:, 1].numpy()
+    log.info(
+        pd.crosstab(
+            pd.Series(bc.predict(X_train).numpy(), name='Prediction').map({0: 'hq', 1: 'doublet'}),
+            pd.Series(y_train, name='Simulation').map({0: 'real', 1: 'sim'}),
+        )
+    )
+    true_co_preds.metadata['doublet_prediction'] = {
+        cb: p for cb, p in zip(cb_true, doublet_pred)
+    }
+    return true_co_preds
+
+
 def run_predict(marker_json_fn, output_json_fn, *,
                 co_markers=None,
                 cb_whitelist_fn=None, bin_size=25_000,
                 segment_size=1_000_000, terminal_segment_size=50_000,
                 cm_per_mb=4.5, model_lambdas=None,
+                predict_doublets=True, n_doublets=0.25,
                 output_precision=2, processes=1,
                 batch_size=1_000, device=DEFAULT_DEVICE):
     '''
@@ -228,6 +282,19 @@ def run_predict(marker_json_fn, output_json_fn, *,
     co_preds = detect_crossovers(
         co_markers, rhmm, batch_size=batch_size, processes=processes
     )
+    if predict_doublets:
+        if n_doublets > 1:
+            n_sim = int(min(n_doublets, len(co_markers)))
+        else:
+            n_sim = int(len(co_markers) * n_doublets)
+        log.info(f'Simulating {n_sim} doublets')
+        sim_co_markers = simulate_doublets(co_markers, n_sim)
+        log.info(f'Predicting crossovers for doublets')
+        sim_co_preds = detect_crossovers(
+            sim_co_markers, rhmm, batch_size=batch_size, processes=processes
+        )
+        log.info('Predicting doublets for real data using simulated doublets')
+        co_preds = predict_doublet_barcodes(co_markers, co_preds, sim_co_markers, sim_co_preds)
     if output_json_fn is not None:
         log.info(f'Writing predictions to {output_json_fn}')
         co_preds.write_json(output_json_fn, output_precision)

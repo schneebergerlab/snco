@@ -100,6 +100,9 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
                            show_mesh_prob=True, annotate_co_number=True, show_gt=True,
                            max_yheight=20, ref_colour='#0072b2', alt_colour='#d55e00'):
 
+    if cb not in co_markers.barcodes:
+        raise KeyError(f'cb {cb} not in co_marker object')
+
     fig, axes = chrom_subplots(co_markers.chrom_sizes, figsize=figsize)
     axes[0].set_ylabel('Marker coverage')
     cmap = LinearSegmentedColormap.from_list('hap_cmap', [ref_colour, alt_colour])
