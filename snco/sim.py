@@ -7,9 +7,11 @@ import pandas as pd
 from .utils import load_json
 from .records import MarkerRecords, PredictionRecords
 from .clean import estimate_overall_background_signal, subtract_background, random_bg_sample
+from .opts import DEFAULT_RANDOM_SEED
 
 
 log = logging.getLogger('snco')
+DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 
 
 def co_invs_to_gt(co_invs, bin_size, chrom_nbins):
@@ -49,7 +51,7 @@ def read_ground_truth_haplotypes(co_invs_fn, chrom_sizes, bin_size=25_000):
     return gt
 
 
-def apply_gt_to_markers(gt, m, bg_rate, bg_signal):
+def apply_gt_to_markers(gt, m, bg_rate, bg_signal, rng=DEFAULT_RNG):
     '''
     For an array of markers from one chromosome of a cell barcode,
     estimate the foreground and background signal and then apply the ground truth
@@ -59,7 +61,7 @@ def apply_gt_to_markers(gt, m, bg_rate, bg_signal):
     s = len(m)
 
     # simulate a realistic background signal using the average background across the dataset
-    fg, bg = subtract_background(m, bg_signal, bg_rate, return_bg=True)
+    fg, bg = subtract_background(m, bg_signal, bg_rate, return_bg=True, rng=rng)
 
     # flatten haplotypes
     fg = fg.sum(axis=1)
@@ -75,38 +77,43 @@ def apply_gt_to_markers(gt, m, bg_rate, bg_signal):
     return sim
 
 
-def simulate_singlets(co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sample):
+def simulate_singlets(co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sample, rng=DEFAULT_RNG):
     '''
     Simulate barcodes with crossovers from ground truth
     '''
     sim_co_markers = MarkerRecords.new_like(co_markers)
     sim_co_markers.metadata['ground_truth'] = PredictionRecords.new_like(co_markers)
     for sample_id in ground_truth.barcodes:
-        cbs_to_sim = np.random.choice(co_markers.barcodes, replace=False, size=nsim_per_sample)
+        cbs_to_sim = rng.choice(co_markers.barcodes, replace=False, size=nsim_per_sample)
         for cb in cbs_to_sim:
             sim_id = f'{sample_id}:{cb}'
             for chrom in ground_truth.chrom_sizes:
                 gt = ground_truth[sample_id, chrom]
                 sim_co_markers[sim_id, chrom] = apply_gt_to_markers(
-                    gt, co_markers[cb, chrom], frac_bg[cb], bg_signal[chrom]
+                    gt, co_markers[cb, chrom], frac_bg[cb], bg_signal[chrom], rng=rng
                 )
                 sim_co_markers.metadata['ground_truth'][sim_id, chrom] = gt
     return sim_co_markers
 
 
-def simulate_doublets(co_markers, n_doublets):
+def simulate_doublets(co_markers, n_doublets, rng=DEFAULT_RNG):
     '''
     Simulate barcodes with doublets.
     '''
     sim_co_markers_doublets = MarkerRecords.new_like(co_markers)
-    barcodes = np.random.choice(co_markers.barcodes, size=n_doublets * 2, replace=True)
+    barcodes = rng.choice(co_markers.barcodes, size=n_doublets * 2, replace=True)
     for cb_i, cb_j in zip(barcodes[:n_doublets], barcodes[n_doublets:]):
         sim_id = f'doublet:{cb_i}_{cb_j}'
         for chrom in sim_co_markers_doublets.chrom_sizes:
             m_i = co_markers[cb_i, chrom]
             m_j = co_markers[cb_j, chrom]
             m_i_tot = m_i.sum(axis=None)
+            if not m_i_tot:
+                # prevent zero division
+                m_i_tot = 1.0
             m_j_tot = m_j.sum(axis=None)
+            if not m_j_tot:
+                m_j_tot = 1.0
             doublet = np.round(((m_i / m_i_tot) + (m_j / m_j_tot)) * (m_i_tot + m_j_tot))
             sim_co_markers_doublets[sim_id, chrom] = doublet
     return sim_co_markers_doublets
@@ -114,7 +121,7 @@ def simulate_doublets(co_markers, n_doublets):
 
 def generate_simulated_data(ground_truth, co_markers, conv_window_size=2_500_000,
                             bg_rate=None, nsim_per_sample=100,
-                            doublet_rate=0.5):
+                            doublet_rate=0.5, rng=DEFAULT_RNG):
     '''
     For a set of crossover markers from real data, estimate the foreground 
     and background signal for each, and then apply the ground truth
@@ -128,12 +135,13 @@ def generate_simulated_data(ground_truth, co_markers, conv_window_size=2_500_000
         frac_bg = defaultdict(lambda: bg_rate)
 
     sim_co_markers = simulate_singlets(
-        co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sample
+        co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sample, rng=rng
     )
 
     sim_co_markers.merge(
         simulate_doublets(
-            co_markers, int(len(sim_co_markers) * doublet_rate)),
+            co_markers, int(len(sim_co_markers) * doublet_rate), rng=rng
+        ),
         inplace=True
     )
     return sim_co_markers
@@ -152,7 +160,7 @@ def ground_truth_from_marker_records(co_markers):
 
 def run_sim(marker_json_fn, output_json_fn, haplo_bed_fn, *,
             cb_whitelist_fn=None, bin_size=25_000, bg_marker_rate=None,
-            bg_window_size=2_500_000, nsim_per_sample=100):
+            bg_window_size=2_500_000, nsim_per_sample=100, rng=DEFAULT_RNG):
     '''
     Simulate realistic haplotype marker distributions using real data from `load`,
     with known haplotypes/crossovers supplied from a bed file.
@@ -168,6 +176,7 @@ def run_sim(marker_json_fn, output_json_fn, haplo_bed_fn, *,
         bg_rate=bg_marker_rate,
         conv_window_size=bg_window_size,
         nsim_per_sample=nsim_per_sample,
+        rng=rng
     )
     log.info(f'Simulated {len(sim_co_markers)} cells')
     if output_json_fn is not None:

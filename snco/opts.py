@@ -2,10 +2,13 @@ import re
 import logging
 import click
 
+import numpy as np
+
 from .logger import click_logger
 from .bam import DEFAULT_EXCLUDE_CONTIGS
 
 log = logging.getLogger('snco')
+DEFAULT_RANDOM_SEED = 101
 
 
 class OptionRegistry:
@@ -49,7 +52,7 @@ class OptionRegistry:
 
 snco_opts = OptionRegistry(
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                 'sim', 'concat', 'clean', 'predict',
+                 'sim', 'concat', 'clean', 'predict', 'doublet',
                  'stats', 'plot']
 )
 
@@ -93,7 +96,7 @@ snco_opts.argument(
 
 snco_opts.argument(
     'marker-json-fn',
-    subcommands=['sim', 'clean', 'predict', 'stats', 'plot'],
+    subcommands=['sim', 'clean', 'predict', 'doublet', 'stats', 'plot'],
     required=True,
     nargs=1,
     type=_input_file_type,
@@ -111,7 +114,7 @@ snco_opts.argument(
 
 snco_opts.argument(
     'pred-json-fn',
-    subcommands=['stats'],
+    subcommands=['doublet', 'stats'],
     required=True,
     nargs=1,
     type=_input_file_type,
@@ -138,7 +141,7 @@ snco_opts.option(
 
 snco_opts.option(
     '-o', '--output-json-fn',
-    subcommands=['loadbam', 'loadcsl', 'sim', 'concat', 'clean', 'predict'],
+    subcommands=['loadbam', 'loadcsl', 'sim', 'concat', 'clean', 'predict', 'doublet'],
     required=True,
     type=_output_file_type,
     callback=_log_callback,
@@ -166,7 +169,7 @@ snco_opts.option(
 snco_opts.option(
     '-c', '--cb-whitelist-fn',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                 'sim', 'clean', 'predict', 'stats'],
+                 'sim', 'clean', 'predict', 'doublet', 'stats'],
     required=False,
     type=_input_file_type,
     callback=_log_callback,
@@ -194,7 +197,7 @@ snco_opts.option(
 snco_opts.option(
     '-N', '--bin-size',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                 'sim', 'clean', 'predict', 'stats'], # todo: why do these cmds need this again?
+                 'sim', 'clean', 'predict', 'doublet', 'stats'],
     required=False,
     type=click.IntRange(1000, 100_000),
     default=25_000,
@@ -506,9 +509,19 @@ snco_opts.option(
     help='whether to use synthetic doublet scoring to predict likely doublets in the data'
 )
 
+
+snco_opts.option(
+    '--generate-stats/--no-stats',
+    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
+    required=False,
+    default=True,
+    callback=_log_callback,
+    help='whether to use synthetic doublet scoring to predict likely doublets in the data'
+)
+
 snco_opts.option(
     '--n-doublets',
-    subcommands=['predict', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.FloatRange(0.01, 10_000),
     default=0.25,
@@ -517,6 +530,20 @@ snco_opts.option(
     help=('number of doublets to simulate. If >1, treated as integer number of doublets. '
           'If <1, treated as a fraction of the total dataset')
 )
+
+
+snco_opts.option(
+    '--k-neighbours',
+    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
+    required=False,
+    type=click.FloatRange(0.01, 10_000),
+    default=0.25,
+    callback=_log_callback,
+    metavar='INTEGER OR FLOAT',
+    help=('K neighbours to use for doublet calling. If >1, treated as integer k neighbours. '
+          'If <1, treated as a fraction of --n-doublets')
+)
+
 
 snco_opts.option(
     '--figsize',
@@ -587,7 +614,7 @@ snco_opts.option(
 
 snco_opts.option(
     '-p', '--processes',
-    subcommands=['loadbam', 'bam2pred', 'predict'],
+    subcommands=['loadbam', 'bam2pred', 'predict', 'doublet'],
     required=False,
     type=click.IntRange(min=1),
     default=1,
@@ -597,7 +624,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--output-precision',
-    subcommands=['predict', 'bam2pred', 'csl2pred', 'stats'],
+    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred', 'stats'],
     required=False,
     type=click.IntRange(1, 10),
     default=3,
@@ -632,7 +659,7 @@ def _check_device(ctx, param, value):
 
 snco_opts.option(
     '-d', '--device',
-    subcommands=['predict', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
     type=str,
     default='cpu',
@@ -642,7 +669,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--batch-size',
-    subcommands=['predict', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.IntRange(1, 10_000),
     default=1_000,
@@ -651,10 +678,25 @@ snco_opts.option(
 )
 
 
+def _get_rng(ctx, param, value):
+    return _log_callback(ctx, param, np.random.default_rng(value))
+
+
+snco_opts.option(
+    '-r', '--random-seed', 'rng',
+    subcommands=['clean', 'sim', 'predict', 'doublet', 'bam2pred', 'csl2pred'],
+    required=False,
+    type=int,
+    default=DEFAULT_RANDOM_SEED,
+    callback=_get_rng,
+    help='batch size for prediction. larger may be faster but use more memory'
+)
+
+
 snco_opts.option(
     '-v', '--verbosity',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                 'sim', 'concat', 'clean', 'predict', 'stats', 'plot'],
+                 'sim', 'concat', 'clean', 'predict', 'doublet', 'stats', 'plot'],
     required=False,
     expose_value=False,
     metavar='LVL',

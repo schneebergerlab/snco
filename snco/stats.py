@@ -1,9 +1,15 @@
+import logging
+from collections import defaultdict
 import numpy as np
 import pandas as pd
 from scipy.ndimage import convolve1d
 
 from .utils import load_json
 from .sim import ground_truth_from_marker_records
+
+
+log = logging.getLogger('snco')
+
 
 def total_markers(cb_co_markers):
     tot = 0
@@ -47,7 +53,7 @@ def coverage_score(cb_co_markers, max_score=10):
         idx, = np.nonzero(m.sum(axis=1))
         try:
             cov += idx[-1] - idx[0] + 1
-        except KeyError:
+        except IndexError:
             cov += 0
         tot += len(m)
     return np.minimum(-np.log2(1 - (cov / tot)), max_score)
@@ -59,21 +65,31 @@ def mean_haplotype(cb_co_preds):
 
 def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=1e-3, max_phred_score=10):
     qual_metrics = []
+    bg_frac = co_markers.metadata.get(
+        'estimated_background_fraction', defaultdict(lambda: np.nan)
+    )
+    doublet_rate = co_preds.metadata.get(
+        'doublet_probability', defaultdict(lambda: np.nan)
+    )
     for cb, cb_co_markers in co_markers.items():
         cb_co_preds = co_preds[cb]
         qual_metrics.append([
             cb,
             total_markers(cb_co_markers),
+            bg_frac.get(cb, np.nan),
             n_crossovers(cb_co_preds, min_co_prob=nco_min_prob),
             accuracy_score(cb_co_markers, cb_co_preds, max_score=max_phred_score),
             uncertainty_score(cb_co_preds),
+            doublet_rate.get(cb, np.nan),
             coverage_score(cb_co_markers),
             mean_haplotype(cb_co_preds)
         ])
     qual_metrics = pd.DataFrame(
         qual_metrics,
-        columns=['cb', 'total_markers', 'n_crossovers',
+        columns=['cb', 'total_markers',
+                 'bg_fraction', 'n_crossovers',
                  'accuracy_score', 'uncertainty_score',
+                 'doublet_probability',
                  'coverage_score', 'mean_haplotype']
     )
     return qual_metrics
@@ -167,24 +183,30 @@ def write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics=None, precision=
 
 
 def run_stats(marker_json_fn, pred_json_fn, output_tsv_fn, *,
-          cb_whitelist_fn=None, bin_size=25_000, output_precision=3):
+              co_markers=None, co_preds=None,
+              cb_whitelist_fn=None, bin_size=25_000, output_precision=3):
     '''
     Scores the quality of data and predictions for a set of haplotype calls
     generated with `predict`.
     '''
-    co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
-    co_preds = load_json(
-        pred_json_fn, cb_whitelist_fn, bin_size, data_type='predictions'
-    )
+    if co_markers is None:
+        co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
+    if co_preds is None:
+        co_preds = load_json(
+            pred_json_fn, cb_whitelist_fn, bin_size, data_type='predictions'
+        )
 
     if set(co_preds.barcodes) != set(co_markers.barcodes):
         raise ValueError('Cell barcodes from marker-json-fn and predict-json-fn do not match')
 
+    log.info('Calculating quality metrics')
     qual_metrics = calculate_quality_metrics(co_markers, co_preds)
     if 'ground_truth' in co_markers.metadata:
         ground_truth_haplotypes = ground_truth_from_marker_records(co_markers)
+        log.info('Using ground truth info to calculate benchmarking metrics')
         score_metrics = calculate_score_metrics(co_markers, co_preds, ground_truth_haplotypes)
     else:
         score_metrics = None
 
+    log.info(f'Writing stats to {output_tsv_fn}')
     write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics, precision=output_precision)

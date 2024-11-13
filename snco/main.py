@@ -79,6 +79,16 @@ def predict_subcommand(**kwargs):
     run_predict(**kwargs)
 
 
+@main.command('doublet')
+@snco_opts('doublet')
+def doublet_subcommand(**kwargs):
+    '''
+    Predict doublets using synthetic doublet detection method
+    '''
+    from .predict import run_doublet
+    run_doublet(**kwargs)
+
+
 @main.command('stats')
 @snco_opts('stats')
 def stats_subcommand(**kwargs):

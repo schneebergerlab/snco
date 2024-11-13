@@ -5,8 +5,10 @@ from scipy.ndimage import convolve1d
 
 from .utils import load_json
 from .records import MarkerRecords
+from .opts import DEFAULT_RANDOM_SEED
 
 log = logging.getLogger('snco')
+DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 
 
 def filter_low_coverage_barcodes(co_markers, min_cov=0, min_cov_per_chrom=0):
@@ -62,23 +64,23 @@ def estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg
     return co_markers
 
 
-def random_bg_sample(m, bg_signal, n_bg):
+def random_bg_sample(m, bg_signal, n_bg, rng=DEFAULT_RNG):
     bg_idx = np.nonzero(m)
     m_valid = m[bg_idx]
     p = m_valid * bg_signal[bg_idx]
     p = p / p.sum(axis=None)
     n_p = p.shape[0]
-    bg_c = np.bincount(np.random.choice(np.arange(n_p), size=n_bg, replace=True, p=p), minlength=n_p)
+    bg_c = np.bincount(rng.choice(np.arange(n_p), size=n_bg, replace=True, p=p), minlength=n_p)
     bg = np.zeros_like(m)
     bg[bg_idx] = np.minimum(bg_c, m_valid)
     return bg
 
 
-def subtract_background(m, bg_signal, frac_bg, return_bg=False):
+def subtract_background(m, bg_signal, frac_bg, return_bg=False, rng=DEFAULT_RNG):
     tot = m.sum(axis=None)
     if tot:
         n_bg = round(tot * frac_bg)
-        bg = random_bg_sample(m, bg_signal, n_bg)
+        bg = random_bg_sample(m, bg_signal, n_bg, rng=rng)
     else:
         # no markers on this chromosome
         log.warn('Saw chromosome with no markers when estimating background signal')
@@ -89,12 +91,14 @@ def subtract_background(m, bg_signal, frac_bg, return_bg=False):
     return m_sub, bg
 
 
-def clean_marker_background(co_markers):
+def clean_marker_background(co_markers, rng=DEFAULT_RNG):
     bg_signal = co_markers.metadata['background_signal']
     frac_bg = co_markers.metadata['estimated_background_fraction']
     co_markers_c = MarkerRecords.new_like(co_markers)
     for cb, chrom, m in co_markers.deep_items():
-        co_markers_c[cb, chrom] = subtract_background(m, bg_signal[chrom], frac_bg[cb])
+        co_markers_c[cb, chrom] = subtract_background(
+            m, bg_signal[chrom], frac_bg[cb], rng=rng
+        )
     return co_markers_c
 
 
@@ -145,7 +149,8 @@ def run_clean(marker_json_fn, output_json_fn, *,
               cb_whitelist_fn=None, bin_size=25_000,
               min_markers_per_cb=0, min_markers_per_chrom=0, max_bin_count=20,
               clean_bg=True, bg_window_size=2_500_000, max_frac_bg=0.2,
-              mask_imbalanced=True, max_marker_imbalance=0.9):
+              mask_imbalanced=True, max_marker_imbalance=0.9,
+              rng=DEFAULT_RNG):
     '''
     Removes predicted background markers, that result from ambient nucleic acids, 
     from each cell barcode.
@@ -175,7 +180,7 @@ def run_clean(marker_json_fn, output_json_fn, *,
     log.info(f'Average estimated background fraction is {av_bg:.3f}')
     if clean_bg:
         log.info('Attempting to filter likely background markers')
-        co_markers = clean_marker_background(co_markers)
+        co_markers = clean_marker_background(co_markers, rng=rng)
 
     if mask_imbalanced:
         # mask any bins that still have extreme imbalance
