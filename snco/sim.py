@@ -107,14 +107,15 @@ def simulate_doublets(co_markers, n_doublets, rng=DEFAULT_RNG):
         for chrom in sim_co_markers_doublets.chrom_sizes:
             m_i = co_markers[cb_i, chrom]
             m_j = co_markers[cb_j, chrom]
-            m_i_tot = m_i.sum(axis=None)
-            if not m_i_tot:
-                # prevent zero division
-                m_i_tot = 1.0
-            m_j_tot = m_j.sum(axis=None)
-            if not m_j_tot:
-                m_j_tot = 1.0
-            doublet = np.round(((m_i / m_i_tot) + (m_j / m_j_tot)) * (m_i_tot + m_j_tot))
+            doublet = m_i + m_j
+            #m_i_tot = m_i.sum(axis=None)
+            #if not m_i_tot:
+            #    # prevent zero division
+            #    m_i_tot = 1.0
+            #m_j_tot = m_j.sum(axis=None)
+            #if not m_j_tot:
+            #    m_j_tot = 1.0
+            #doublet = np.round(((m_i / m_i_tot) + (m_j / m_j_tot)) * (m_i_tot + m_j_tot))
             sim_co_markers_doublets[sim_id, chrom] = doublet
     return sim_co_markers_doublets
 

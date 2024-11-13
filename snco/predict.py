@@ -251,6 +251,7 @@ def predict_doublet_barcodes(true_co_markers, true_co_preds,
             stats.accuracy_score(cb_co_markers, cb_co_preds),
             stats.uncertainty_score(cb_co_preds),
             stats.coverage_score(cb_co_markers),
+            np.log10(stats.n_crossovers(cb_co_preds) + 1)
         ])
         cb_true.append(cb)
     X_true = np.array(X_true)
@@ -261,6 +262,7 @@ def predict_doublet_barcodes(true_co_markers, true_co_preds,
             stats.accuracy_score(cb_co_markers, cb_co_preds),
             stats.uncertainty_score(cb_co_preds),
             stats.coverage_score(cb_co_markers),
+            np.log10(stats.n_crossovers(cb_co_preds) + 1)
         ])
     N = len(sim_co_markers)
     X_train = np.concatenate(
