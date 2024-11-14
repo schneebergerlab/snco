@@ -101,22 +101,15 @@ def simulate_doublets(co_markers, n_doublets, rng=DEFAULT_RNG):
     Simulate barcodes with doublets.
     '''
     sim_co_markers_doublets = MarkerRecords.new_like(co_markers)
-    barcodes = rng.choice(co_markers.barcodes, size=n_doublets * 2, replace=True)
-    for cb_i, cb_j in zip(barcodes[:n_doublets], barcodes[n_doublets:]):
+    barcodes = rng.choice(co_markers.barcodes, size=n_doublets * 2, replace=False)
+    # sorting by total markers makes m_i and m_j relatively similar in size
+    barcodes = sorted(barcodes, key=co_markers.total_marker_count)
+    for cb_i, cb_j in zip(barcodes[0::2], barcodes[1::2]):
         sim_id = f'doublet:{cb_i}_{cb_j}'
         for chrom in sim_co_markers_doublets.chrom_sizes:
             m_i = co_markers[cb_i, chrom]
             m_j = co_markers[cb_j, chrom]
-            doublet = m_i + m_j
-            #m_i_tot = m_i.sum(axis=None)
-            #if not m_i_tot:
-            #    # prevent zero division
-            #    m_i_tot = 1.0
-            #m_j_tot = m_j.sum(axis=None)
-            #if not m_j_tot:
-            #    m_j_tot = 1.0
-            #doublet = np.round(((m_i / m_i_tot) + (m_j / m_j_tot)) * (m_i_tot + m_j_tot))
-            sim_co_markers_doublets[sim_id, chrom] = doublet
+            sim_co_markers_doublets[sim_id, chrom] = m_i + m_j
     return sim_co_markers_doublets
 
 
