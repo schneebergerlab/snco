@@ -292,7 +292,7 @@ def doublet_detector(co_markers, co_preds, rhmm,
                      batch_size=1000, device=DEFAULT_DEVICE,
                      processes=1, rng=DEFAULT_RNG):
     if n_doublets > 1:
-        n_sim = int(min(n_doublets, len(co_markers)))
+        n_sim = int(min(n_doublets, len(co_markers) // 2))
     else:
         n_sim = int(len(co_markers) * n_doublets)
 
@@ -303,11 +303,11 @@ def doublet_detector(co_markers, co_preds, rhmm,
 
     log.info(f'Simulating {n_sim} doublets')
     sim_co_markers = simulate_doublets(co_markers, n_sim)
-    log.info(f'Predicting crossovers for doublets')
+    log.info(f'Predicting crossovers for simulated doublets')
     sim_co_preds = detect_crossovers(
         sim_co_markers, rhmm, batch_size=batch_size, processes=processes
     )
-    log.info('Predicting doublets for real data using simulated doublets '
+    log.info('Predicting doublets using simulated doublets '
              f'and {k_neighbours} nearest neighbours')
     co_preds = predict_doublet_barcodes(
         co_markers, co_preds,

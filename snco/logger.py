@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from collections import deque
 
 import click
 
@@ -20,6 +21,20 @@ def format_log_msg(lvl, msg):
     label = fmt['label'].rjust(5)
     prefix = click.style(f'[{dt}] SNCO {label}:', fg=fmt['fg'])
     return f'{prefix} {msg}'
+
+
+class LogFilter(logging.Filter):
+
+    def __init__(self, memory=10):
+        super().__init__()
+        self.msgs = deque(maxlen=memory)
+
+    def filter(self, record):
+        '''only display new messages, prevents extreme repetition of warnings'''
+        rv = record.msg not in self.msgs
+        if rv:
+            self.msgs.append(record.msg)
+        return rv
 
 
 class LogFormatter(logging.Formatter):
@@ -47,6 +62,8 @@ class ClickLogHandler(logging.Handler):
 def click_logger(ctx, params, value):
     log = logging.getLogger('snco')
     log.setLevel(value)
+    log_filter = LogFilter(memory=10)
+    log.addFilter(log_filter)
     log_handler = ClickLogHandler()
     log_handler.formatter = LogFormatter()
     log.handlers = [log_handler]
