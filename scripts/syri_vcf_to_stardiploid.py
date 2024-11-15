@@ -85,11 +85,17 @@ def convert_syri_output(syri_vcf_fn, output_vcf_fn, max_hdr_length, min_score, m
         o.write(
             '##fileformat=VCFv4.3\n'
             '##source=syri_vcf_to_stardiploid.py\n'
-            f'#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{alt_name}\n'
+            '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n'
+            '##INFO=<ID=MTD,Number=1,Type=String,Description="Method">\n'
         )
         filt_chrom = None
         filt_end = 0
         with pysam.VariantFile(syri_vcf_fn) as v:
+            for chrom, cntg in v.header.contigs.items():
+                o.write(f'##contig=<ID={chrom},length={cntg.length}\n')
+            o.write(
+                f'#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{alt_name}\n'
+            )
             for r in v.fetch():
                 if r.info['VarType'] == 'SR' and not re.match('(SYN\d+)|(INV\d+)', r.id):
                     # structural variant, we need to filter any ShV that overlap these positions
@@ -105,7 +111,7 @@ def convert_syri_output(syri_vcf_fn, output_vcf_fn, max_hdr_length, min_score, m
                         if allele_size <= max_indel_length:
                             outrecord = (
                                 f'{r.chrom}\t{r.pos}\t{r.id}\t{r.alleles[0]}\t{r.alleles[1]}\t'
-                                f'.\tPASS\tMTD=syri\tGT\t0|1\n'
+                                f'.\tPASS\tMTD=syri\tGT\t1\n'
                             )
                             o.write(outrecord)
                     else:
@@ -114,7 +120,7 @@ def convert_syri_output(syri_vcf_fn, output_vcf_fn, max_hdr_length, min_score, m
                                 if max(len(ref), len(alt)) <= max_indel_length:
                                     outrecord = (
                                         f'{r.chrom}\t{pos}\t{id_}\t{ref}\t{alt}\t'
-                                        f'.\tPASS\tMTD=syri\tGT\t0|1\n'
+                                        f'.\tPASS\tMTD=syri\tGT\t1\n'
                                     )
                                     o.write(outrecord)
 
