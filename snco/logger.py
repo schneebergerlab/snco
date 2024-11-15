@@ -31,9 +31,10 @@ class LogFilter(logging.Filter):
 
     def filter(self, record):
         '''only display new messages, prevents extreme repetition of warnings'''
-        rv = record.msg not in self.msgs
+        msg = record.getMessage()
+        rv = msg not in self.msgs
         if rv:
-            self.msgs.append(record.msg)
+            self.msgs.append(msg)
         return rv
 
 

@@ -240,30 +240,31 @@ def k_nearest_neighbours_classifier(X_train, y_train, k_neighbours):
     return _knn
 
 
+def generate_doublet_prediction_features(co_markers, co_preds):
+    X = []
+    barcodes = []
+    for cb, cb_co_markers in co_markers.items():
+        cb_co_preds = co_preds[cb]
+        X.append([
+            stats.accuracy_score(cb_co_markers, cb_co_preds),
+            stats.uncertainty_score(cb_co_preds),
+            stats.coverage_score(cb_co_markers),
+            np.log10(stats.n_crossovers(cb_co_preds) + 1)
+        ])
+        barcodes.append(cb)
+    X = np.array(X)
+    return X, barcodes
+
+
 def predict_doublet_barcodes(true_co_markers, true_co_preds,
                              sim_co_markers, sim_co_preds,
                              k_neighbours, rng=DEFAULT_RNG):
-    X_true = []
-    cb_true = []
-    for cb, cb_co_markers in true_co_markers.items():
-        cb_co_preds = true_co_preds[cb]
-        X_true.append([
-            stats.accuracy_score(cb_co_markers, cb_co_preds),
-            stats.uncertainty_score(cb_co_preds),
-            stats.coverage_score(cb_co_markers),
-            np.log10(stats.n_crossovers(cb_co_preds) + 1)
-        ])
-        cb_true.append(cb)
-    X_true = np.array(X_true)
-    X_doublet = []
-    for cb, cb_co_markers in sim_co_markers.items():
-        cb_co_preds = sim_co_preds[cb]
-        X_doublet.append([
-            stats.accuracy_score(cb_co_markers, cb_co_preds),
-            stats.uncertainty_score(cb_co_preds),
-            stats.coverage_score(cb_co_markers),
-            np.log10(stats.n_crossovers(cb_co_preds) + 1)
-        ])
+    X_true, cb_true = generate_doublet_prediction_features(
+        true_co_markers, true_co_preds
+    )
+    X_doublet, _ = generate_doublet_prediction_features(
+        sim_co_markers, sim_co_preds
+    )
     N = len(sim_co_markers)
     X_train = np.concatenate(
         [X_true[rng.integers(0, len(X_true), size=N)], X_doublet],
@@ -297,9 +298,9 @@ def doublet_detector(co_markers, co_preds, rhmm,
         n_sim = int(len(co_markers) * n_doublets)
 
     if k_neighbours > 1:
-        k_neighbours = int(min(k_neighbours, n_doublets))
+        k_neighbours = int(min(k_neighbours, n_sim))
     else:
-        k_neighbours = int(n_doublets * k_neighbours)
+        k_neighbours = int(n_sim * k_neighbours)
 
     log.info(f'Simulating {n_sim} doublets')
     sim_co_markers = simulate_doublets(co_markers, n_sim)

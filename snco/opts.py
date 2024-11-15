@@ -86,15 +86,6 @@ snco_opts.argument(
 )
 
 snco_opts.argument(
-    'cell-barcode',
-    subcommands=['plot'],
-    required=True,
-    type=str,
-    nargs=1,
-    callback=_log_callback,
-)
-
-snco_opts.argument(
     'marker-json-fn',
     subcommands=['sim', 'clean', 'predict', 'doublet', 'stats', 'plot'],
     required=True,
@@ -127,6 +118,15 @@ snco_opts.argument(
     required=False,
     nargs=1,
     type=_input_file_type,
+    callback=_log_callback,
+)
+
+snco_opts.argument(
+    'cell-barcode',
+    subcommands=['plot'],
+    required=False,
+    type=str,
+    nargs=1,
     callback=_log_callback,
 )
 
@@ -169,7 +169,7 @@ snco_opts.option(
 snco_opts.option(
     '-c', '--cb-whitelist-fn',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                 'sim', 'clean', 'predict', 'doublet', 'stats'],
+                 'sim', 'clean', 'predict', 'doublet', 'stats', 'plot'],
     required=False,
     type=_input_file_type,
     callback=_log_callback,
@@ -546,6 +546,17 @@ snco_opts.option(
 
 
 snco_opts.option(
+    '--plot-type',
+    subcommands=['plot'],
+    required=False,
+    type=click.Choice(['markerplot', 'recombination'], case_sensitive=False),
+    default='markerplot',
+    callback=_log_callback,
+    help='type of plot to create'
+)
+
+
+snco_opts.option(
     '--figsize',
     subcommands=['plot'],
     required=False,
@@ -561,7 +572,7 @@ snco_opts.option(
     required=False,
     default=True,
     callback=_log_callback,
-    help='whether to draw predicted haplotype onto plot as shading'
+    help='whether to draw predicted haplotype onto plot as shading (markerplot)'
 )
 
 snco_opts.option(
@@ -570,7 +581,7 @@ snco_opts.option(
     required=False,
     default=True,
     callback=_log_callback,
-    help='whether to annotate each chromosome with the no. of predicted COs'
+    help='whether to annotate each chromosome with the no. of predicted COs (markerplot)'
 )
 
 snco_opts.option(
@@ -579,7 +590,7 @@ snco_opts.option(
     required=False,
     default=True,
     callback=_log_callback,
-    help='when ground truth is present (i.e. sim data), show expected CO positions'
+    help='when ground truth is present (i.e. sim data), show expected CO positions (markerplot)'
 )
 
 snco_opts.option(
@@ -589,8 +600,42 @@ snco_opts.option(
     type=click.IntRange(5, 1000),
     default=20,
     callback=_log_callback,
-    help='maximum number of markers per bin to plot (higher values are thresholded)'
+    help='maximum number of markers per bin to plot, higher values are thresholded (markerplot)'
 )
+
+
+snco_opts.option(
+    '--window-size',
+    subcommands=['plot'],
+    required=False,
+    type=click.IntRange(25_000, 10_000_000),
+    default=1_000_000,
+    callback=_log_callback,
+    help='Rolling window size for calculating recombination landscape (recombination)'
+)
+
+
+snco_opts.option(
+    '--bootstraps', 'nboots',
+    subcommands=['plot'],
+    required=False,
+    type=click.IntRange(1, 10_000),
+    default=100,
+    callback=_log_callback,
+    help='Number of random subsamples for calculating recombination landscape (recombination)'
+)
+
+
+snco_opts.option(
+    '--confidence-intervals',
+    subcommands=['plot'],
+    required=False,
+    type=click.FloatRange(50, 100),
+    default=95,
+    callback=_log_callback,
+    help='Percentile to use for drawing confidence intervals (recombination)'
+)
+
 
 snco_opts.option(
     '--ref-colour',
@@ -599,7 +644,7 @@ snco_opts.option(
     type=str,
     default='#0072b2',
     callback=_log_callback,
-    help='hex colour to use for reference (hap1) markers'
+    help='hex colour to use for reference (hap1) markers (also for recombination landscape)'
 )
 
 snco_opts.option(
@@ -609,7 +654,7 @@ snco_opts.option(
     type=str,
     default='#d55e00',
     callback=_log_callback,
-    help='hex colour to use for alternative (hap2) markers'
+    help='hex colour to use for alternative (hap2) markers (markerplot)'
 )
 
 snco_opts.option(
@@ -684,7 +729,7 @@ def _get_rng(ctx, param, value):
 
 snco_opts.option(
     '-r', '--random-seed', 'rng',
-    subcommands=['clean', 'sim', 'predict', 'doublet', 'bam2pred', 'csl2pred'],
+    subcommands=['clean', 'sim', 'predict', 'doublet', 'bam2pred', 'csl2pred', 'plot'],
     required=False,
     type=int,
     default=DEFAULT_RANDOM_SEED,

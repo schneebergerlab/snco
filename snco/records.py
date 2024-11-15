@@ -63,6 +63,16 @@ class BaseRecords:
         for chrom, arr in sd.items():
             self._check_arr(arr, chrom)
 
+    def get_chrom(self, chrom):
+        arrs = []
+        for cb in self.keys():
+            try:
+                m = self._records[cb][chrom]
+            except KeyError:
+                m = self[cb, chrom]
+            arrs.append(m)
+        return np.asarray(arrs)
+
     def __getitem__(self, index):
         if isinstance(index, str):
             if index not in self._records:
@@ -70,6 +80,8 @@ class BaseRecords:
             return self._records[index]
         if len(index) == 2:
             cb, chrom = index
+            if cb is Ellipsis:
+                return self.get_chrom(chrom)
             try:
                 cb_record = self._records[cb]
             except KeyError:

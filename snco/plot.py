@@ -1,11 +1,17 @@
 import re
+import logging
 
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.colors import Normalize, LinearSegmentedColormap
 
 from .utils import load_json
+from .recombination import recombination_landscape
+from .opts import DEFAULT_RANDOM_SEED
 
+
+log = logging.getLogger('snco')
+DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 YLIM_OFFSET = 1
 XLIM_OFFSET = 1e4
 
@@ -146,12 +152,66 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
     return fig, axes
 
 
-def run_plot(cell_barcode, marker_json_fn, pred_json_fn,
-             output_fig_fn, figsize=(18, 4),
-             show_pred=True, show_co_num=True, show_gt=True,
-             max_yheight=20,
-             ref_colour='#0072b2', alt_colour='#d55e00'):
-    co_markers = load_json(marker_json_fn, cb_whitelist_fn=None, bin_size=None, subset=[cell_barcode])
+def plot_recombination_landscape(co_preds, co_markers=None,
+                                 cb_whitelist=None,
+                                 rolling_mean_window_size=1_000_000,
+                                 nboots=100, ci=95,
+                                 min_prob=0.01,
+                                 axes=None,
+                                 figsize=(12, 4),
+                                 colour="#0072b2",
+                                 label=None,
+                                 rng=DEFAULT_RNG):
+
+    if axes is None:
+        fig, axes = chrom_subplots(co_preds.chrom_sizes, figsize=figsize)
+    else:
+        assert len(axes) == len(co_preds.chrom_sizes)
+
+    if cb_whitelist is not None:
+        co_preds = co_preds.copy()
+        co_preds.filter(cb_whitelist)
+        if co_markers is not None:
+            co_markers = co_markers.copy()
+            co_markers.filter(cb_whitelist)
+
+    cm_per_mb = recombination_landscape(
+        co_preds,
+        co_markers=co_markers,
+        rolling_mean_window_size=rolling_mean_window_size,
+        nboots=nboots,
+        min_prob=min_prob,
+        rng=rng
+    )
+
+    lower = (100 - ci) / 2
+    upper = 100 - lower
+    
+    for chrom, ax in zip(cm_per_mb, axes):
+        x = np.arange(0, co_preds.nbins[chrom]) * co_preds.bin_size
+        c = cm_per_mb[chrom]
+        ax.step(x, np.nanmean(c, axis=0), color=colour)
+        ax.fill_between(
+            x=x,
+            y1=np.nanpercentile(c, lower, axis=0),
+            y2=np.nanpercentile(c, upper, axis=0),
+            alpha=0.25,
+            color=colour
+        )
+    axes[0].set_ylabel('cM / Mb')
+    axes[-1].plot([], [], color=colour, label=label)
+    if label is not None:
+        axes[-1].legend()
+    plt.tight_layout()
+    return axes
+
+
+def run_plot(cell_barcode, marker_json_fn, pred_json_fn, output_fig_fn, 
+             cb_whitelist_fn=None, plot_type='markerplot', figsize=(18, 4),
+             show_pred=True, show_co_num=True, show_gt=True, max_yheight=20,
+             window_size=1_000_000, nboots=100, confidence_intervals=95,
+             ref_colour='#0072b2', alt_colour='#d55e00', rng=DEFAULT_RNG):
+    co_markers = load_json(marker_json_fn, cb_whitelist_fn=None, bin_size=None)
     if pred_json_fn is not None:
         co_preds = load_json(
             pred_json_fn, cb_whitelist_fn=None, bin_size=None, data_type='predictions'
@@ -159,16 +219,27 @@ def run_plot(cell_barcode, marker_json_fn, pred_json_fn,
     else:
         co_preds = None
 
-    single_cell_markerplot(
-        cell_barcode,
-        co_markers,
-        co_preds=co_preds,
-        figsize=figsize,
-        show_mesh_prob=show_pred,
-        annotate_co_number=show_co_num,
-        max_yheight=max_yheight,
-        ref_colour=ref_colour,
-        alt_colour=alt_colour
-    )
+    if plot_type == 'markerplot':
+        if cell_barcode is None:
+            raise ValueError('Must specify a cell barcode for plot-type "markerplot"')
+        single_cell_markerplot(
+            cell_barcode,
+            co_markers,
+            co_preds=co_preds,
+            figsize=figsize,
+            show_mesh_prob=show_pred,
+            annotate_co_number=show_co_num,
+            max_yheight=max_yheight,
+            ref_colour=ref_colour,
+            alt_colour=alt_colour
+        )
+    elif plot_type == 'recombination':
+        plot_recombination_landscape(
+            co_preds, co_markers,
+            rolling_mean_window_size=window_size,
+            nboots=nboots, ci=confidence_intervals,
+            figsize=figsize,
+            colour=ref_colour,
+            rng=rng
+        )
     plt.savefig(output_fig_fn)
-    
