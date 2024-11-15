@@ -734,7 +734,7 @@ snco_opts.option(
     type=int,
     default=DEFAULT_RANDOM_SEED,
     callback=_get_rng,
-    help='batch size for prediction. larger may be faster but use more memory'
+    help='seed for random number generator'
 )
 
 

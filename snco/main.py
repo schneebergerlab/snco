@@ -104,7 +104,8 @@ def stats_subcommand(**kwargs):
 @snco_opts('plot')
 def plot_subcommand(**kwargs):
     '''
-    Draw a marker plot for a given cell barcode
+    Draw a marker plot for a given cell barcode,
+    or the recombination landscape of a whole dataset
     '''
     from .plot import run_plot
     run_plot(**kwargs)
