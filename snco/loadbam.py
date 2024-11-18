@@ -107,7 +107,9 @@ def run_loadbam(bam_fn, output_json_fn, *,
     n = len(co_markers)
     log.info(f'Identified {n} cell barcodes from bam file')
     if min_markers_per_cb or min_markers_per_chrom:
-        co_markers = filter_low_coverage_barcodes(co_markers, min_markers_per_cb, min_markers_per_chrom)
+        co_markers = filter_low_coverage_barcodes(
+            co_markers, min_markers_per_cb, min_markers_per_chrom
+        )
         log.info(
             f'Removed {n - len(co_markers)} barcodes with fewer than {min_markers_per_cb} markers '
             f'or fewer than {min_markers_per_chrom} markers per chromosome'

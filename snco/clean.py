@@ -83,7 +83,7 @@ def subtract_background(m, bg_signal, frac_bg, return_bg=False, rng=DEFAULT_RNG)
         bg = random_bg_sample(m, bg_signal, n_bg, rng=rng)
     else:
         # no markers on this chromosome
-        log.warn('Saw chromosome with no markers when estimating background signal')
+        log.warning('Saw chromosome with no markers when estimating background signal')
         bg = m.copy()
     m_sub = m - bg
     if not return_bg:
@@ -160,7 +160,9 @@ def run_clean(marker_json_fn, output_json_fn, *,
 
     n = len(co_markers)
     if min_markers_per_cb:
-        co_markers = filter_low_coverage_barcodes(co_markers, min_markers_per_cb, min_markers_per_chrom)
+        co_markers = filter_low_coverage_barcodes(
+            co_markers, min_markers_per_cb, min_markers_per_chrom
+        )
         log.info(
             f'Removed {n - len(co_markers)} barcodes with fewer than {min_markers_per_cb} markers '
             f'or fewer than {min_markers_per_chrom} markers per chromosome'

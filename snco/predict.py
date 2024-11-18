@@ -271,27 +271,25 @@ def predict_doublet_barcodes(true_co_markers, true_co_preds,
         axis=0
     )
     y_train = np.repeat([0, 1], [N, N])
-    n_neighbours = min(int(N // 2), k_neighbours)
+    k_neighbours = min(int(N // 2), k_neighbours)
     knn_classifier = k_nearest_neighbours_classifier(X_train, y_train, k_neighbours)
     doublet_pred = knn_classifier(X_true)
     doublet_n = (doublet_pred > 0.5).sum()
-    log.info(f'Identified {doublet_n} putative doublets ({doublet_n / len(doublet_pred) * 100:.2f}%)')
-    log.debug(
-        pd.crosstab(
-            pd.Series(knn_classifier(X_train) > 0.5, name='Prediction').map({False: 'hq', True: 'doublet'}),
-            pd.Series(y_train, name='Simulation').map({0: 'real', 1: 'sim'}),
-        )
+    log.info(
+        f'Identified {doublet_n} putative doublets ({doublet_n / len(doublet_pred) * 100:.2f}%)'
     )
-    true_co_preds.metadata['doublet_probability'] = {
-        cb: p for cb, p in zip(cb_true, doublet_pred)
-    }
+    if log.getEffectiveLevel() <= logging.DEBUG:
+        X_pred_series = pd.Series(
+            knn_classifier(X_train) > 0.5, name='Prediction'
+        ).map({False: 'hq', True: 'doublet'})
+        y_pred_series = pd.Series(y_train, name='Simulation').map({0: 'real', 1: 'sim'})
+        log.debug(pd.crosstab(X_pred_series, y_pred_series))
+    true_co_preds.metadata['doublet_probability'] = dict(zip(cb_true, doublet_pred))
     return true_co_preds
 
 
-def doublet_detector(co_markers, co_preds, rhmm,
-                     n_doublets, k_neighbours,
-                     batch_size=1000, device=DEFAULT_DEVICE,
-                     processes=1, rng=DEFAULT_RNG):
+def doublet_detector(co_markers, co_preds, rhmm, n_doublets, k_neighbours,
+                     batch_size=1000, processes=1, rng=DEFAULT_RNG):
     if n_doublets > 1:
         n_sim = int(min(n_doublets, len(co_markers) // 2))
     else:
@@ -304,7 +302,7 @@ def doublet_detector(co_markers, co_preds, rhmm,
 
     log.info(f'Simulating {n_sim} doublets')
     sim_co_markers = simulate_doublets(co_markers, n_sim)
-    log.info(f'Predicting crossovers for simulated doublets')
+    log.info('Predicting crossovers for simulated doublets')
     sim_co_preds = detect_crossovers(
         sim_co_markers, rhmm, batch_size=batch_size, processes=processes
     )
@@ -348,8 +346,7 @@ def run_predict(marker_json_fn, output_json_fn, *,
     if predict_doublets:
         co_preds = doublet_detector(
             co_markers, co_preds, rhmm, n_doublets, k_neighbours,
-            batch_size=batch_size, processes=processes,
-            device=device, rng=rng,
+            batch_size=batch_size, processes=processes, rng=rng,
         )
 
     if generate_stats:
@@ -385,15 +382,15 @@ def run_doublet(marker_json_fn, pred_json_fn, output_json_fn, *,
         rparams['rfactor'],
         rparams['term_rfactor'],
         rparams['trans_prob'],
-        device
+        device=device
     )
     rhmm.initialise_model(rparams['fg_lambda'], rparams['bg_lambda'])
-    
+
     co_preds = doublet_detector(
         co_markers, co_preds, rhmm,
         n_doublets, k_neighbours,
         batch_size=batch_size, processes=processes,
-        device=device, rng=rng,
+        rng=rng,
     )
 
     if generate_stats:
@@ -404,7 +401,7 @@ def run_doublet(marker_json_fn, pred_json_fn, output_json_fn, *,
             co_preds=co_preds,
             output_precision=output_precision
         )
-    
+
     if output_json_fn is not None:
         log.info(f'Writing predictions to {output_json_fn}')
         co_preds.write_json(output_json_fn, output_precision)

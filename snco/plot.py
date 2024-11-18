@@ -186,7 +186,7 @@ def plot_recombination_landscape(co_preds, co_markers=None,
 
     lower = (100 - ci) / 2
     upper = 100 - lower
-    
+
     for chrom, ax in zip(cm_per_mb, axes):
         x = np.arange(0, co_preds.nbins[chrom]) * co_preds.bin_size
         c = cm_per_mb[chrom]
@@ -206,12 +206,12 @@ def plot_recombination_landscape(co_preds, co_markers=None,
     return axes
 
 
-def run_plot(cell_barcode, marker_json_fn, pred_json_fn, output_fig_fn, 
+def run_plot(cell_barcode, marker_json_fn, pred_json_fn, output_fig_fn,
              cb_whitelist_fn=None, plot_type='markerplot', figsize=(18, 4),
              show_pred=True, show_co_num=True, show_gt=True, max_yheight=20,
              window_size=1_000_000, nboots=100, confidence_intervals=95,
              ref_colour='#0072b2', alt_colour='#d55e00', rng=DEFAULT_RNG):
-    co_markers = load_json(marker_json_fn, cb_whitelist_fn=None, bin_size=None)
+    co_markers = load_json(marker_json_fn, cb_whitelist_fn=cb_whitelist_fn, bin_size=None)
     if pred_json_fn is not None:
         co_preds = load_json(
             pred_json_fn, cb_whitelist_fn=None, bin_size=None, data_type='predictions'
@@ -229,6 +229,7 @@ def run_plot(cell_barcode, marker_json_fn, pred_json_fn, output_fig_fn,
             figsize=figsize,
             show_mesh_prob=show_pred,
             annotate_co_number=show_co_num,
+            show_gt=show_gt,
             max_yheight=max_yheight,
             ref_colour=ref_colour,
             alt_colour=alt_colour

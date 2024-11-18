@@ -40,18 +40,35 @@ def parse_sample_alleles(variant):
     return ref_samples, alt_samples
 
 
+class VariantRecords:
+
+    def __init__(self):
+        self._records = []
+        self._samples = {}
+
+    def add(self, contig, pos, sample_alleles=None):
+        self._records.append((contig, pos))
+        self._samples[(contig, pos)] = sample_alleles
+
+    def __getitem__(self, index):
+        return self._records[index]
+
+    def get_samples(self, contig, pos):
+        return self._samples[(contig, pos)]
+
+
 def read_vcf(vcf_fn, drop_samples=True):
     with pysam.VariantFile(vcf_fn, drop_samples=drop_samples) as vcf:
-        variants = [] if drop_samples else {}
+        variants = VariantRecords()
         for record in vcf.fetch():
             if drop_samples:
-                variants.append((record.contig, record.pos))
+                sample_alleles = None
             else:
                 try:
                     sample_alleles = parse_sample_alleles(record)
                 except ValueError:
                     continue
-                variants[(record.contig, record.pos)] = sample_alleles
+            variants.add(record.contig, record.pos, sample_alleles)
     return variants
 
 
@@ -98,7 +115,7 @@ def iter_cellsnp_lite_markers(csl_dir, cb_whitelist, sample_vcf_fn=None):
             if sample_alleles is None:
                 yield SNPCounts(cb, chrom, pos, ref, alt)
             else:
-                ref_samples, alt_samples = sample_alleles[(chrom, pos)]
+                ref_samples, alt_samples = sample_alleles.get_samples(chrom, pos)
                 yield SNPCounts(cb, chrom, pos, ref, alt, ref_samples, alt_samples)
 
 
