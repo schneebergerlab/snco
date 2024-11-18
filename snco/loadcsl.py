@@ -1,7 +1,10 @@
 '''functions for converting cellsnp-lite output into snco.MarkerRecords format'''
 import os
 import logging
+from dataclasses import dataclass
 from scipy.io import mmread
+
+import pysam
 
 from .utils import read_cb_whitelist
 from .records import MarkerRecords
@@ -22,22 +25,37 @@ def read_chrom_sizes(chrom_sizes_fn):
     return chrom_sizes
 
 
-def read_vcf(vcf_fn, bin_size):
-    '''
-    read variant chromosomes and bin positions from cellsnp-lite vcf file
-    '''
-    with open(vcf_fn) as vcf:
-        variants = []
-        for record in vcf:
-            if record.startswith('#'):
-                continue
-            chrom, pos = record.split('\t')[:2]
-            variants.append((chrom, int(pos) // bin_size))
-    log.info(f'Read {len(variants)} variants from vcf file {vcf_fn}')
+def parse_sample_alleles(variant):
+    if len(variant.alleles) != 2:
+        raise ValueError('Only biallelic variants are allowed')
+    ref_samples = set()
+    alt_samples = set()
+    for sample_id, sample in variant.samples.items():
+        if len(sample.alleles) > 1:
+            raise ValueError('Only haploid haplotype calls are allowed for each sample')
+        if not sample.allele_indices[0]:
+            ref_samples.add(sample_id)
+        else:
+            alt_samples.add(sample_id)
+    return ref_samples, alt_samples
+
+
+def read_vcf(vcf_fn, drop_samples=True):
+    with pysam.VariantFile(vcf_fn, drop_samples=drop_samples) as vcf:
+        variants = [] if drop_samples else {}
+        for record in vcf.fetch():
+            if drop_samples:
+                variants.append((record.contig, record.pos))
+            else:
+                try:
+                    sample_alleles = parse_sample_alleles(record)
+                except ValueError:
+                    continue
+                variants[(record.contig, record.pos)] = sample_alleles
     return variants
 
 
-def parse_cellsnp_lite(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist=None):
+def parse_cellsnp_lite(csl_dir):
     '''
     read data from cellsnp-lite output into a MarkerRecords object
     '''
@@ -46,26 +64,57 @@ def parse_cellsnp_lite(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist=None):
     vcf_fn = os.path.join(csl_dir, 'cellSNP.base.vcf')
     barcode_fn = os.path.join(csl_dir, 'cellSNP.samples.tsv')
 
-    chrom_sizes = read_chrom_sizes(chrom_sizes_fn)
     dep_mm = mmread(dep_fn)
     alt_mm = mmread(alt_fn).tocsr()
     barcodes = read_cb_whitelist(barcode_fn)
-    variants = read_vcf(vcf_fn, bin_size)
+    variants = read_vcf(vcf_fn)
 
+    return dep_mm, alt_mm, barcodes, variants
+
+
+@dataclass(frozen=True)
+class SNPCounts:
+    cb: str
+    chrom: str
+    pos: int
+    ref_count: int
+    alt_count: int
+    ref_samples: set = None
+    alt_samples: set = None
+
+
+def iter_cellsnp_lite_markers(csl_dir, cb_whitelist, sample_vcf_fn=None):
+    dep_mm, alt_mm, barcodes, variants = parse_cellsnp_lite(csl_dir)
+    if sample_vcf_fn is not None:
+        sample_alleles = read_vcf(sample_vcf_fn, drop_samples=False)
+    else:
+        sample_alleles = None
+    for cb_idx, var_idx, tot in zip(dep_mm.col, dep_mm.row, dep_mm.data):
+        cb = barcodes[cb_idx]
+        if cb in cb_whitelist:
+            alt = alt_mm[var_idx, cb_idx]
+            ref = tot - alt
+            chrom, pos = variants[var_idx]
+            if sample_alleles is None:
+                yield SNPCounts(cb, chrom, pos, ref, alt)
+            else:
+                ref_samples, alt_samples = sample_alleles[(chrom, pos)]
+                yield SNPCounts(cb, chrom, pos, ref, alt, ref_samples, alt_samples)
+
+
+def cellsnp_lite_to_co_markers(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist):
+
+    chrom_sizes = read_chrom_sizes(chrom_sizes_fn)
     co_markers = MarkerRecords(
         chrom_sizes,
         bin_size,
         seq_type='csl_snps',
     )
 
-    for cb_idx, var_idx, tot in zip(dep_mm.col, dep_mm.row, dep_mm.data):
-        cb = barcodes[cb_idx]
-        if cb in cb_whitelist:
-            alt = alt_mm[var_idx, cb_idx]
-            ref = tot - alt
-            chrom, bin_idx = variants[var_idx]
-            co_markers[cb, chrom, bin_idx, 0] += ref
-            co_markers[cb, chrom, bin_idx, 1] += alt
+    for snp in iter_cellsnp_lite_markers(csl_dir, cb_whitelist):
+        bin_idx = snp.pos // bin_size
+        co_markers[snp.cb, snp.chrom, bin_idx, 0] += snp.ref_count
+        co_markers[snp.cb, snp.chrom, bin_idx, 1] += snp.alt_count
 
     return co_markers
 
@@ -80,7 +129,7 @@ def run_loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, *,
     '''
 
     cb_whitelist = read_cb_whitelist(cb_whitelist_fn)
-    co_markers = parse_cellsnp_lite(
+    co_markers = cellsnp_lite_to_co_markers(
         cellsnp_lite_dir,
         chrom_sizes_fn,
         bin_size=bin_size,
