@@ -74,13 +74,22 @@ def hdr_to_shv(hdr_record, open_pen=26, extend_pen=1, match_score=1, mismatch_sc
               help='max length of indel to output')
 @click.option('-n', '--alt-sample-name', 'alt_name', required=False, default='hap2', type=str,
               help='name of alternative/haplotype 2 in output vcf (default: hap2)')
-def convert_syri_output(syri_vcf_fn, output_vcf_fn, max_hdr_length, min_score, max_indel_length, alt_name):
+@click.option('-g', '--genotype', required=False, default='dip_het', type=click.Choice(['hap_alt', 'dip_het']),
+              help=('how to encode the genotype in the vcf file ("hap_alt" means haploid alternative i.e. 1, '
+                    '"dip_het" means phased diploid heterozygous i.e. 0|1'))
+def convert_syri_output(syri_vcf_fn, output_vcf_fn, max_hdr_length, min_score, max_indel_length, alt_name, genotype):
     '''
     convert a vcf file from syri into a suitable format for use with STAR diploid and snco analysis
     variants overlapping non-syntenic regions will be filtered out
 
     NB: syri vcf MUST be sorted by position for filtering to work correctly - this is assumed and not checked
     '''
+    if genotype == 'hap_alt':
+        gt = '1'
+    elif genotype == 'dip_het':
+        gt = '0|1'
+    else:
+        raise ValueError('Unknown genotype')
     with open(output_vcf_fn, 'w') as o:
         o.write(
             '##fileformat=VCFv4.3\n'
@@ -111,7 +120,7 @@ def convert_syri_output(syri_vcf_fn, output_vcf_fn, max_hdr_length, min_score, m
                         if allele_size <= max_indel_length:
                             outrecord = (
                                 f'{r.chrom}\t{r.pos}\t{r.id}\t{r.alleles[0]}\t{r.alleles[1]}\t'
-                                f'.\tPASS\tMTD=syri\tGT\t1\n'
+                                f'.\tPASS\tMTD=syri\tGT\t{gt}\n'
                             )
                             o.write(outrecord)
                     else:
@@ -120,7 +129,7 @@ def convert_syri_output(syri_vcf_fn, output_vcf_fn, max_hdr_length, min_score, m
                                 if max(len(ref), len(alt)) <= max_indel_length:
                                     outrecord = (
                                         f'{r.chrom}\t{pos}\t{id_}\t{ref}\t{alt}\t'
-                                        f'.\tPASS\tMTD=syri\tGT\t1\n'
+                                        f'.\tPASS\tMTD=syri\tGT\t{gt}\n'
                                     )
                                     o.write(outrecord)
 

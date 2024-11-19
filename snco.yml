@@ -8,6 +8,7 @@ dependencies:
  - numpy
  - scipy
  - pandas
+ - matplotlib
  - pytorch
  - pomegranate>=1.0
  - click
