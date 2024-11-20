@@ -77,7 +77,7 @@ def hdr_to_shv(hdr_record, open_pen=26, extend_pen=1, match_score=1, mismatch_sc
 @click.option('-g', '--genotype', required=False, default='dip_het', type=click.Choice(['hap_alt', 'dip_het']),
               help=('how to encode the genotype in the vcf file ("hap_alt" means haploid alternative i.e. 1, '
                     '"dip_het" means phased diploid heterozygous i.e. 0|1'))
-def convert_syri_output(syri_vcf_fn, output_vcf_fn, max_hdr_length, min_score, max_indel_length, alt_name, genotype):
+def main(syri_vcf_fn, output_vcf_fn, max_hdr_length, min_score, max_indel_length, alt_name, genotype):
     '''
     convert a vcf file from syri into a suitable format for use with STAR diploid and snco analysis
     variants overlapping non-syntenic regions will be filtered out

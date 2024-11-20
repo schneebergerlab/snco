@@ -51,7 +51,7 @@ def estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg
 
             bg_count += bg.sum(axis=None)
             tot_count += m.sum(axis=None)
-        frac_bg[cb] = np.minimum((bg_count * 2) / tot_count, 0.5)
+        frac_bg[cb] = bg_count / tot_count
         if frac_bg[cb] > max_frac_bg:
             co_markers.pop(cb)
 

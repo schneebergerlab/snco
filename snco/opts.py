@@ -386,7 +386,7 @@ snco_opts.option(
     subcommands=['clean', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.FloatRange(1e-3, 0.5),
-    default=0.25,
+    default=0.5,
     callback=_log_callback,
     help='the estimated background marker rate to allow before filtering'
 )
