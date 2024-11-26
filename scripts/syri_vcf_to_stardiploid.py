@@ -135,4 +135,4 @@ def main(syri_vcf_fn, output_vcf_fn, max_hdr_length, min_score, max_indel_length
 
 
 if __name__ == '__main__':
-    convert_syri_output()
+    main()
