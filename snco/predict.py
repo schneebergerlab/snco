@@ -293,6 +293,8 @@ def doublet_detector(co_markers, co_preds, rhmm, n_doublets, k_neighbours,
     if n_doublets > 1:
         n_sim = int(min(n_doublets, len(co_markers) // 2))
     else:
+        if not n_doublets:
+            raise ValueError('n-doublets must be >0 for doublet detection')
         n_sim = int(len(co_markers) * n_doublets)
 
     if k_neighbours > 1:

@@ -115,7 +115,7 @@ def simulate_doublets(co_markers, n_doublets, rng=DEFAULT_RNG):
 
 def generate_simulated_data(ground_truth, co_markers, conv_window_size=2_500_000,
                             bg_rate=None, nsim_per_sample=100,
-                            doublet_rate=0.5, rng=DEFAULT_RNG):
+                            doublet_rate=0.0, rng=DEFAULT_RNG):
     '''
     For a set of crossover markers from real data, estimate the foreground 
     and background signal for each, and then apply the ground truth
@@ -132,12 +132,12 @@ def generate_simulated_data(ground_truth, co_markers, conv_window_size=2_500_000
         co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sample, rng=rng
     )
 
-    sim_co_markers.merge(
-        simulate_doublets(
-            co_markers, int(len(sim_co_markers) * doublet_rate), rng=rng
-        ),
-        inplace=True
-    )
+    if doublet_rate:
+        doublet_rate = int(len(sim_co_markers) * doublet_rate) if doublet_rate < 1 else int(doublet_rate)
+        sim_co_markers.merge(
+            simulate_doublets(co_markers, doublet_rate, rng=rng),
+            inplace=True
+        )
     return sim_co_markers
 
 
@@ -154,7 +154,8 @@ def ground_truth_from_marker_records(co_markers):
 
 def run_sim(marker_json_fn, output_json_fn, haplo_bed_fn, *,
             cb_whitelist_fn=None, bin_size=25_000, bg_marker_rate=None,
-            bg_window_size=2_500_000, nsim_per_sample=100, rng=DEFAULT_RNG):
+            bg_window_size=2_500_000, nsim_per_sample=100, n_doublets=0.0,
+            rng=DEFAULT_RNG):
     '''
     Simulate realistic haplotype marker distributions using real data from `load`,
     with known haplotypes/crossovers supplied from a bed file.
@@ -170,6 +171,7 @@ def run_sim(marker_json_fn, output_json_fn, haplo_bed_fn, *,
         bg_rate=bg_marker_rate,
         conv_window_size=bg_window_size,
         nsim_per_sample=nsim_per_sample,
+        doublet_rate=n_doublets,
         rng=rng
     )
     log.info(f'Simulated {len(sim_co_markers)} cells')

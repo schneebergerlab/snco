@@ -401,6 +401,7 @@ snco_opts.option(
     help='the number of randomly selected cell barcodes to simulate per ground truth sample'
 )
 
+
 snco_opts.option(
     '--min-markers-per-cb',
     subcommands=['loadbam', 'loadcsl', 'clean', 'bam2pred', 'csl2pred'],
@@ -521,9 +522,9 @@ snco_opts.option(
 
 snco_opts.option(
     '--n-doublets',
-    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
+    subcommands=['sim', 'predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
-    type=click.FloatRange(0.01, 10_000),
+    type=click.FloatRange(0.0, 10_000),
     default=0.25,
     callback=_log_callback,
     metavar='INTEGER OR FLOAT',
