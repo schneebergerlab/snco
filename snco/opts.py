@@ -266,6 +266,7 @@ def _set_default_umi_collapse_method(ctx, param, value):
 snco_opts.option(
     '--umi-collapse-method',
     subcommands=['loadbam', 'bam2pred'],
+    is_eager=True,
     required=False,
     type=click.Choice(['exact', 'directional', 'none'], case_sensitive=False),
     default='none',
