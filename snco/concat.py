@@ -1,5 +1,6 @@
 from .utils import load_json
 
+
 def concatenate_records(record_objs, merge_suffixes=None):
     if merge_suffixes is None:
         merge_suffixes = range(len(record_objs))

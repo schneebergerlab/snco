@@ -21,7 +21,8 @@ class BaseRecords:
                  chrom_sizes: dict[str, int],
                  bin_size: int,
                  seq_type: str | None = None,
-                 metadata: dict | None = None):
+                 metadata: dict | None = None,
+                 frozen=False):
         self.chrom_sizes = chrom_sizes
         self.bin_size = bin_size
         self.seq_type = seq_type
@@ -30,6 +31,7 @@ class BaseRecords:
         self._ndim = None
         self._dim2_shape = None
         self._init_val = None
+        self.frozen = frozen
         self.nbins = {
             chrom: int(np.ceil(cs / bin_size)) for chrom, cs in chrom_sizes.items()
         }
@@ -76,6 +78,8 @@ class BaseRecords:
     def __getitem__(self, index):
         if isinstance(index, str):
             if index not in self._records:
+                if self.frozen:
+                    raise KeyError(f'Cell barcode {index} not in records')
                 self._records[index] = {}
             return self._records[index]
         if len(index) == 2:
@@ -303,7 +307,7 @@ class BaseRecords:
             f.write(self.to_json(precision=precision))
 
     @classmethod
-    def read_json(cls, fp: str, subset: list | set | None = None):
+    def read_json(cls, fp: str, subset: list | set | None = None, frozen=False):
         '''read records object from a json file'''
         with open(fp) as f:
             obj = json.load(f)
@@ -312,7 +316,8 @@ class BaseRecords:
         new_instance = cls(obj['chrom_sizes'],
                            obj['bin_size'],
                            seq_type=obj['sequencing_data_type'],
-                           metadata=obj['metadata'])
+                           metadata=obj['metadata'],
+                           frozen=frozen)
         new_instance._cmd = obj['cmd']
         if subset is None:
             subset = obj['data'].keys()
@@ -334,8 +339,9 @@ class MarkerRecords(BaseRecords):
                  chrom_sizes: dict[str, int],
                  bin_size: int,
                  seq_type: str | None = None,
-                 metadata: dict | None = None):
-        super().__init__(chrom_sizes, bin_size, seq_type, metadata)
+                 metadata: dict | None = None,
+                 frozen: bool = False):
+        super().__init__(chrom_sizes, bin_size, seq_type, metadata, frozen)
         self._ndim = 2
         self._dim2_shape = 2
         self._init_val = 0.0
@@ -385,8 +391,9 @@ class PredictionRecords(BaseRecords):
                  chrom_sizes: dict[str, int],
                  bin_size: int,
                  seq_type: str | None = None,
-                 metadata: dict | None = None):
-        super().__init__(chrom_sizes, bin_size, seq_type, metadata)
+                 metadata: dict | None = None,
+                 frozen: bool = False):
+        super().__init__(chrom_sizes, bin_size, seq_type, metadata, frozen)
         self._ndim = 1
         self._dim2_shape = np.nan
         self._init_val = np.nan

@@ -256,6 +256,12 @@ def generate_doublet_prediction_features(co_markers, co_preds):
     return X, barcodes
 
 
+def min_max_normalise(*X_arrs):
+    X_min = np.min([X.min(axis=0) for X in X_arrs], axis=0)
+    X_max = np.max([X.max(axis=0) for X in X_arrs], axis=0)
+    return [(X - X_min) / (X_max - X_min) for X in X_arrs]
+
+
 def predict_doublet_barcodes(true_co_markers, true_co_preds,
                              sim_co_markers, sim_co_preds,
                              k_neighbours, rng=DEFAULT_RNG):
@@ -271,6 +277,9 @@ def predict_doublet_barcodes(true_co_markers, true_co_preds,
         axis=0
     )
     y_train = np.repeat([0, 1], [N, N])
+
+    X_train, X_true = min_max_normalise(X_train, X_true)
+
     k_neighbours = min(int(N // 2), k_neighbours)
     knn_classifier = k_nearest_neighbours_classifier(X_train, y_train, k_neighbours)
     doublet_pred = knn_classifier(X_true)
