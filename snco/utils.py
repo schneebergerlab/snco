@@ -6,7 +6,9 @@ from .records import MarkerRecords, PredictionRecords
 log = logging.getLogger('snco')
 
 
-def read_cb_whitelist(barcode_fn, cb_correction_method='exact'):
+def read_cb_whitelist(barcode_fn, validate_barcodes=True,
+                      cb_correction_method='exact',
+                      allow_ns=False, allow_homopolymers=False):
     '''
     Read a text file of cell barcodes and return them as a list.
     In a multi-column file, barcode must be the first column
@@ -17,7 +19,11 @@ def read_cb_whitelist(barcode_fn, cb_correction_method='exact'):
         log.info(f'Read {len(cb_whitelist)} cell barcodes from cb whitelist file {barcode_fn}')
     else:
         cb_whitelist = None
-    return CellBarcodeWhitelist(cb_whitelist, cb_correction_method)
+    return CellBarcodeWhitelist(cb_whitelist,
+                                validate_barcodes,
+                                cb_correction_method,
+                                allow_ns=allow_ns,
+                                allow_homopolymers=allow_homopolymers)
 
 
 def load_json(json_fn, cb_whitelist_fn, bin_size, data_type='markers', subset=None):

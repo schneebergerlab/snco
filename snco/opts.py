@@ -301,6 +301,14 @@ snco_opts.option(
     help='bam file tag representing haplotype.'
 )
 
+snco_opts.option(
+    '--validate-barcodes/--no-validate',
+    subcommands=['loadcsl', 'csl2pred'],
+    required=False,
+    default=True,
+    callback=_log_callback,
+    help='whether to check that cell barcodes are valid sequences',
+)
 
 def _parse_excl_contigs(ctx, param, value):
     if value is None:

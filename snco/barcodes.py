@@ -16,10 +16,12 @@ def edit_dist(umi1, umi2):
 
 class CellBarcodeWhitelist:
 
-    def __init__(self, whitelist=None, correction_method='exact',
+    def __init__(self, whitelist=None, validate_barcodes=True,
+                 correction_method='exact',
                  allow_ns=False, allow_homopolymers=False):
         if whitelist is not None:
-            self._check_whitelist(whitelist, allow_ns, allow_homopolymers)
+            if validate_barcodes:
+                self._check_whitelist(whitelist, allow_ns, allow_homopolymers)
             self.whitelist = set(whitelist)
             self.whitelist_ordered = list(whitelist)
         else:
@@ -29,6 +31,7 @@ class CellBarcodeWhitelist:
             raise ValueError(f'Unrecognised cb correction method {correction_method}')
         if correction_method == '1mm' and whitelist is None:
             raise ValueError('cb-whitelist must be supplied if correction-method is "1mm"')
+        self.validate = validate_barcodes
         self.correction_method = correction_method
         self.allow_ns = allow_ns
         self.allow_homopolymers = allow_homopolymers
@@ -47,6 +50,8 @@ class CellBarcodeWhitelist:
             raise ValueError('Cell barcodes are not all the same length')
 
     def check_proper_barcode(self, cb):
+        if not self.validate:
+            return True
         if not self.allow_ns and cb.count('N'):
             return False
         if not self.allow_homopolymers and len(set(cb)) == 1:
