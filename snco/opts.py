@@ -16,6 +16,7 @@ class OptionRegistry:
     def __init__(self, subcommands):
         self.subcommands = subcommands
         self.register = {}
+        self.callback_register = {}
 
     def register_param(self, click_param, args, kwargs):
         subcommands = kwargs.pop('subcommands', None)
@@ -38,8 +39,20 @@ class OptionRegistry:
     def option(self, *args, **kwargs):
         self.register_param(click.option, args, kwargs)
 
+    def callback(self, subcommands):
+        def _register_callback(callback):
+            for sc in subcommands:
+                if sc not in self.subcommands:
+                    raise ValueError(f'subcommand {sc} is not pre-registered')
+                if sc not in self.callback_register:
+                    self.callback_register[sc] = []
+                self.callback_register[sc].append(callback)
+        return _register_callback
+
     def __call__(self, subcommand):
         def _apply_options(func):
+            for callback in reversed(self.callback_register[subcommand]):
+                func = callback(func)
             for option in reversed(self.register[subcommand].values()):
                 func = option(func)
             return func
@@ -57,9 +70,66 @@ snco_opts = OptionRegistry(
 )
 
 
-def _log_callback(ctx, param, value):
-    log.debug(f'set parameter {param.name} to {value}')
-    return value
+@snco_opts.callback(['loadbam', 'bam2pred'])
+def validate_loadbam_input(func):
+    '''decorator to validate the input of the loadbam command'''
+    def _validate(**kwargs):
+        seq_type = kwargs.get('seq_type')
+        if kwargs.get('cb_correction_method') == 'auto':
+            cb_tag = kwargs.get('cb_tag')
+            method = 'exact' if cb_tag == 'CB' else '1mm'
+            log.info(f"setting CB correction method to '{method}' for data with CB tag '{cb_tag}'")
+        if kwargs.get('umi_collapse_method') == 'auto':
+            if seq_type in ('10x_rna', 'bd_rna', 'bd_atac'):
+                umi_tag = kwargs.get('umi_tag')
+                method = 'exact' if umi_tag == 'UB' else 'directional'
+                log.info(f"setting UMI dedup method to '{method}' for 10x RNA or BD data with UMI tag '{umi_tag}'")
+                kwargs['umi_collapse_method'] = method
+            elif seq_type in ('10x_atac', 'takara_dna'):
+                log.info('turning off UMI processing for 10x or Takara ATAC data')
+                kwargs['umi_tag'] = None
+                kwargs['umi_collapse_method'] = None
+            elif seq_type is None:
+                raise click.BadParameter("'-x' / '--seq-type' must be specified when '--umi-collapse-method' is set to 'auto'")
+        elif kwargs.get('umi_collapse_method') == 'none':
+            log.info('turning off UMI processing')
+            kwargs['umi_tag'] = None
+            kwargs['umi_collapse_method'] = None
+        if kwargs.get('cb_tag') == 'CB' and kwargs.get('cb_correction_method') == '1mm':
+            log.warn("'--cb-tag' is set to 'CB', which usually indicates pre-corrected barcodes, but "
+                     "'--cb-correction-method' is set to '1mm'. This may lead to overcorrection")
+        if kwargs.get('umi_tag') == 'UB' and kwargs.get('umi_collapse_method') == 'directional':
+            log.warn("'--umi-tag' is set to 'UB', which usually indicates pre-corrected UMIs, but "
+                     "'--cb-correction-method' is set to 'directional'. This may lead to overcorrection")
+        return func(**kwargs)
+    return _validate
+
+
+@snco_opts.callback(['predict', 'bam2pred', 'csl2pred'])
+def validate_pred_input(func):
+    '''decorator to validate the input of the predict command'''
+    def _validate(**kwargs):
+        bin_size = kwargs.get('bin_size')
+        seg_size = kwargs.get('segment_size')
+        tseg_size = kwargs.get('terminal_segment_size')
+        if seg_size < bin_size:
+            raise click.BadParameter("'-R' / '--segment-size' cannot be less than '-N' / '--bin-size'")
+        if tseg_size < bin_size:
+            raise click.BadParameter("'-t' / '--terminal-segment-size' cannot be less than '-N' / '--bin-size'")
+        return func(**kwargs)
+    return _validate
+
+
+@snco_opts.callback(['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
+                     'sim', 'concat', 'clean', 'predict', 'doublet',
+                     'stats', 'plot'])
+def log_parameters(func):
+    '''decorator which logs the final values of all parameters used to execute snco'''
+    def _log(**kwargs):
+        for param, value in kwargs.items():
+            log.debug(f'set parameter {param} to {value}')
+        return func(**kwargs)
+    return _log
 
 
 _input_file_type = click.Path(exists=True, file_okay=True, dir_okay=False)
@@ -73,7 +143,6 @@ snco_opts.argument(
     required=True,
     nargs=1,
     type=_input_file_type,
-    callback=_log_callback,
 )
 
 snco_opts.argument(
@@ -82,7 +151,6 @@ snco_opts.argument(
     required=True,
     nargs=1,
     type=_input_dir_type,
-    callback=_log_callback,
 )
 
 snco_opts.argument(
@@ -91,7 +159,6 @@ snco_opts.argument(
     required=True,
     nargs=1,
     type=_input_file_type,
-    callback=_log_callback,
 )
 
 snco_opts.argument(
@@ -100,7 +167,6 @@ snco_opts.argument(
     required=True,
     nargs=-1,
     type=_input_file_type,
-    callback=_log_callback,
 )
 
 snco_opts.argument(
@@ -109,7 +175,6 @@ snco_opts.argument(
     required=True,
     nargs=1,
     type=_input_file_type,
-    callback=_log_callback,
 )
 
 snco_opts.argument(
@@ -118,7 +183,6 @@ snco_opts.argument(
     required=False,
     nargs=1,
     type=_input_file_type,
-    callback=_log_callback,
 )
 
 snco_opts.argument(
@@ -127,7 +191,6 @@ snco_opts.argument(
     required=False,
     type=str,
     nargs=1,
-    callback=_log_callback,
 )
 
 snco_opts.option(
@@ -135,7 +198,6 @@ snco_opts.option(
     subcommands=['bam2pred', 'csl2pred'],
     required=True,
     type=_output_file_type,
-    callback=_log_callback,
     help='Output prefix'
 )
 
@@ -144,7 +206,6 @@ snco_opts.option(
     subcommands=['loadbam', 'loadcsl', 'sim', 'concat', 'clean', 'predict', 'doublet'],
     required=True,
     type=_output_file_type,
-    callback=_log_callback,
     help='Output JSON file name.'
 )
 
@@ -153,7 +214,6 @@ snco_opts.option(
     subcommands=['stats'],
     required=True,
     type=_output_file_type,
-    callback=_log_callback,
     help='Output TSV file name.'
 )
 
@@ -162,7 +222,6 @@ snco_opts.option(
     subcommands=['plot'],
     required=True,
     type=_output_file_type,
-    callback=_log_callback,
     help='Output figure file name (filetype automatically determined)'
 )
 
@@ -172,7 +231,6 @@ snco_opts.option(
                  'sim', 'clean', 'predict', 'doublet', 'stats', 'plot'],
     required=False,
     type=_input_file_type,
-    callback=_log_callback,
     help='Text file containing whitelisted cell barcodes, one per line'
 )
 
@@ -181,7 +239,6 @@ snco_opts.option(
     subcommands=['loadcsl', 'csl2pred'],
     required=True,
     type=_input_file_type,
-    callback=_log_callback,
     help='chrom sizes or faidx file'
 )
 
@@ -190,7 +247,6 @@ snco_opts.option(
     subcommands=['sim'],
     required=True,
     type=_input_file_type,
-    callback=_log_callback,
     help='bed file (6 column) containing ground truth haplotype intervals to simulate'
 )
 
@@ -201,7 +257,6 @@ snco_opts.option(
     required=False,
     type=click.IntRange(1000, 100_000),
     default=25_000,
-    callback=_log_callback,
     help='Bin size for marker distribution'
 )
 
@@ -209,7 +264,7 @@ snco_opts.option(
 def _replace_other_with_nonetype(ctx, param, value):
     if value == 'other':
         return None
-    return _log_callback(ctx, param, value)
+    return value
 
 
 snco_opts.option(
@@ -217,7 +272,7 @@ snco_opts.option(
     required=False,
     subcommands=['loadbam', 'bam2pred'],
     type=click.Choice(
-        ['10x_rna', '10x_atac', 'takara_dna', 'other'],
+        ['10x_rna', '10x_atac', 'bd_rna', 'bd_atac', 'takara_dna', 'other'],
         case_sensitive=False
     ),
     default='other',
@@ -229,9 +284,8 @@ snco_opts.option(
     '--cb-correction-method',
     subcommands=['loadbam', 'bam2pred'],
     required=False,
-    type=click.Choice(['exact', '1mm'], case_sensitive=False),
-    default='exact',
-    callback=_log_callback,
+    type=click.Choice(['exact', '1mm', 'auto'], case_sensitive=False),
+    default='auto',
     help='method for correcting/matching cell barcodes to whitelist'
 )
 
@@ -239,7 +293,7 @@ snco_opts.option(
 def _validate_bam_tag(ctx, param, value):
     if not len(value) == 2:
         raise ValueError(f'{param} is not of length 2')
-    return _log_callback(ctx, param, value)
+    return value
 
 
 snco_opts.option(
@@ -253,32 +307,15 @@ snco_opts.option(
 )
 
 
-def _set_default_umi_collapse_method(ctx, param, value):
-    if value == 'none':
-        if ctx.params['seq_type'] == '10x_rna':
-            log.info('setting default UMI dedup method to directional for 10x RNA data')
-            value = 'directional'
-        else:
-            value = None
-    return _log_callback(ctx, param, value)
-
-
 snco_opts.option(
     '--umi-collapse-method',
     subcommands=['loadbam', 'bam2pred'],
     is_eager=True,
     required=False,
-    type=click.Choice(['exact', 'directional', 'none'], case_sensitive=False),
-    default='none',
-    callback=_set_default_umi_collapse_method,
+    type=click.Choice(['exact', 'directional', 'none', 'auto'], case_sensitive=False),
+    default='auto',
     help='Method for deduplicating/collapsing UMIs'
 )
-
-
-def _override_umi_tag(ctx, param, value):
-    if ctx.params['umi_collapse_method'] is None or ctx.params['umi_collapse_method'] == 'none':
-        return _log_callback(ctx, param , None)
-    return _validate_bam_tag(ctx, param, value)
 
 
 snco_opts.option(
@@ -287,7 +324,6 @@ snco_opts.option(
     required=False,
     type=str,
     default='UB',
-    callback=_override_umi_tag,
     help='bam file tag representing UMI'
 )
 
@@ -306,7 +342,6 @@ snco_opts.option(
     subcommands=['loadcsl', 'csl2pred'],
     required=False,
     default=True,
-    callback=_log_callback,
     help='whether to check that cell barcodes are valid sequences',
 )
 
@@ -315,7 +350,7 @@ def _parse_excl_contigs(ctx, param, value):
         value = DEFAULT_EXCLUDE_CONTIGS
     else:
         value = set(value.split(',')) # todo: check allowed fasta header names
-    return _log_callback(ctx, param, value)
+    return value
 
 
 snco_opts.option(
@@ -336,7 +371,7 @@ def _parse_merge_suffixes(ctx, param, value):
         if not re.match('^[a-zA-Z0-9,]+$', value):
             raise click.BadParameter('merge suffixes must be alphanumeric only')
         value = value.split(',')
-    return _log_callback(ctx, param, value)
+    return value
 
 
 snco_opts.option(
@@ -356,7 +391,6 @@ snco_opts.option(
     subcommands=['bam2pred', 'csl2pred'],
     required=False,
     default=True,
-    callback=_log_callback,
     help='whether to run clean step in pipeline',
 )
 
@@ -365,7 +399,6 @@ snco_opts.option(
     subcommands=['clean', 'bam2pred', 'csl2pred'],
     required=False,
     default=True,
-    callback=_log_callback,
     help='whether to estimate and remove background markers'
 )
 
@@ -375,7 +408,6 @@ snco_opts.option(
     required=False,
     type=click.FloatRange(0.0, 0.49),
     default=None,
-    callback=_log_callback,
     help=('set uniform background marker rate for simulations. '
           'Default is to estimate per cell barcode from markers')
 )
@@ -386,7 +418,6 @@ snco_opts.option(
     required=False,
     type=click.IntRange(100_000, 10_000_000),
     default=2_500_000,
-    callback=_log_callback,
     help='the size (in basepairs) of the convolution window used to estimate background marker rate'
 )
 
@@ -396,7 +427,6 @@ snco_opts.option(
     required=False,
     type=click.FloatRange(1e-3, 0.5),
     default=0.5,
-    callback=_log_callback,
     help='the estimated background marker rate to allow before filtering'
 )
 
@@ -406,7 +436,6 @@ snco_opts.option(
     required=False,
     type=click.IntRange(1, 1000),
     default=10,
-    callback=_log_callback,
     help='the number of randomly selected cell barcodes to simulate per ground truth sample'
 )
 
@@ -417,7 +446,6 @@ snco_opts.option(
     required=False,
     type=click.IntRange(0, 1000),
     default=100,
-    callback=_log_callback,
     help='minimum total number of markers per cb (cb with lower are filtered)'
 )
 
@@ -427,7 +455,6 @@ snco_opts.option(
     required=False,
     type=click.IntRange(1, 1000),
     default=20,
-    callback=_log_callback,
     help='minimum total number of markers per chrom, per cb (cb with lower are filtered)'
 )
 
@@ -436,7 +463,6 @@ snco_opts.option(
     subcommands=['clean', 'bam2pred', 'csl2pred'],
     type=click.IntRange(5, 1000),
     default=20,
-    callback=_log_callback,
     help='maximum number of markers per cell per bin (higher values are thresholded)'
 )
 
@@ -445,7 +471,6 @@ snco_opts.option(
     subcommands=['clean', 'bam2pred', 'csl2pred'],
     required=False,
     default=True,
-    callback=_log_callback,
     help='whether to max bins with extreme allelic imbalance'
 )
 
@@ -455,25 +480,17 @@ snco_opts.option(
     required=False,
     type=click.FloatRange(0.6, 1.0),
     default=0.9,
-    callback=_log_callback,
     help=('maximum allowed global marker imbalance between haplotypes of a bin '
           '(higher values are masked)')
 )
 
 
-def _validate_seg_size(ctx, param, value):
-    if value < ctx.params['bin_size']:
-        raise click.BadParameter(f'{param} cannot be lower than --bin-size')
-    return _log_callback(ctx, param, value)
-
-
 snco_opts.option(
-    '-r', '--segment-size',
+    '-R', '--segment-size',
     subcommands=['predict', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.IntRange(100_000, 10_000_000),
     default=1_000_000,
-    callback=_validate_seg_size,
     help='rfactor of the rigid HMM. Approximately controls minimum distance between COs'
 )
 
@@ -483,7 +500,6 @@ snco_opts.option(
     required=False,
     type=click.IntRange(10_000, 1_000_000),
     default=50_000,
-    callback=_validate_seg_size,
     help=('terminal rfactor of the rigid HMM. approx. controls min distance of COs '
           'from chromosome ends')
 )
@@ -494,7 +510,6 @@ snco_opts.option(
     required=False,
     type=click.FloatRange(1.0, 20.0),
     default=4.5,
-    callback=_log_callback,
     help=('Approximate average centiMorgans per megabase. '
           'Used to parameterise the rigid HMM transitions')
 )
@@ -505,7 +520,6 @@ snco_opts.option(
     required=False,
     type=(click.FloatRange(1e-5, 5.0), click.FloatRange(1e-5, 5.0)),
     default=None,
-    callback=_log_callback,
     help=('optional lambda parameters for foreground and background Poisson distributions of '
           'model. Default is to fit to the data')
 )
@@ -515,7 +529,6 @@ snco_opts.option(
     subcommands=['predict', 'bam2pred', 'csl2pred'],
     required=False,
     default=True,
-    callback=_log_callback,
     help='whether to use synthetic doublet scoring to predict likely doublets in the data'
 )
 
@@ -525,7 +538,6 @@ snco_opts.option(
     subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
     default=True,
-    callback=_log_callback,
     help='whether to use synthetic doublet scoring to predict likely doublets in the data'
 )
 
@@ -535,7 +547,6 @@ snco_opts.option(
     required=False,
     type=click.FloatRange(0.0, 10_000),
     default=0.25,
-    callback=_log_callback,
     metavar='INTEGER OR FLOAT',
     help=('number of doublets to simulate. If >1, treated as integer number of doublets. '
           'If <1, treated as a fraction of the total dataset')
@@ -548,7 +559,6 @@ snco_opts.option(
     required=False,
     type=click.FloatRange(0.01, 10_000),
     default=0.25,
-    callback=_log_callback,
     metavar='INTEGER OR FLOAT',
     help=('K neighbours to use for doublet calling. If >1, treated as integer k neighbours. '
           'If <1, treated as a fraction of --n-doublets')
@@ -561,7 +571,6 @@ snco_opts.option(
     required=False,
     type=click.Choice(['markerplot', 'recombination'], case_sensitive=False),
     default='markerplot',
-    callback=_log_callback,
     help='type of plot to create'
 )
 
@@ -572,7 +581,6 @@ snco_opts.option(
     required=False,
     type=(click.IntRange(8, 30), click.IntRange(2, 10)),
     default=(18, 4),
-    callback=_log_callback,
     help='size of generated figure'
 )
 
@@ -581,7 +589,6 @@ snco_opts.option(
     subcommands=['plot'],
     required=False,
     default=True,
-    callback=_log_callback,
     help='whether to draw predicted haplotype onto plot as shading (markerplot)'
 )
 
@@ -590,7 +597,6 @@ snco_opts.option(
     subcommands=['plot'],
     required=False,
     default=True,
-    callback=_log_callback,
     help='whether to annotate each chromosome with the no. of predicted COs (markerplot)'
 )
 
@@ -599,7 +605,6 @@ snco_opts.option(
     subcommands=['plot'],
     required=False,
     default=True,
-    callback=_log_callback,
     help='when ground truth is present (i.e. sim data), show expected CO positions (markerplot)'
 )
 
@@ -609,7 +614,6 @@ snco_opts.option(
     required=False,
     type=click.IntRange(5, 1000),
     default=20,
-    callback=_log_callback,
     help='maximum number of markers per bin to plot, higher values are thresholded (markerplot)'
 )
 
@@ -620,7 +624,6 @@ snco_opts.option(
     required=False,
     type=click.IntRange(25_000, 10_000_000),
     default=1_000_000,
-    callback=_log_callback,
     help='Rolling window size for calculating recombination landscape (recombination)'
 )
 
@@ -631,7 +634,6 @@ snco_opts.option(
     required=False,
     type=click.IntRange(1, 10_000),
     default=100,
-    callback=_log_callback,
     help='Number of random subsamples for calculating recombination landscape (recombination)'
 )
 
@@ -642,7 +644,6 @@ snco_opts.option(
     required=False,
     type=click.FloatRange(50, 100),
     default=95,
-    callback=_log_callback,
     help='Percentile to use for drawing confidence intervals (recombination)'
 )
 
@@ -653,7 +654,6 @@ snco_opts.option(
     required=False,
     type=str,
     default='#0072b2',
-    callback=_log_callback,
     help='hex colour to use for reference (hap1) markers (also for recombination landscape)'
 )
 
@@ -663,7 +663,6 @@ snco_opts.option(
     required=False,
     type=str,
     default='#d55e00',
-    callback=_log_callback,
     help='hex colour to use for alternative (hap2) markers (markerplot)'
 )
 
@@ -673,7 +672,6 @@ snco_opts.option(
     required=False,
     type=click.IntRange(min=1),
     default=1,
-    callback=_log_callback,
     help='number of cpu processes to use'
 )
 
@@ -683,7 +681,6 @@ snco_opts.option(
     required=False,
     type=click.IntRange(1, 10),
     default=3,
-    callback=_log_callback,
     help='floating point precision in output files'
 )
 
@@ -691,7 +688,7 @@ snco_opts.option(
 def _check_device(ctx, param, value):
     import torch
     if value == 'cpu':
-        return _log_callback(ctx, param, torch.device(value))
+        return torch.device(value)
     try:
         device_type, device_number = value.split(':')
         device_number = int(device_number)
@@ -709,7 +706,7 @@ def _check_device(ctx, param, value):
         raise click.BadParameter(
             f'device number is too high, only {n_devices} device of type {device_type} avaiable'
         )
-    return _log_callback(ctx, param, torch.device(value))
+    return torch.device(value)
 
 
 snco_opts.option(
@@ -728,13 +725,12 @@ snco_opts.option(
     required=False,
     type=click.IntRange(1, 10_000),
     default=1_000,
-    callback=_log_callback,
     help='batch size for prediction. larger may be faster but use more memory'
 )
 
 
 def _get_rng(ctx, param, value):
-    return _log_callback(ctx, param, np.random.default_rng(value))
+    return np.random.default_rng(value)
 
 
 snco_opts.option(

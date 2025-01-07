@@ -50,6 +50,8 @@ class CellBarcodeWhitelist:
             raise ValueError('Cell barcodes are not all the same length')
 
     def check_proper_barcode(self, cb):
+        if cb is None:
+            return False
         if not self.validate:
             return True
         if not self.allow_ns and cb.count('N'):
@@ -59,6 +61,8 @@ class CellBarcodeWhitelist:
         return True
 
     def __contains__(self, cb):
+        if cb is None:
+            return False
         return self.whitelist is None or cb in self.whitelist
 
     def _find_new_match(self, cb):

@@ -176,6 +176,8 @@ class BAMHaplotypeIntervalReader:
 
             try:
                 cb = aln.get_tag(self._cb_tag)
+                if cb == '-':
+                    cb = None
             except KeyError as exc:
                 raise IOError(
                     f'bam records do not all have the cell barcode tag "{self._cb_tag}"'
