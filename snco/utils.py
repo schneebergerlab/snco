@@ -48,7 +48,7 @@ def load_json(json_fn, cb_whitelist_fn, bin_size, data_type='markers', subset=No
                          'please modify cli option or rerun previous snco steps')
     log.info(f'Read {len(data)} cell barcodes from json file {json_fn}')
     if cb_whitelist_fn:
-        cb_whitelist = read_cb_whitelist(cb_whitelist_fn).toset()
+        cb_whitelist = read_cb_whitelist(cb_whitelist_fn,  validate_barcodes=False).toset()
         data.filter(cb_whitelist)
         if not data:
             raise ValueError('No CBs from --cb-whitelist-fn are present in json-fn')

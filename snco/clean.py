@@ -102,7 +102,7 @@ def clean_marker_background(co_markers, rng=DEFAULT_RNG):
     return co_markers_c
 
 
-def create_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.9, min_cb=5):
+def create_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.75, min_cb=100):
     tot_signal = {}
     tot_obs = {}
     for _, chrom, m in co_markers.deep_items():
@@ -149,7 +149,7 @@ def run_clean(marker_json_fn, output_json_fn, *,
               cb_whitelist_fn=None, bin_size=25_000,
               min_markers_per_cb=0, min_markers_per_chrom=0, max_bin_count=20,
               clean_bg=True, bg_window_size=2_500_000, max_frac_bg=0.2,
-              mask_imbalanced=True, max_marker_imbalance=0.9,
+              mask_imbalanced=True, max_marker_imbalance=0.75,
               rng=DEFAULT_RNG):
     '''
     Removes predicted background markers, that result from ambient nucleic acids, 

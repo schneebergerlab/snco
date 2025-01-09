@@ -471,7 +471,7 @@ snco_opts.option(
     subcommands=['clean', 'bam2pred', 'csl2pred'],
     required=False,
     default=True,
-    help='whether to max bins with extreme allelic imbalance'
+    help='whether to mask bins with extreme allelic imbalance'
 )
 
 snco_opts.option(
@@ -479,7 +479,7 @@ snco_opts.option(
     subcommands=['clean', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.FloatRange(0.6, 1.0),
-    default=0.9,
+    default=0.75,
     help=('maximum allowed global marker imbalance between haplotypes of a bin '
           '(higher values are masked)')
 )
