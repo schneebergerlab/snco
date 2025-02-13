@@ -18,23 +18,16 @@ def filter_haplotype_correlated_principal_components(principal_components, haplo
     n_pcs = principal_components.shape[1]
     keep_pcs = []
     for pc_idx, pc in principal_components.items():
-        pc_max_r2 = 0.0
-        best_corr_chrom = None
-        best_corr_pos = None
-        for (chrom, pos), haplo in haplotypes.items():
-            _, _, r, *_ = stats.linregress(pc, haplo)
-            r2 = r ** 2
-            if r2 > pc_max_r2:
-                pc_max_r2 = r2
-                best_corr_chrom = chrom
-                best_corr_pos = pos
-        if pc_max_r2 <= max_var_explained:
+        r2 = haplotypes.corrwith(pc, axis=0) ** 2
+        max_r2 = r2.max()
+        if max_r2 <= max_var_explained:
             keep_pcs.append(pc_idx)
         else:
+            chrom, pos = r2.idxmax()
             log.info(
                 f'Removing {pc_idx} as it correlates with '
-                f'{best_corr_chrom}:{best_corr_pos/1e6:.1f} '
-                f'with R squared of {pc_max_r2:.2f}'
+                f'{chrom}:{pos/1e6:.1f} '
+                f'with R squared of {max_r2:.2f}'
             )
     return principal_components[keep_pcs]
 

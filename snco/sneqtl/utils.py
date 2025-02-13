@@ -4,6 +4,7 @@ import logging
 
 import numpy as np
 import pandas as pd
+from pandas.api.types import is_numeric_dtype
 from scipy.io import mmread
 
 log = logging.getLogger('snco')
@@ -21,6 +22,18 @@ def get_dummies(df, drop_first=False):
         return pd.DataFrame()
     dummies = pd.get_dummies(df, drop_first=drop_first).astype('float')
     return dummies
+
+
+def convert_to_numeric(df, drop_first=False):
+    converted = []
+    for colname, col in df.items():
+        if is_numeric_dtype(col):
+            converted.append(col)
+        else:
+            converted.append(
+                pd.get_dummies(col, drop_first=drop_first, prefix=colname).astype(int)
+            )
+    return pd.concat(converted, axis=1)
 
 
 def drop_first_column(df):
@@ -46,8 +59,8 @@ def expanding_mul(df1, df2, join_char='_'):
     return product
 
 
-def align_input(exprs_mat, haplotypes, cb_whitelist=None, covariates=None, interacting_variables=None,
-                parental_genotypes=None):
+def align_input(exprs_mat, haplotypes, cb_whitelist=None, covariates=None,
+                interacting_variables=None, parental_genotypes=None):
     if cb_whitelist is None:
         cb_whitelist = list(set(exprs_mat.columns).intersection(haplotypes.index))
         if not len(cb_whitelist):

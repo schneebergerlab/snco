@@ -1,3 +1,4 @@
+from copy import copy
 import logging
 import itertools as it
 from functools import cached_property
@@ -64,16 +65,14 @@ def fit_model(gene_exprs, variables, model_type='ols'):
     return m.fit(disp=0)
 
 
-def estimate_effective_haplotypes(hap_probs):
+def estimate_effective_haplotypes(hap_corrs):
     '''
     Estimate the effective number of haplotypes in order to perform FWER correction
     of p values from eQTL tests (which are not independent due to LD)
     Uses the Li and Hi method (Heredity volume 95, pages221–227 (2005))
     '''
     H_eff = 0
-
-    for chrom, h in hap_probs.T.groupby(level='chrom'):
-        corr = h.T.corr(method='pearson')
+    for chrom, corr in hap_corrs.items():
         eig = np.abs(np.linalg.eigvalsh(corr))
         chrom_H_eff = np.sum((eig >= 1).astype(int) + (eig - np.floor(eig)))
         H_eff += round(chrom_H_eff)
@@ -84,7 +83,8 @@ class SNeQTLAnalysis:
 
     def __init__(self, exprs_mat, haplotypes, cb_whitelist=None, covariates=None,
                  interacting_variables=None, parental_genotypes=None, control_haplotypes=None,
-                 interacting_haplotypes=None, control_cis_haplotype=False, gene_locs=None):
+                 interacting_haplotypes=None, control_cis_haplotype=False,
+                 gene_locs=None, control_haplotypes_r2=0.95):
         
         (exprs_mat, haplotypes, covariates,
          interacting_variables, parental_genotypes) = utils.align_input(
@@ -101,12 +101,23 @@ class SNeQTLAnalysis:
         self.parental_genotypes = utils.get_dummies(parental_genotypes)
 
         if control_haplotypes is not None:
+            control_haplotypes_exact = []
             control_haplotype_variables = []
+            testable_positions = self.haplotypes.columns
             for chrom, pos in control_haplotypes:
-                control_haplotype_variables.append(self.get_closest_haplotype(chrom, pos))
+                chrom, pos, haplo = self.get_closest_haplotype(chrom, pos)
+                control_haplotypes_exact.append((chrom, pos))
+                control_haplotype_variables.append(haplo)
+                pos_r2 = self.haplo_r2[chrom].loc[(chrom, pos)]
+                blacklist_haplotypes = pos_r2[pos_r2 > control_haplotypes_r2].index
+                testable_positions = testable_positions[~testable_positions.isin(blacklist_haplotypes)]
             self.control_haplotype_variables = pd.concat(control_haplotype_variables, axis=1)
+            self.control_haplotypes = control_haplotypes_exact
+            self._testable_positions = testable_positions
         else:
             self.control_haplotype_variables = pd.DataFrame()
+            self.control_haplotypes = []
+            self._testable_positions = self.haplotypes.columns
 
         if interacting_haplotypes is not None:
             interacting_haplotype_variables = []
@@ -136,6 +147,7 @@ class SNeQTLAnalysis:
             raise ValueError('when control_cis_haplotype is True, gene_locs must be provided')
         self.control_cis_haplotype = control_cis_haplotype
         self.gene_locs = gene_locs
+        self.max_r2 = control_haplotypes_r2
 
         self._gene_specific_covariates = {}
         self._haplotype_specific_variables = {}
@@ -143,6 +155,8 @@ class SNeQTLAnalysis:
         self._param_names = None
         self._result_colnames = None
         self._H_eff = None
+        self._haplo_r = None
+        self._haplo_r2 = None
 
     def haplotype_variables(self, chrom, pos):
         try:
@@ -168,11 +182,12 @@ class SNeQTLAnalysis:
     def get_closest_haplotype(self, chrom, pos):
         chrom_bins = self.haplotypes[chrom].columns.values
         pos = chrom_bins[np.searchsorted(chrom_bins, pos, side='right') - 1]
-        return self.haplotypes[(chrom, pos)].rename(f'{chrom}:{pos/1e6:.1f}Mb')
+        return chrom, pos, self.haplotypes[(chrom, pos)].rename(f'{chrom}:{pos/1e6:.1f}Mb')
 
     def get_cis_haplotype(self, gene_id):
         chrom, pos = self.gene_locs.loc[gene_id].values
-        return self.get_closest_haplotype(chrom, pos).rename(f'cishaplo-{gene_id}')
+        chrom, pos, haplo = self.get_closest_haplotype(chrom, pos)
+        return chrom, pos, haplo.rename(f'cishaplo-{gene_id}')
 
     def get_covariates(self, gene_id):
         try:
@@ -180,7 +195,7 @@ class SNeQTLAnalysis:
         except KeyError:
             covars = self.covariates
             if self.control_cis_haplotype:
-                cis_haplo = self.get_cis_haplotype(gene_id)
+                *_, cis_haplo = self.get_cis_haplotype(gene_id)
                 covars = pd.concat([covars, cis_haplo], axis=1)
             self._gene_specific_covariates[gene_id] = covars
         return covars
@@ -241,13 +256,33 @@ class SNeQTLAnalysis:
         return self.exprs_mat.columns.tolist()
 
     @property
-    def haplotype_positions(self):
-        return self.haplotypes.columns.tolist()
+    def haplo_r(self):
+        if self._haplo_r is None:
+            self._haplo_r = {
+                chrom: h.T.corr(method='pearson')
+                for chrom, h in self.haplotypes.T.groupby(level='chrom')
+            }
+        return self._haplo_r
+
+    @property
+    def haplo_r2(self):
+        if self._haplo_r2 is None:
+            self._haplo_r2 = {chrom: h_r ** 2 for chrom, h_r in self.haplo_r.items()}
+        return self._haplo_r2
+
+    def testable_positions(self, cis_gene_id=None):
+        testable_positions = self._testable_positions.copy()
+        if cis_gene_id is not None and self.control_cis_haplotype:
+            chrom, pos, _ = self.get_cis_haplotype(cis_gene_id)
+            pos_r2 = self.haplo_r2[chrom].loc[(chrom, pos)]
+            blacklist_haplotypes = pos_r2[pos_r2 > self.max_r2].index
+            testable_positions = testable_positions[~testable_positions.isin(blacklist_haplotypes)]
+        return testable_positions.tolist()
 
     @property
     def effective_haplotypes(self):
         if self._H_eff is None:
-            self._H_eff = estimate_effective_haplotypes(self.haplotypes)
+            self._H_eff = estimate_effective_haplotypes(self.haplo_r)
         return self._H_eff
 
     def apply_fwer_correction(self, results, inplace=True):
@@ -282,7 +317,7 @@ class SNeQTLAnalysis:
 
     def run_gene(self, gene_id, fwer_correction=False):
         results = []
-        for chrom, pos in self.haplotype_positions:
+        for chrom, pos in self.testable_positions(gene_id):
             results.append(self.run_single_test(gene_id, chrom, pos))
         results = pd.DataFrame(results)
         if fwer_correction:
@@ -312,9 +347,9 @@ class SNeQTLAnalysis:
 def run_eqtl(exprs_mat_dir, pred_json_fn, cb_stats_fn, output_prefix, gtf_fn=None,
              min_cells_exprs=0.02,
              control_principal_components=True, min_pc_var_explained=0.01,
-             max_pc_haplotype_var_explained=0.05, whitelist_covar_names=None,
+             max_pc_haplotype_var_explained=0.05, covar_names=None,
              model_parental_genotype=False, parental_genotype_colname='geno',
-             celltype_haplotype_interaction=False, celltype_n_clusters='auto',
+             celltype_haplotype_interaction=False, celltype_n_clusters=None,
              control_haplotypes=None, control_cis_haplotype=False,
              control_haplotypes_r2=0.95, cb_filter_exprs=None,
              processes=1, rng=DEFAULT_RNG):
@@ -341,10 +376,10 @@ def run_eqtl(exprs_mat_dir, pred_json_fn, cb_stats_fn, output_prefix, gtf_fn=Non
         max_pc_haplotype_var_explained=max_pc_haplotype_var_explained
     )
 
-    if whitelist_covar_names is not None and cb_stats is not None:
+    if covar_names is not None and cb_stats is not None:
         covariates = pd.concat([
             principal_components,
-            cb_stats[whitelist_covar_names]
+            utils.convert_to_numeric(cb_stats.loc[:, covar_names], drop_first=True)
         ], axis=1)
     else:
         covariates = principal_components
@@ -372,7 +407,10 @@ def run_eqtl(exprs_mat_dir, pred_json_fn, cb_stats_fn, output_prefix, gtf_fn=Non
 
     if control_cis_haplotype and gtf_fn is not None:
         gene_locs = utils.read_gtf_gene_locs(gtf_fn)
+        log.info(f'Read gene locations from GTF file {gtf_fn}')
     else:
+        if control_cis_haplotype:
+            log.warn('No GTF file provided, cannot control for cis haplotypes!')
         gene_locs = None
 
     e = SNeQTLAnalysis(
@@ -382,7 +420,8 @@ def run_eqtl(exprs_mat_dir, pred_json_fn, cb_stats_fn, output_prefix, gtf_fn=Non
         parental_genotypes=parental_genotypes,
         control_haplotypes=control_haplotypes,
         control_cis_haplotype=control_cis_haplotype,
-        gene_locs=gene_locs
+        gene_locs=gene_locs,
+        control_haplotypes_r2=control_haplotypes_r2,
     )
     example_gene_id = e.gene_ids[0]
     example_covars = e.get_covariates(example_gene_id).columns.tolist()
@@ -390,6 +429,8 @@ def run_eqtl(exprs_mat_dir, pred_json_fn, cb_stats_fn, output_prefix, gtf_fn=Non
     haplo_test_vars = e.param_names
     log.debug(f'Controlling for {len(example_covars)} covariates: {example_covars}')
     log.debug(f'{len(haplo_test_vars)} haplotype-associated variables will be tested: {haplo_test_vars}')
+    log.debug(f'Estimated {e.effective_haplotypes} effective haplotypes - this number will be used '
+              'for haplotype-wise multiple testing correction')
 
     results = e.run_all_genes(processes=processes)
     

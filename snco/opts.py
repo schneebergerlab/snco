@@ -120,9 +120,6 @@ def validate_pred_input(func):
     return _validate
 
 
-@snco_opts.callback(['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                     'sim', 'concat', 'clean', 'predict', 'bc1predict',
-                     'doublet', 'stats', 'plot'])
 def log_parameters(func):
     '''decorator which logs the final values of all parameters used to execute snco'''
     def _log(**kwargs):
@@ -130,6 +127,10 @@ def log_parameters(func):
             log.debug(f'set parameter {param} to {value}')
         return func(**kwargs)
     return _log
+
+snco_opts.callback(['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
+                     'sim', 'concat', 'clean', 'predict', 'bc1predict',
+                     'doublet', 'stats', 'plot'])(log_parameters)
 
 
 _input_file_type = click.Path(exists=True, file_okay=True, dir_okay=False)
@@ -775,6 +776,7 @@ snco_opts.option(
 
 
 sneqtl_opts = OptionRegistry(subcommands=['eqtl', 'peakcall'])
+sneqtl_opts.callback(['eqtl', 'peakcall'])(log_parameters)
 
 
 sneqtl_opts.argument(
@@ -785,6 +787,7 @@ sneqtl_opts.argument(
     type=_input_dir_type,
 )
 
+
 sneqtl_opts.argument(
     'pred-json-fn',
     subcommands=['eqtl'],
@@ -792,6 +795,7 @@ sneqtl_opts.argument(
     nargs=1,
     type=_input_file_type,
 )
+
 
 sneqtl_opts.argument(
     'eqtl-csv-fn',
@@ -801,6 +805,7 @@ sneqtl_opts.argument(
     type=_input_file_type,
 )
 
+
 sneqtl_opts.option(
     '-c', '--cb-stats-fn',
     subcommands=['eqtl', 'peakcall'],
@@ -809,6 +814,7 @@ sneqtl_opts.option(
     help='cell barcode stats'
 )
 
+
 sneqtl_opts.option(
     '-o', '--output-prefix',
     subcommands=['eqtl', 'peakcall'],
@@ -816,6 +822,7 @@ sneqtl_opts.option(
     type=_output_file_type,
     help='Output prefix'
 )
+
 
 sneqtl_opts.option(
     '-g', '--gtf-fn',
@@ -827,11 +834,88 @@ sneqtl_opts.option(
 
 
 sneqtl_opts.option(
+    '--min-cells-exprs',
+    subcommands=['eqtl'],
+    required=False,
+    type=click.FloatRange(0.0, 0.5),
+    default=0.02,
+    help='the minimum proportion of cell barcodes that must express a gene for it to be tested'
+)
+
+
+sneqtl_opts.option(
+    '--control-pcs/--no-pcs', 'control_principal_components',
+    subcommands=['eqtl'],
+    required=False,
+    default=True,
+    help='whether to use principal components of the expression matrix as covariates'
+)
+
+
+sneqtl_opts.option(
+    '--min-pc-var-explained',
+    subcommands=['eqtl'],
+    required=False,
+    type=click.FloatRange(0, 1.0),
+    default=0.01,
+    help='the minimum variance explained required to keep a principal component for modelling'
+)
+
+
+sneqtl_opts.option(
+    '--max-pc-haplotype-var-explained',
+    subcommands=['eqtl'],
+    required=False,
+    type=click.FloatRange(0.01, 1.0),
+    default=0.01,
+    help='the maximum variance that a haplotype '
+)
+
+
+def _parse_whitelist_covar_names(ctx, param, value):
+    if value is not None:
+        value = value.split(',')
+    return value
+
+
+sneqtl_opts.option(
+    '--covar-names',
+    subcommands=['eqtl'],
+    required=False,
+    type=str,
+    default=None,
+    callback=_parse_whitelist_covar_names,
+    help=('comma separated list of columns from --cb-stats-fn that should be used as '
+          'covariates in the model')
+)
+
+
+sneqtl_opts.option(
+    '--genotype/--no-genotype', 'model_parental_genotype',
+    subcommands=['eqtl'],
+    required=False,
+    default=False,
+    help='whether to model parental (diploid) genotype'
+)
+
+
+sneqtl_opts.option(
+    '--genotype-name', 'parental_genotype_colname',
+    subcommands=['eqtl'],
+    required=False,
+    type=str,
+    default='geno',
+    help=('the name of the column in --cb-stats-fn that contains the parental genotype '
+          'of each barcode')
+)
+
+
+sneqtl_opts.option(
     '--celltype/--no-celltype', 'celltype_haplotype_interaction',
     subcommands=['eqtl'],
     required=False,
     default=False,
-    help='whether to model celltypes (automatically generated)'
+    help='whether to cluster barcodes into celltypes and model them as interactors with haplotype'
 )
 
 
@@ -841,7 +925,39 @@ sneqtl_opts.option(
     required=False,
     type=click.IntRange(2, 10),
     default=None,
-    help='Number of clusters to use for celltype clustering'
+    help=('number of clusters to use for celltype clustering. '
+          'default is to automatically choose best number using silhouette scoring')
+)
+
+
+sneqtl_opts.option(
+    '--control-haplotypes',
+    subcommands=['eqtl'],
+    required=False,
+    default=None,
+    help=('comma separated list of positions (in format Chr1:100000), the haplotypes of which '
+          'should be controlled for as covariates in the model')
+)
+
+
+sneqtl_opts.option(
+    '--control-cis-haplotype/--no-control-cis',
+    subcommands=['eqtl'],
+    required=False,
+    default=False,
+    help=('whether to control for the cis-haplotype of genes when modelling them. '
+          'Requires GTF file of gene locations to be provided')
+)
+
+
+sneqtl_opts.option(
+    '--control-haplotypes-r2',
+    subcommands=['eqtl'],
+    required=False,
+    type=click.FloatRange(0.5, 1),
+    default=0.95,
+    help=('When controlling for specific haplotypes, do not test linked haplotypes with r2 of more '
+          'than this value')
 )
 
 
@@ -851,7 +967,18 @@ sneqtl_opts.option(
     required=False,
     type=str,
     default=None,
-    help='expression used to filter barcodes by column e.g. "doublet_probability < 0.5"'
+    help=('expression used to filter barcodes by column in --cb-stats-fn '
+          'e.g. "doublet_probability < 0.5"')
+)
+
+
+sneqtl_opts.option(
+    '-p', '--processes',
+    subcommands=['eqtl',],
+    required=False,
+    type=click.IntRange(min=1),
+    default=1,
+    help='number of cpu processes to use'
 )
 
 
@@ -863,16 +990,6 @@ sneqtl_opts.option(
     default=DEFAULT_RANDOM_SEED,
     callback=_get_rng,
     help='seed for random number generator'
-)
-
-
-sneqtl_opts.option(
-    '-p', '--processes',
-    subcommands=['eqtl',],
-    required=False,
-    type=click.IntRange(min=1),
-    default=1,
-    help='number of cpu processes to use'
 )
 
 
