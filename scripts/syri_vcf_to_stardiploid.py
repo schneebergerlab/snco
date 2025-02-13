@@ -70,7 +70,7 @@ def hdr_to_shv(hdr_record, open_pen=26, extend_pen=1, match_score=1, mismatch_sc
               help='max length of HDRs to resolve to SNPs and Indels')
 @click.option('-s', '--min-hdr-aln-quality', 'min_score', required=False, default=0.25, type=float,
               help='min alignment quality of HDRs to resolve to SNPs and Indels')
-@click.option('-i', '--max-indel-length', required=False, default=250, type=int,
+@click.option('-i', '--max-indel-length', required=False, default=50, type=int,
               help='max length of indel to output')
 @click.option('-n', '--alt-sample-name', 'alt_name', required=False, default='hap2', type=str,
               help='name of alternative/haplotype 2 in output vcf (default: hap2)')

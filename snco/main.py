@@ -1,5 +1,5 @@
 import click
-from .opts import snco_opts
+from .opts import snco_opts, sneqtl_opts
 
 
 @click.group()
@@ -77,6 +77,17 @@ def predict_subcommand(**kwargs):
     '''
     from .predict import run_predict
     run_predict(**kwargs)
+
+
+@main.command('bc1predict')
+@snco_opts('bc1predict')
+def bc1predict_subcommand(**kwargs):
+    '''
+    Uses rigid hidden Markov model to predict the haplotypes of WGS backcross 1 individuals
+    at each genomic bin.
+    '''
+    from .bc1predict import run_bc1predict
+    run_bc1predict(**kwargs)
 
 
 @main.command('doublet')
@@ -168,3 +179,26 @@ def csl_pipeline_subcommand(**kwargs):
     loadcsl_kwargs['min_markers_per_chrom'] = 0
     co_markers = run_loadcsl(**loadcsl_kwargs)
     _clean_predict_pipeline(co_markers, output_prefix, kwargs)
+
+
+@click.group()
+@click.version_option()
+def sneqtl():
+    '''
+    sneqtl: a toolkit for performing single nucleus eQTL mapping with snco results
+    '''
+    pass
+
+
+@sneqtl.command('eqtl')
+@sneqtl_opts('eqtl')
+def eqtl_subcommand(**kwargs):
+    from .sneqtl.eqtl import run_eqtl
+    run_eqtl(**kwargs)
+
+
+@sneqtl.command('peakcall')
+@sneqtl_opts('peakcall')
+def peakcall_subcommand(**kwargs):
+    from .sneqtl.peaks import run_peakcall
+    run_peakcall(**kwargs)

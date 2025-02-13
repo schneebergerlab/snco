@@ -3,7 +3,7 @@ from setuptools import setup
 if __name__ == '__main__':
     setup(
         name='snco',
-        version='0.0pre',
+        version='0.1',
         description=(
             'crossover mapping for single cell/nucleus sequencing data'
         ),
@@ -11,6 +11,7 @@ if __name__ == '__main__':
         entry_points={
             'console_scripts': [
                 'snco = snco.main:main',
+                'sneqtl = snco.main:sneqtl'
             ]
         },
         packages=[
@@ -26,6 +27,7 @@ if __name__ == '__main__':
             'click',
             'joblib',
             'pysam',
-            'matplotlib' # todo: make this dependency optional
+            'matplotlib', # todo: make this dependency optional
+            'scikit-learn',
         ],
     )

@@ -23,6 +23,16 @@ DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 DEFAULT_DEVICE = torch.device('cpu')
 
 
+def interp_nan_inplace(arr):
+    nan_mask = np.isnan(arr)
+    if nan_mask.any():
+        real_mask = ~nan_mask
+        xp = real_mask.ravel().nonzero()[0]
+        fp = arr[real_mask]
+        x = nan_mask.ravel().nonzero()[0]
+        arr[nan_mask] = np.interp(x, xp, fp)
+
+
 class RigidHMM:
 
     haplotypes = (0, 1)
@@ -175,9 +185,11 @@ class RigidHMM:
             if self._device is not None:
                 X_batch.to(self._device)
             p_batch = self._model.predict_proba(X_batch).cpu().numpy()
-            # fix nans introduced by pomegranate on extremely tiny probabilities (I think...)
-            p_batch[np.isnan(p_batch)] = 0.0
             p_batch = p_batch[..., self._hap2_states].sum(axis=2)
+            # fix nans introduced by pomegranate on positions where all state logprobs are -inf
+            # seems to occur 
+            for p in p_batch:
+                interp_nan_inplace(p)
             proba.append(p_batch)
         return np.concatenate(proba, axis=0)
 

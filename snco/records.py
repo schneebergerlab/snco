@@ -229,16 +229,21 @@ class BaseRecords:
 
         for cb, cb_m in other.items():
             for chrom, m in cb_m.items():
-                s[cb, chrom] += m
+                s_m = s[cb, chrom]
+                s_m[np.isnan(s_m)] = 0
+                s[cb, chrom] = s_m + m
 
         if not inplace:
             return s
 
-    def filter(self, cb_whitelist):
+    def filter(self, cb_whitelist, inplace=True):
         cb_whitelist = set(cb_whitelist)
-        for cb in self.barcodes:
+        obj = self if inplace else self.copy()
+        for cb in obj.barcodes:
             if cb not in cb_whitelist:
-                self._records.pop(cb)
+                obj._records.pop(cb)
+        if not inplace:
+            return obj
 
     def __add__(self, other):
         if isinstance(other, BaseRecords):

@@ -12,7 +12,6 @@ from .opts import DEFAULT_RANDOM_SEED
 
 log = logging.getLogger('snco')
 DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
-YLIM_OFFSET = 1
 XLIM_OFFSET = 1e4
 
 
@@ -104,7 +103,7 @@ def _add_gt_vlines(ax, gt, bin_size, ylims, colour='#eeeeee'):
 
 def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
                            show_mesh_prob=True, annotate_co_number=True, show_gt=True,
-                           max_yheight=20, ref_colour='#0072b2', alt_colour='#d55e00'):
+                           max_yheight='auto', ref_colour='#0072b2', alt_colour='#d55e00'):
 
     if cb not in co_markers.barcodes:
         raise KeyError(f'cb {cb} not in co_marker object')
@@ -120,10 +119,15 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
             show_gt = False
             gt = None
 
+    if max_yheight == 'auto':
+        m = np.concatenate([co_markers[cb, chrom].ravel() for chrom in co_markers.chrom_sizes])
+        max_yheight = np.percentile(m, 97.5)
+    ylim_offset = max_yheight * 0.05
+
     for chrom, ax in zip(co_markers.chrom_sizes, axes):
 
         ax.set_xlim(-XLIM_OFFSET, co_markers.chrom_sizes[chrom] + XLIM_OFFSET)
-        ylims = np.array([-max_yheight - YLIM_OFFSET, max_yheight + YLIM_OFFSET])
+        ylims = np.array([-max_yheight - ylim_offset, max_yheight + ylim_offset])
         ax.set_ylim(*ylims)
 
         chrom_markerplot(

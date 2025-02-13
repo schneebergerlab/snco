@@ -51,7 +51,7 @@ class OptionRegistry:
 
     def __call__(self, subcommand):
         def _apply_options(func):
-            for callback in reversed(self.callback_register[subcommand]):
+            for callback in reversed(self.callback_register.get(subcommand, [])):
                 func = callback(func)
             for option in reversed(self.register[subcommand].values()):
                 func = option(func)
@@ -65,8 +65,8 @@ class OptionRegistry:
 
 snco_opts = OptionRegistry(
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                 'sim', 'concat', 'clean', 'predict', 'doublet',
-                 'stats', 'plot']
+                 'sim', 'concat', 'clean', 'predict', 'bc1predict',
+                 'doublet', 'stats', 'plot']
 )
 
 
@@ -77,7 +77,7 @@ def validate_loadbam_input(func):
         seq_type = kwargs.get('seq_type')
         if kwargs.get('cb_correction_method') == 'auto':
             cb_tag = kwargs.get('cb_tag')
-            method = 'exact' if cb_tag == 'CB' else '1mm'
+            method = 'exact' if cb_tag in ('CB', 'RG') else '1mm'
             log.info(f"setting CB correction method to '{method}' for data with CB tag '{cb_tag}'")
         if kwargs.get('umi_collapse_method') == 'auto':
             if seq_type in ('10x_rna', 'bd_rna', 'bd_atac'):
@@ -85,8 +85,8 @@ def validate_loadbam_input(func):
                 method = 'exact' if umi_tag == 'UB' else 'directional'
                 log.info(f"setting UMI dedup method to '{method}' for 10x RNA or BD data with UMI tag '{umi_tag}'")
                 kwargs['umi_collapse_method'] = method
-            elif seq_type in ('10x_atac', 'takara_dna'):
-                log.info('turning off UMI processing for 10x or Takara ATAC data')
+            elif seq_type in ('10x_atac', 'takara_dna', 'wgs'):
+                log.info('turning off UMI processing for 10x/Takara ATAC data, or WGS data')
                 kwargs['umi_tag'] = None
                 kwargs['umi_collapse_method'] = None
             elif seq_type is None:
@@ -105,7 +105,7 @@ def validate_loadbam_input(func):
     return _validate
 
 
-@snco_opts.callback(['predict', 'bam2pred', 'csl2pred'])
+@snco_opts.callback(['predict', 'bc1predict', 'bam2pred', 'csl2pred'])
 def validate_pred_input(func):
     '''decorator to validate the input of the predict command'''
     def _validate(**kwargs):
@@ -121,8 +121,8 @@ def validate_pred_input(func):
 
 
 @snco_opts.callback(['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                     'sim', 'concat', 'clean', 'predict', 'doublet',
-                     'stats', 'plot'])
+                     'sim', 'concat', 'clean', 'predict', 'bc1predict',
+                     'doublet', 'stats', 'plot'])
 def log_parameters(func):
     '''decorator which logs the final values of all parameters used to execute snco'''
     def _log(**kwargs):
@@ -155,7 +155,7 @@ snco_opts.argument(
 
 snco_opts.argument(
     'marker-json-fn',
-    subcommands=['sim', 'clean', 'predict', 'doublet', 'stats', 'plot'],
+    subcommands=['sim', 'clean', 'predict', 'bc1predict', 'doublet', 'stats', 'plot'],
     required=True,
     nargs=1,
     type=_input_file_type,
@@ -203,7 +203,7 @@ snco_opts.option(
 
 snco_opts.option(
     '-o', '--output-json-fn',
-    subcommands=['loadbam', 'loadcsl', 'sim', 'concat', 'clean', 'predict', 'doublet'],
+    subcommands=['loadbam', 'loadcsl', 'sim', 'concat', 'clean', 'predict', 'bc1predict', 'doublet'],
     required=True,
     type=_output_file_type,
     help='Output JSON file name.'
@@ -228,7 +228,7 @@ snco_opts.option(
 snco_opts.option(
     '-c', '--cb-whitelist-fn',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                 'sim', 'clean', 'predict', 'doublet', 'stats', 'plot'],
+                 'sim', 'clean', 'predict', 'bc1predict', 'doublet', 'stats', 'plot'],
     required=False,
     type=_input_file_type,
     help='Text file containing whitelisted cell barcodes, one per line'
@@ -253,7 +253,8 @@ snco_opts.option(
 snco_opts.option(
     '-N', '--bin-size',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                 'sim', 'clean', 'predict', 'doublet', 'stats'],
+                 'sim', 'clean', 'predict', 'bc1predict',
+                 'doublet', 'stats'],
     required=False,
     type=click.IntRange(1000, 100_000),
     default=25_000,
@@ -272,7 +273,7 @@ snco_opts.option(
     required=False,
     subcommands=['loadbam', 'bam2pred'],
     type=click.Choice(
-        ['10x_rna', '10x_atac', 'bd_rna', 'bd_atac', 'takara_dna', 'other'],
+        ['10x_rna', '10x_atac', 'bd_rna', 'bd_atac', 'takara_dna', 'wgs', 'other'],
         case_sensitive=False
     ),
     default='other',
@@ -487,7 +488,7 @@ snco_opts.option(
 
 snco_opts.option(
     '-R', '--segment-size',
-    subcommands=['predict', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'bc1predict', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.IntRange(100_000, 10_000_000),
     default=1_000_000,
@@ -496,7 +497,7 @@ snco_opts.option(
 
 snco_opts.option(
     '-t', '--terminal-segment-size',
-    subcommands=['predict', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'bc1predict', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.IntRange(10_000, 1_000_000),
     default=50_000,
@@ -506,7 +507,7 @@ snco_opts.option(
 
 snco_opts.option(
     '-C', '--cm-per-mb',
-    subcommands=['predict', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'bc1predict', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.FloatRange(1.0, 20.0),
     default=4.5,
@@ -516,9 +517,19 @@ snco_opts.option(
 
 snco_opts.option(
     '--model-lambdas',
-    subcommands=['predict', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'bc1predict', 'bam2pred', 'csl2pred'],
     required=False,
-    type=(click.FloatRange(1e-5, 5.0), click.FloatRange(1e-5, 5.0)),
+    type=(click.FloatRange(1e-5, 10.0), click.FloatRange(1e-5, 10.0)),
+    default=None,
+    help=('optional lambda parameters for foreground and background Poisson distributions of '
+          'model. Default is to fit to the data')
+)
+
+snco_opts.option(
+    '--empty-fraction',
+    subcommands=['bc1predict'],
+    required=False,
+    type=click.FloatRange(0, 1),
     default=None,
     help=('optional lambda parameters for foreground and background Poisson distributions of '
           'model. Default is to fit to the data')
@@ -535,7 +546,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--generate-stats/--no-stats',
-    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'bc1predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
     default=True,
     help='whether to use synthetic doublet scoring to predict likely doublets in the data'
@@ -668,7 +679,7 @@ snco_opts.option(
 
 snco_opts.option(
     '-p', '--processes',
-    subcommands=['loadbam', 'bam2pred', 'predict', 'doublet'],
+    subcommands=['loadbam', 'bam2pred', 'predict', 'bc1predict', 'doublet'],
     required=False,
     type=click.IntRange(min=1),
     default=1,
@@ -677,7 +688,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--output-precision',
-    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred', 'stats'],
+    subcommands=['predict', 'bc1predict', 'doublet', 'bam2pred', 'csl2pred', 'stats'],
     required=False,
     type=click.IntRange(1, 10),
     default=3,
@@ -711,7 +722,7 @@ def _check_device(ctx, param, value):
 
 snco_opts.option(
     '-d', '--device',
-    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'bc1predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
     type=str,
     default='cpu',
@@ -721,7 +732,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--batch-size',
-    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'bc1predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.IntRange(1, 10_000),
     default=1_000,
@@ -735,7 +746,8 @@ def _get_rng(ctx, param, value):
 
 snco_opts.option(
     '-r', '--random-seed', 'rng',
-    subcommands=['clean', 'sim', 'predict', 'doublet', 'bam2pred', 'csl2pred', 'plot'],
+    subcommands=['clean', 'sim', 'predict', 'bc1predict',
+                 'doublet', 'bam2pred', 'csl2pred', 'plot'],
     required=False,
     type=int,
     default=DEFAULT_RANDOM_SEED,
@@ -747,7 +759,126 @@ snco_opts.option(
 snco_opts.option(
     '-v', '--verbosity',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                 'sim', 'concat', 'clean', 'predict', 'doublet', 'stats', 'plot'],
+                 'sim', 'concat', 'clean', 'predict', 'bc1predict',
+                 'doublet', 'stats', 'plot'],
+    required=False,
+    expose_value=False,
+    metavar='LVL',
+    type=click.Choice(
+        ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+        case_sensitive=False
+    ),
+    default='info',
+    callback=click_logger,
+    help='Logging level, either debug, info, warning, error or critical'
+)
+
+
+sneqtl_opts = OptionRegistry(subcommands=['eqtl', 'peakcall'])
+
+
+sneqtl_opts.argument(
+    'exprs-mat-dir',
+    subcommands=['eqtl'],
+    required=True,
+    nargs=1,
+    type=_input_dir_type,
+)
+
+sneqtl_opts.argument(
+    'pred-json-fn',
+    subcommands=['eqtl'],
+    required=True,
+    nargs=1,
+    type=_input_file_type,
+)
+
+sneqtl_opts.argument(
+    'eqtl-csv-fn',
+    subcommands=['peakcall'],
+    required=True,
+    nargs=1,
+    type=_input_file_type,
+)
+
+sneqtl_opts.option(
+    '-c', '--cb-stats-fn',
+    subcommands=['eqtl', 'peakcall'],
+    required=False,
+    type=_input_file_type,
+    help='cell barcode stats'
+)
+
+sneqtl_opts.option(
+    '-o', '--output-prefix',
+    subcommands=['eqtl', 'peakcall'],
+    required=True,
+    type=_output_file_type,
+    help='Output prefix'
+)
+
+sneqtl_opts.option(
+    '-g', '--gtf-fn',
+    subcommands=['eqtl', 'peakcall'],
+    required=False,
+    type=_input_file_type,
+    help='GTF file name'
+)
+
+
+sneqtl_opts.option(
+    '--celltype/--no-celltype', 'celltype_haplotype_interaction',
+    subcommands=['eqtl'],
+    required=False,
+    default=False,
+    help='whether to model celltypes (automatically generated)'
+)
+
+
+sneqtl_opts.option(
+    '--celltype-n-clusters',
+    subcommands=['eqtl'],
+    required=False,
+    type=click.IntRange(2, 10),
+    default=None,
+    help='Number of clusters to use for celltype clustering'
+)
+
+
+sneqtl_opts.option(
+    '--cb-filter-exprs',
+    subcommands=['eqtl'],
+    required=False,
+    type=str,
+    default=None,
+    help='expression used to filter barcodes by column e.g. "doublet_probability < 0.5"'
+)
+
+
+sneqtl_opts.option(
+    '-r', '--random-seed', 'rng',
+    subcommands=['eqtl', 'peakcall'],
+    required=False,
+    type=int,
+    default=DEFAULT_RANDOM_SEED,
+    callback=_get_rng,
+    help='seed for random number generator'
+)
+
+
+sneqtl_opts.option(
+    '-p', '--processes',
+    subcommands=['eqtl',],
+    required=False,
+    type=click.IntRange(min=1),
+    default=1,
+    help='number of cpu processes to use'
+)
+
+
+sneqtl_opts.option(
+    '-v', '--verbosity',
+    subcommands=['eqtl', 'peakcall'],
     required=False,
     expose_value=False,
     metavar='LVL',
