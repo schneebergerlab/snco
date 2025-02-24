@@ -169,7 +169,7 @@ def run_sim(marker_json_fn, output_json_fn, ground_truth_fn, *,
     with known haplotypes/crossovers supplied from a bed file.
     '''
     co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
-    if os.path.splitext(ground_truth_fn)[1] == 'bed':
+    if os.path.splitext(ground_truth_fn)[1] == '.bed':
         ground_truth_haplotypes = read_ground_truth_haplotypes_bed(
             ground_truth_fn, co_markers.chrom_sizes, bin_size
         )
