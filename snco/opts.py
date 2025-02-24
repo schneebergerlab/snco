@@ -244,11 +244,11 @@ snco_opts.option(
 )
 
 snco_opts.option(
-    '-b', '--haplo-bed-fn',
+    '-g', '--ground-truth-fn',
     subcommands=['sim'],
     required=True,
     type=_input_file_type,
-    help='bed file (6 column) containing ground truth haplotype intervals to simulate'
+    help='pred json or bed file (6 column) containing ground truth haplotype intervals to simulate'
 )
 
 snco_opts.option(
@@ -678,6 +678,7 @@ snco_opts.option(
     help='hex colour to use for alternative (hap2) markers (markerplot)'
 )
 
+
 snco_opts.option(
     '-p', '--processes',
     subcommands=['loadbam', 'bam2pred', 'predict', 'bc1predict', 'doublet'],
@@ -686,6 +687,7 @@ snco_opts.option(
     default=1,
     help='number of cpu processes to use'
 )
+
 
 snco_opts.option(
     '--output-precision',

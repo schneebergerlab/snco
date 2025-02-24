@@ -414,7 +414,7 @@ def run_eqtl(exprs_mat_dir, pred_json_fn, cb_stats_fn, output_prefix, gtf_fn=Non
         gene_locs = None
 
     e = SNeQTLAnalysis(
-        exprs_mat.head(10), haplotypes, cb_whitelist,
+        exprs_mat, haplotypes, cb_whitelist,
         covariates=covariates,
         interacting_variables=celltype_clusters,
         parental_genotypes=parental_genotypes,

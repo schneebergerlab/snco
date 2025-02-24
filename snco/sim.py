@@ -1,3 +1,4 @@
+import os
 import logging
 from collections import defaultdict
 
@@ -31,7 +32,7 @@ def co_invs_to_gt(co_invs, bin_size, chrom_nbins):
     return gt
 
 
-def read_ground_truth_haplotypes(co_invs_fn, chrom_sizes, bin_size=25_000):
+def read_ground_truth_haplotypes_bed(co_invs_fn, chrom_sizes, bin_size=25_000):
     '''
     Read a bed file containing haplotype intervals from a ground truth dataset
     and convert these into binned binary arrays, stored in PredictionRecords object
@@ -48,6 +49,13 @@ def read_ground_truth_haplotypes(co_invs_fn, chrom_sizes, bin_size=25_000):
         for chrom, n in gt.nbins.items():
             chrom_invs = sample_invs.query('chrom == @chrom')
             gt[sample_id, chrom] = co_invs_to_gt(chrom_invs, bin_size, n)
+    return gt
+
+
+def read_ground_truth_haplotypes_json(pred_json_fn):
+    gt = PredictionRecords.read_json(pred_json_fn)
+    for *_, m in gt.deep_items():
+        np.round(m, decimals=0, out=m)
     return gt
 
 
@@ -152,7 +160,7 @@ def ground_truth_from_marker_records(co_markers):
     return ground_truth
 
 
-def run_sim(marker_json_fn, output_json_fn, haplo_bed_fn, *,
+def run_sim(marker_json_fn, output_json_fn, ground_truth_fn, *,
             cb_whitelist_fn=None, bin_size=25_000, bg_marker_rate=None,
             bg_window_size=2_500_000, nsim_per_sample=100, n_doublets=0.0,
             rng=DEFAULT_RNG):
@@ -161,10 +169,13 @@ def run_sim(marker_json_fn, output_json_fn, haplo_bed_fn, *,
     with known haplotypes/crossovers supplied from a bed file.
     '''
     co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
-    ground_truth_haplotypes = read_ground_truth_haplotypes(
-        haplo_bed_fn, co_markers.chrom_sizes, bin_size
-    )
-    log.info(f'Read {len(ground_truth_haplotypes)} ground truth samples from {haplo_bed_fn}')
+    if os.path.splitext(ground_truth_fn)[1] == 'bed':
+        ground_truth_haplotypes = read_ground_truth_haplotypes_bed(
+            ground_truth_fn, co_markers.chrom_sizes, bin_size
+        )
+    else:
+        ground_truth_haplotypes = read_ground_truth_haplotypes_json(ground_truth_fn)
+    log.info(f'Read {len(ground_truth_haplotypes)} ground truth samples from {ground_truth_fn}')
     sim_co_markers = generate_simulated_data(
         ground_truth_haplotypes,
         co_markers,
