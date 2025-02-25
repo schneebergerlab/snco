@@ -208,6 +208,7 @@ class RigidHMM:
             'trans_prob': self.trans_prob,
             'fg_lambda': self.fg_lambda,
             'bg_lambda': self.bg_lambda,
+            'empty_fraction': self.empty_fraction,
         }
 
 
