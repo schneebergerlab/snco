@@ -210,8 +210,8 @@ def plot_recombination_landscape(co_preds, co_markers=None,
     return axes
 
 
-def run_plot(cell_barcode, marker_json_fn, pred_json_fn, output_fig_fn,
-             cb_whitelist_fn=None, plot_type='markerplot', figsize=(18, 4),
+def run_plot(cell_barcode, marker_json_fn, pred_json_fn, output_fig_fn=None,
+             cb_whitelist_fn=None, plot_type='markerplot', figsize=(18, 4), display_plot=False,
              show_pred=True, show_co_num=True, show_gt=True, max_yheight=20,
              window_size=1_000_000, nboots=100, confidence_intervals=95,
              ref_colour='#0072b2', alt_colour='#d55e00', rng=DEFAULT_RNG):
@@ -247,4 +247,8 @@ def run_plot(cell_barcode, marker_json_fn, pred_json_fn, output_fig_fn,
             colour=ref_colour,
             rng=rng
         )
-    plt.savefig(output_fig_fn)
+    if output_fig_fn is not None:
+        plt.savefig(output_fig_fn)
+    if display_plot:
+        #plt.switch_backend('TkAgg')
+        plt.show()

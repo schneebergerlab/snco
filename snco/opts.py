@@ -221,8 +221,9 @@ snco_opts.option(
 snco_opts.option(
     '-o', '--output-fig-fn',
     subcommands=['plot'],
-    required=True,
+    required=False,
     type=_output_file_type,
+    default=None,
     help='Output figure file name (filetype automatically determined)'
 )
 
@@ -241,6 +242,15 @@ snco_opts.option(
     required=True,
     type=_input_file_type,
     help='chrom sizes or faidx file'
+)
+
+snco_opts.option(
+    '-m', '--mask-bed-fn',
+    subcommands=['clean', 'bam2pred', 'csl2pred', 'bc1predict'],
+    required=False,
+    type=_input_file_type,
+    default=None,
+    help='A bed file of regions to mask when cleaning data'
 )
 
 snco_opts.option(
@@ -594,6 +604,14 @@ snco_opts.option(
     type=(click.IntRange(8, 30), click.IntRange(2, 10)),
     default=(18, 4),
     help='size of generated figure'
+)
+
+snco_opts.option(
+    '--display/--no-display', 'display_plot',
+    subcommands=['plot'],
+    required=False,
+    default=True,
+    help='whether to display the plot to screen (requires interactive mode)'
 )
 
 snco_opts.option(

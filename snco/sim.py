@@ -142,6 +142,7 @@ def generate_simulated_data(ground_truth, co_markers, conv_window_size=2_500_000
 
     if doublet_rate:
         doublet_rate = int(len(sim_co_markers) * doublet_rate) if doublet_rate < 1 else int(doublet_rate)
+        log.info(f'Simulating {doublet_rate} doublet barcodes')
         sim_co_markers.merge(
             simulate_doublets(co_markers, doublet_rate, rng=rng),
             inplace=True
@@ -185,7 +186,7 @@ def run_sim(marker_json_fn, output_json_fn, ground_truth_fn, *,
         doublet_rate=n_doublets,
         rng=rng
     )
-    log.info(f'Simulated {len(sim_co_markers)} cells')
+    log.info(f'Simulated {len(sim_co_markers)} barcodes total')
     if output_json_fn is not None:
         log.info(f'Writing markers to {output_json_fn}')
         sim_co_markers.write_json(output_json_fn)

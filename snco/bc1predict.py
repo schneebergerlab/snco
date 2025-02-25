@@ -13,6 +13,7 @@ from pomegranate.hmm import DenseHMM
 from .records import MarkerRecords
 from .predict import RigidHMM, detect_crossovers, DEFAULT_RNG, DEFAULT_DEVICE
 from .utils import load_json
+from .clean import mask_regions_bed
 from .stats import run_stats
 
 
@@ -122,7 +123,7 @@ def create_bc1rhmm(co_markers, cm_per_mb=4.5,
 
 
 def run_bc1predict(marker_json_fn, output_json_fn, *,
-                   cb_whitelist_fn=None, bin_size=25_000,
+                   cb_whitelist_fn=None, mask_bed_fn=None, bin_size=25_000,
                    segment_size=1_000_000, terminal_segment_size=50_000,
                    cm_per_mb=4.5, model_lambdas=None, empty_fraction=0.1,
                    generate_stats=True,
@@ -135,6 +136,8 @@ def run_bc1predict(marker_json_fn, output_json_fn, *,
     '''
     co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
     co_markers = apply_allele_ratio_mask(co_markers)
+    if mask_bed_fn is not None:
+        co_markers = mask_regions_bed(co_markers, mask_bed_fn)
     rhmm = create_bc1rhmm(
         co_markers,
         cm_per_mb=cm_per_mb,

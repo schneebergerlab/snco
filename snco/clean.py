@@ -1,6 +1,7 @@
 import logging
 
 import numpy as np
+import pandas as pd
 from scipy.ndimage import convolve1d
 
 from .utils import load_json
@@ -144,9 +145,28 @@ def apply_marker_threshold(co_markers, max_marker_threshold):
     return co_markers_t
 
 
+def mask_regions_bed(co_markers, mask_bed_fn):
+    co_markers_m = co_markers.copy()
+    mask_invs = pd.read_csv(
+        mask_bed_fn,
+        sep='\t',
+        usecols=[0, 1, 2],
+        names=['chrom', 'start', 'end'],
+        dtype={'chrom': str, 'start': int, 'end': int}
+    )
+    bs = co_markers.bin_size
+    for chrom, invs in mask_invs.groupby('chrom'):
+        start_bins = np.floor(invs.start // bs).astype(int)
+        end_bins = np.ceil(invs.end // bs).astype(int)        
+        for cb, m in co_markers_m.iter_chrom(chrom):
+            for s, e in zip(start_bins, end_bins):
+                m[s: e] = 0
+    return co_markers_m
+
+
 def run_clean(marker_json_fn, output_json_fn, *,
               co_markers=None,
-              cb_whitelist_fn=None, bin_size=25_000,
+              cb_whitelist_fn=None, mask_bed_fn=None, bin_size=25_000,
               min_markers_per_cb=0, min_markers_per_chrom=0, max_bin_count=20,
               clean_bg=True, bg_window_size=2_500_000, max_frac_bg=0.2,
               mask_imbalanced=True, max_marker_imbalance=0.75,
@@ -209,6 +229,10 @@ def run_clean(marker_json_fn, output_json_fn, *,
     # threshold bins that have a large number of reads
     co_markers = apply_marker_threshold(co_markers, max_bin_count)
     log.info(f'Thresholded bins with >{max_bin_count} markers')
+
+    if mask_bed_fn is not None:
+        co_markers = mask_regions_bed(co_markers, mask_bed_fn)
+        log.info(f'Masked regions blacklisted in {mask_bed_fn}')
 
     if output_json_fn is not None:
         log.info(f'Writing markers to {output_json_fn}')

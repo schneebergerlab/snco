@@ -75,6 +75,13 @@ class BaseRecords:
             arrs.append(m)
         return np.asarray(arrs)
 
+    def iter_chrom(self, chrom):
+        for cb in self.keys():
+            try:
+                yield cb, self._records[cb][chrom]
+            except KeyError:
+                yield cb, self[cb, chrom]
+
     def __getitem__(self, index):
         if isinstance(index, str):
             if index not in self._records:
