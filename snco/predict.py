@@ -415,7 +415,7 @@ def run_doublet(marker_json_fn, pred_json_fn, output_json_fn, *,
         rparams['trans_prob'],
         device=device
     )
-    rhmm.initialise_model(rparams['fg_lambda'], rparams['bg_lambda'])
+    rhmm.initialise_model(rparams['fg_lambda'], rparams['bg_lambda'], rparams['empty_fraction'])
 
     co_preds = doublet_detector(
         co_markers, co_preds, rhmm,
