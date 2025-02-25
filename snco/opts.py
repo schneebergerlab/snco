@@ -146,6 +146,7 @@ snco_opts.argument(
     type=_input_file_type,
 )
 
+
 snco_opts.argument(
     'cellsnp-lite-dir',
     subcommands=['loadcsl', 'csl2pred'],
@@ -153,6 +154,7 @@ snco_opts.argument(
     nargs=1,
     type=_input_dir_type,
 )
+
 
 snco_opts.argument(
     'marker-json-fn',
@@ -162,6 +164,7 @@ snco_opts.argument(
     type=_input_file_type,
 )
 
+
 snco_opts.argument(
     'json-fn',
     subcommands=['concat'],
@@ -169,6 +172,7 @@ snco_opts.argument(
     nargs=-1,
     type=_input_file_type,
 )
+
 
 snco_opts.argument(
     'pred-json-fn',
@@ -178,6 +182,7 @@ snco_opts.argument(
     type=_input_file_type,
 )
 
+
 snco_opts.argument(
     'pred-json-fn',
     subcommands=['plot'],
@@ -185,6 +190,7 @@ snco_opts.argument(
     nargs=1,
     type=_input_file_type,
 )
+
 
 snco_opts.argument(
     'cell-barcode',
@@ -194,6 +200,7 @@ snco_opts.argument(
     nargs=1,
 )
 
+
 snco_opts.option(
     '-o', '--output-prefix',
     subcommands=['bam2pred', 'csl2pred'],
@@ -201,6 +208,7 @@ snco_opts.option(
     type=_output_file_type,
     help='Output prefix'
 )
+
 
 snco_opts.option(
     '-o', '--output-json-fn',
@@ -210,6 +218,7 @@ snco_opts.option(
     help='Output JSON file name.'
 )
 
+
 snco_opts.option(
     '-o', '--output-tsv-fn',
     subcommands=['stats'],
@@ -217,6 +226,7 @@ snco_opts.option(
     type=_output_file_type,
     help='Output TSV file name.'
 )
+
 
 snco_opts.option(
     '-o', '--output-fig-fn',
@@ -227,6 +237,7 @@ snco_opts.option(
     help='Output figure file name (filetype automatically determined)'
 )
 
+
 snco_opts.option(
     '-c', '--cb-whitelist-fn',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
@@ -236,6 +247,7 @@ snco_opts.option(
     help='Text file containing whitelisted cell barcodes, one per line'
 )
 
+
 snco_opts.option(
     '-s', '--chrom-sizes-fn',
     subcommands=['loadcsl', 'csl2pred'],
@@ -243,6 +255,7 @@ snco_opts.option(
     type=_input_file_type,
     help='chrom sizes or faidx file'
 )
+
 
 snco_opts.option(
     '-m', '--mask-bed-fn',
@@ -252,6 +265,7 @@ snco_opts.option(
     default=None,
     help='A bed file of regions to mask when cleaning data'
 )
+
 
 snco_opts.option(
     '-g', '--ground-truth-fn',
@@ -291,6 +305,7 @@ snco_opts.option(
     callback=_replace_other_with_nonetype,
     help='presets for different sequencing data, see manual' # todo !!
 )
+
 
 snco_opts.option(
     '--cb-correction-method',
@@ -339,6 +354,7 @@ snco_opts.option(
     help='bam file tag representing UMI'
 )
 
+
 snco_opts.option(
     '--hap-tag',
     subcommands=['loadbam', 'bam2pred'],
@@ -349,6 +365,7 @@ snco_opts.option(
     help='bam file tag representing haplotype.'
 )
 
+
 snco_opts.option(
     '--validate-barcodes/--no-validate',
     subcommands=['loadcsl', 'csl2pred'],
@@ -356,6 +373,7 @@ snco_opts.option(
     default=True,
     help='whether to check that cell barcodes are valid sequences',
 )
+
 
 def _parse_excl_contigs(ctx, param, value):
     if value is None:
@@ -406,6 +424,7 @@ snco_opts.option(
     help='whether to run clean step in pipeline',
 )
 
+
 snco_opts.option(
     '--clean-bg/--no-clean-bg',
     subcommands=['clean', 'bam2pred', 'csl2pred'],
@@ -413,6 +432,7 @@ snco_opts.option(
     default=True,
     help='whether to estimate and remove background markers'
 )
+
 
 snco_opts.option(
     '--bg-marker-rate',
@@ -424,6 +444,7 @@ snco_opts.option(
           'Default is to estimate per cell barcode from markers')
 )
 
+
 snco_opts.option(
     '--bg-window-size',
     subcommands=['sim', 'clean', 'bam2pred', 'csl2pred'],
@@ -433,6 +454,7 @@ snco_opts.option(
     help='the size (in basepairs) of the convolution window used to estimate background marker rate'
 )
 
+
 snco_opts.option(
     '--max-frac-bg',
     subcommands=['clean', 'bam2pred', 'csl2pred'],
@@ -441,6 +463,7 @@ snco_opts.option(
     default=0.5,
     help='the estimated background marker rate to allow before filtering'
 )
+
 
 snco_opts.option(
     '--nsim-per-sample',
@@ -461,6 +484,7 @@ snco_opts.option(
     help='minimum total number of markers per cb (cb with lower are filtered)'
 )
 
+
 snco_opts.option(
     '--min-markers-per-chrom',
     subcommands=['loadbam', 'loadcsl', 'clean', 'bam2pred', 'csl2pred'],
@@ -470,6 +494,7 @@ snco_opts.option(
     help='minimum total number of markers per chrom, per cb (cb with lower are filtered)'
 )
 
+
 snco_opts.option(
     '--max-bin-count',
     subcommands=['clean', 'bam2pred', 'csl2pred'],
@@ -478,6 +503,7 @@ snco_opts.option(
     help='maximum number of markers per cell per bin (higher values are thresholded)'
 )
 
+
 snco_opts.option(
     '--mask-imbalanced/--no-mask-imbalanced',
     subcommands=['clean', 'bam2pred', 'csl2pred'],
@@ -485,6 +511,7 @@ snco_opts.option(
     default=True,
     help='whether to mask bins with extreme allelic imbalance'
 )
+
 
 snco_opts.option(
     '--max-marker-imbalance',
@@ -506,6 +533,7 @@ snco_opts.option(
     help='rfactor of the rigid HMM. Approximately controls minimum distance between COs'
 )
 
+
 snco_opts.option(
     '-t', '--terminal-segment-size',
     subcommands=['predict', 'bc1predict', 'bam2pred', 'csl2pred'],
@@ -515,6 +543,7 @@ snco_opts.option(
     help=('terminal rfactor of the rigid HMM. approx. controls min distance of COs '
           'from chromosome ends')
 )
+
 
 snco_opts.option(
     '-C', '--cm-per-mb',
@@ -526,6 +555,7 @@ snco_opts.option(
           'Used to parameterise the rigid HMM transitions')
 )
 
+
 snco_opts.option(
     '--model-lambdas',
     subcommands=['predict', 'bc1predict', 'bam2pred', 'csl2pred'],
@@ -535,6 +565,7 @@ snco_opts.option(
     help=('optional lambda parameters for foreground and background Poisson distributions of '
           'model. Default is to fit to the data')
 )
+
 
 snco_opts.option(
     '--empty-fraction',
@@ -562,6 +593,7 @@ snco_opts.option(
     default=True,
     help='whether to use synthetic doublet scoring to predict likely doublets in the data'
 )
+
 
 snco_opts.option(
     '--n-doublets',
@@ -606,6 +638,7 @@ snco_opts.option(
     help='size of generated figure'
 )
 
+
 snco_opts.option(
     '--display/--no-display', 'display_plot',
     subcommands=['plot'],
@@ -613,6 +646,7 @@ snco_opts.option(
     default=True,
     help='whether to display the plot to screen (requires interactive mode)'
 )
+
 
 snco_opts.option(
     '--show-pred/--no-pred',
@@ -622,6 +656,7 @@ snco_opts.option(
     help='whether to draw predicted haplotype onto plot as shading (markerplot)'
 )
 
+
 snco_opts.option(
     '--show-co-num/--no-co-num',
     subcommands=['plot'],
@@ -630,6 +665,7 @@ snco_opts.option(
     help='whether to annotate each chromosome with the no. of predicted COs (markerplot)'
 )
 
+
 snco_opts.option(
     '--show-gt/--no-gt',
     subcommands=['plot'],
@@ -637,6 +673,7 @@ snco_opts.option(
     default=True,
     help='when ground truth is present (i.e. sim data), show expected CO positions (markerplot)'
 )
+
 
 snco_opts.option(
     '--max-yheight',
@@ -686,6 +723,7 @@ snco_opts.option(
     default='#0072b2',
     help='hex colour to use for reference (hap1) markers (also for recombination landscape)'
 )
+
 
 snco_opts.option(
     '--alt-colour',

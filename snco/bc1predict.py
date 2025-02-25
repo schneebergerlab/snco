@@ -23,6 +23,7 @@ log = logging.getLogger('snco')
 def median_absolute_deviation(arr):
     return np.median(np.abs(arr - np.median(arr)))
 
+
 def create_allele_ratio_mask(co_markers, expected_ratio='auto', nmad_mask=5, correction=1e-2):
     allele_ratio_mask = {}
     for chrom in co_markers.chrom_sizes:

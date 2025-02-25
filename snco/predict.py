@@ -8,6 +8,7 @@ from scipy.spatial import KDTree
 import torch
 from pomegranate import distributions as pmd
 from pomegranate.hmm import DenseHMM
+from pomegranate.gmm import GeneralMixtureModel
 
 from .logger import progress_bar
 from .sim import simulate_doublets
@@ -51,6 +52,7 @@ class RigidHMM:
         assert (self.trans_prob + self.term_prob) < 1.0
         self.fg_lambda = None
         self.bg_lambda = None
+        self.empty_fraction = None
         self._transition_probs = {}
         self._calculate_transition_probs()
         self._model = None
@@ -88,7 +90,8 @@ class RigidHMM:
     def _create_rigid_chain(self, params, haplotype):
         self._distributions[haplotype] = []
         for _ in range(self.rfactor):
-            d = pmd.Poisson(params)
+            d = GeneralMixtureModel([pmd.Poisson(params), pmd.Poisson([self.bg_lambda, self.bg_lambda])],
+                                    priors=[1 - self.empty_fraction, self.empty_fraction])
             self._model.add_distribution(d)
             self._distributions[haplotype].append(d)
 
@@ -143,10 +146,11 @@ class RigidHMM:
                         self._transition_probs[i].end
                     )
 
-    def initialise_model(self, fg_lambda, bg_lambda):
+    def initialise_model(self, fg_lambda, bg_lambda, empty_fraction):
         # todo: implement sparse version for when rfactor is very large
         self.fg_lambda = fg_lambda
         self.bg_lambda = bg_lambda
+        self.empty_fraction = empty_fraction
         self._model = DenseHMM(frozen=True)
         log.debug(f'moving model to device: {self._device}')
         self._model.to(self._device)
@@ -161,22 +165,25 @@ class RigidHMM:
     def estimate_params(self, X):
         X_fg = []
         X_bg = []
+        X_empty = []
         for x in X:
             fg_idx = predict_foreground_convolution(x, self.rfactor)
             idx = np.arange(len(x))
             X_fg.append(x[idx, fg_idx])
             X_bg.append(x[idx, 1 - fg_idx])
+            X_empty.append((x == 0).all(axis=1))
         X_fg = np.concatenate(X_fg)
         X_bg = np.concatenate(X_bg)
-        return np.mean(X_fg), np.mean(X_bg)
+        X_empty = np.concatenate(X_empty)
+        return np.mean(X_fg), np.mean(X_bg), np.mean(X_empty)
 
     def fit(self, X):
-        fg_lambda, bg_lambda = self.estimate_params(X)
+        fg_lambda, bg_lambda, empty_fraction = self.estimate_params(X)
         log.debug(
             'Estimated model parameters from data: '
-            f'fg_lambda {fg_lambda:.2g}, bg_lambda {bg_lambda:.2g}'
+            f'fg_lambda {fg_lambda:.2g}, bg_lambda {bg_lambda:.2g}, empty_fraction {empty_fraction:.2g}'
         )
-        self.initialise_model(fg_lambda, bg_lambda)
+        self.initialise_model(fg_lambda, bg_lambda, empty_fraction)
 
     def predict(self, X, batch_size=128):
         proba = []
