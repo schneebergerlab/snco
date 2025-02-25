@@ -172,7 +172,16 @@ class RigidHMM:
             X_bg.append(x[idx, 1 - fg_idx])
         X_fg = np.concatenate(X_fg)
         X_bg = np.concatenate(X_bg)
-        return np.mean(X_fg[X_fg != 0]), np.mean(X_bg), np.mean(X_fg == 0)
+        X_ordered = np.stack([X_fg, X_bg], axis=1)
+        fg_lambda = np.mean(X_fg)
+        bg_lambda = np.mean(X_bg)
+        gmm = GeneralMixtureModel([
+                pmd.Poisson([fg_lambda, bg_lambda], frozen=True),
+                pmd.Poisson([bg_lambda, bg_lambda], frozen=True)
+            ],
+        ).fit(X_ordered)
+        empty_fraction = gmm.priors.numpy()[1]
+        return fg_lambda, bg_lambda, empty_fraction
 
     def fit(self, X):
         fg_lambda, bg_lambda, empty_fraction = self.estimate_params(X)
