@@ -165,17 +165,14 @@ class RigidHMM:
     def estimate_params(self, X):
         X_fg = []
         X_bg = []
-        X_empty = []
         for x in X:
             fg_idx = predict_foreground_convolution(x, self.rfactor)
             idx = np.arange(len(x))
             X_fg.append(x[idx, fg_idx])
             X_bg.append(x[idx, 1 - fg_idx])
-            X_empty.append((x == 0).all(axis=1))
         X_fg = np.concatenate(X_fg)
         X_bg = np.concatenate(X_bg)
-        X_empty = np.concatenate(X_empty)
-        return np.mean(X_fg), np.mean(X_bg), np.mean(X_empty)
+        return np.mean(X_fg[X_fg != 0]), np.mean(X_bg), np.mean(X_fg == 0)
 
     def fit(self, X):
         fg_lambda, bg_lambda, empty_fraction = self.estimate_params(X)
