@@ -359,7 +359,7 @@ def run_predict(marker_json_fn, output_json_fn, *,
                 segment_size=1_000_000, terminal_segment_size=50_000,
                 cm_per_mb=4.5, model_lambdas=None,
                 predict_doublets=True, n_doublets=0.25, k_neighbours=0.25,
-                generate_stats=True,
+                generate_stats=True, nco_min_prob_change=1e-3,
                 output_precision=3, processes=1,
                 batch_size=1_000, device=DEFAULT_DEVICE,
                 rng=DEFAULT_RNG):
@@ -392,6 +392,7 @@ def run_predict(marker_json_fn, output_json_fn, *,
             None, None, output_tsv_fn,
             co_markers=co_markers,
             co_preds=co_preds,
+            nco_min_prob_change=nco_min_prob_change,
             output_precision=output_precision
         )
 

@@ -184,7 +184,8 @@ def write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics=None, precision=
 
 def run_stats(marker_json_fn, pred_json_fn, output_tsv_fn, *,
               co_markers=None, co_preds=None,
-              cb_whitelist_fn=None, bin_size=25_000, output_precision=3):
+              cb_whitelist_fn=None, bin_size=25_000,
+              nco_min_prob_change=1e-3, output_precision=3):
     '''
     Scores the quality of data and predictions for a set of haplotype calls
     generated with `predict`.

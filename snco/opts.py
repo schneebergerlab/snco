@@ -587,15 +587,6 @@ snco_opts.option(
 
 
 snco_opts.option(
-    '--generate-stats/--no-stats',
-    subcommands=['predict', 'bc1predict', 'doublet', 'bam2pred', 'csl2pred'],
-    required=False,
-    default=True,
-    help='whether to use synthetic doublet scoring to predict likely doublets in the data'
-)
-
-
-snco_opts.option(
     '--n-doublets',
     subcommands=['sim', 'predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
@@ -616,6 +607,26 @@ snco_opts.option(
     metavar='INTEGER OR FLOAT',
     help=('K neighbours to use for doublet calling. If >1, treated as integer k neighbours. '
           'If <1, treated as a fraction of --n-doublets')
+)
+
+
+snco_opts.option(
+    '--generate-stats/--no-stats',
+    subcommands=['predict', 'bc1predict', 'doublet', 'bam2pred', 'csl2pred'],
+    required=False,
+    default=True,
+    help='whether to use synthetic doublet scoring to predict likely doublets in the data'
+)
+
+
+snco_opts.option(
+    '-M', '--nco-min-prob-change',
+    subcommands=['stats', 'predict', 'plot', 'bam2pred', 'csl2pred'],
+    required=False,
+    type=click.FloatRange(0.0, 1.0),
+    default=1e-3,
+    help=('Minimum probability change to take into account when estimating stats e.g. number of '
+          'crossovers from the haplotype predictions.')
 )
 
 

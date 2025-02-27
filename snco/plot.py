@@ -102,7 +102,8 @@ def _add_gt_vlines(ax, gt, bin_size, ylims, colour='#eeeeee'):
 
 
 def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
-                           show_mesh_prob=True, annotate_co_number=True, show_gt=True,
+                           show_mesh_prob=True, annotate_co_number=True,
+                           nco_min_prob_change=1e-3, show_gt=True,
                            max_yheight='auto', ref_colour='#0072b2', alt_colour='#d55e00'):
 
     if cb not in co_markers.barcodes:
@@ -146,7 +147,9 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
                     ax, hp, co_markers.chrom_sizes[chrom], co_markers.bin_size, ylims, cmap
                 )
             if annotate_co_number:
-                n_co = np.abs(np.diff(hp)).sum()
+                p_co = np.abs(np.diff(hp))
+                p_co = np.where(p_co > nco_min_prob_change, p_co, 0)
+                n_co = p_co.sum()
                 ax.annotate(text=f'{n_co.sum():.2f} COs', xy=(0.05, 0.05), xycoords='axes fraction')
         if show_gt:
             _add_gt_vlines(
@@ -233,6 +236,7 @@ def run_plot(cell_barcode, marker_json_fn, pred_json_fn, output_fig_fn=None,
             figsize=figsize,
             show_mesh_prob=show_pred,
             annotate_co_number=show_co_num,
+            nco_min_prob_change=nco_min_prob_change,
             show_gt=show_gt,
             max_yheight=max_yheight,
             ref_colour=ref_colour,
@@ -243,6 +247,7 @@ def run_plot(cell_barcode, marker_json_fn, pred_json_fn, output_fig_fn=None,
             co_preds, co_markers,
             rolling_mean_window_size=window_size,
             nboots=nboots, ci=confidence_intervals,
+            min_prob=nco_min_prob_change,
             figsize=figsize,
             colour=ref_colour,
             rng=rng
