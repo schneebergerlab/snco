@@ -103,7 +103,7 @@ def _add_gt_vlines(ax, gt, bin_size, ylims, colour='#eeeeee'):
 
 def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
                            show_mesh_prob=True, annotate_co_number=True,
-                           nco_min_prob_change=1e-3, show_gt=True,
+                           nco_min_prob_change=5e-3, show_gt=True,
                            max_yheight='auto', ref_colour='#0072b2', alt_colour='#d55e00'):
 
     if cb not in co_markers.barcodes:
@@ -122,7 +122,7 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
 
     if max_yheight == 'auto':
         m = np.concatenate([co_markers[cb, chrom].ravel() for chrom in co_markers.chrom_sizes])
-        max_yheight = np.percentile(m, 97.5)
+        max_yheight = np.percentile(m, 99.5)
     ylim_offset = max_yheight * 0.05
 
     for chrom, ax in zip(co_markers.chrom_sizes, axes):
