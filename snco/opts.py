@@ -624,7 +624,7 @@ snco_opts.option(
     subcommands=['stats', 'predict', 'plot', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.FloatRange(0.0, 1.0),
-    default=1e-3,
+    default=5e-3,
     help=('Minimum probability change to take into account when estimating stats e.g. number of '
           'crossovers from the haplotype predictions.')
 )

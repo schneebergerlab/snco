@@ -18,7 +18,7 @@ def total_markers(cb_co_markers):
     return np.log10(tot)
 
 
-def n_crossovers(cb_co_preds, min_co_prob=1e-3):
+def n_crossovers(cb_co_preds, min_co_prob=5e-3):
     nco = 0
     for p in cb_co_preds.values():
         p_co = np.abs(np.diff(p))
@@ -63,7 +63,7 @@ def mean_haplotype(cb_co_preds):
     return np.concatenate(list(cb_co_preds.values())).mean()
 
 
-def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=1e-3, max_phred_score=10):
+def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=5e-3, max_phred_score=10):
     qual_metrics = []
     bg_frac = co_markers.metadata.get(
         'estimated_background_fraction', defaultdict(lambda: np.nan)
@@ -185,7 +185,7 @@ def write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics=None, precision=
 def run_stats(marker_json_fn, pred_json_fn, output_tsv_fn, *,
               co_markers=None, co_preds=None,
               cb_whitelist_fn=None, bin_size=25_000,
-              nco_min_prob_change=1e-3, output_precision=3):
+              nco_min_prob_change=5e-3, output_precision=3):
     '''
     Scores the quality of data and predictions for a set of haplotype calls
     generated with `predict`.
