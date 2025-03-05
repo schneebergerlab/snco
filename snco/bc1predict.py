@@ -13,7 +13,7 @@ from pomegranate.hmm import DenseHMM
 from .records import MarkerRecords
 from .predict import RigidHMM, detect_crossovers, DEFAULT_RNG, DEFAULT_DEVICE
 from .utils import load_json
-from .clean import mask_regions_bed
+from .clean import mask_regions_bed, filter_low_coverage_barcodes
 from .stats import run_stats
 
 
@@ -62,6 +62,17 @@ def calculate_parameters_bc(m, ws=100, bc_haplotype=0):
     bg_lambda = m[~het_mask, 1 - bc_haplotype].mean()
     empty_fraction = (m < bg_lambda).all(axis=1).mean()
     return fg_lambda, bg_lambda, empty_fraction
+
+
+def normalise_coverage(co_markers, norm_factor=100_000):
+    co_markers = co_markers.copy()
+    for cb, cb_co_markers in co_markers.items():
+        tot = sum(m.sum() for m in cb_co_markers.values())
+        co_markers[cb] = {
+            chrom: m / tot * norm_factor
+            for chrom, m in cb_co_markers.items()
+        }
+    return co_markers
 
 
 class BC1RigidHMM(RigidHMM):
@@ -125,8 +136,10 @@ def create_bc1rhmm(co_markers, cm_per_mb=4.5,
 
 def run_bc1predict(marker_json_fn, output_json_fn, *,
                    cb_whitelist_fn=None, mask_bed_fn=None, bin_size=25_000,
+                   min_markers_per_cb=0, min_markers_per_chrom=0,
                    segment_size=1_000_000, terminal_segment_size=50_000,
                    cm_per_mb=4.5, model_lambdas=None, empty_fraction=0.1,
+                   predict_doublets=True, n_doublets=0.25, k_neighbours=0.25,
                    generate_stats=True,
                    output_precision=3, processes=1,
                    batch_size=1_000, device=DEFAULT_DEVICE,
@@ -139,8 +152,10 @@ def run_bc1predict(marker_json_fn, output_json_fn, *,
     co_markers = apply_allele_ratio_mask(co_markers)
     if mask_bed_fn is not None:
         co_markers = mask_regions_bed(co_markers, mask_bed_fn)
+    co_markers = filter_low_coverage_barcodes(co_markers, min_markers_per_cb, min_markers_per_chrom)
+    co_markers_n = normalise_coverage(co_markers)
     rhmm = create_bc1rhmm(
-        co_markers,
+        co_markers_n,
         cm_per_mb=cm_per_mb,
         segment_size=segment_size,
         terminal_segment_size=terminal_segment_size,
@@ -149,7 +164,7 @@ def run_bc1predict(marker_json_fn, output_json_fn, *,
         device=device,
     )
     co_preds = detect_crossovers(
-        co_markers, rhmm, batch_size=batch_size, processes=processes
+        co_markers_n, rhmm, batch_size=batch_size, processes=processes
     )
 
     if generate_stats:

@@ -101,7 +101,7 @@ def _add_gt_vlines(ax, gt, bin_size, ylims, colour='#eeeeee'):
         )
 
 
-def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
+def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4), chroms=None,
                            show_mesh_prob=True, annotate_co_number=True,
                            nco_min_prob_change=5e-3, show_gt=True,
                            max_yheight='auto', ref_colour='#0072b2', alt_colour='#d55e00'):
@@ -109,7 +109,10 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
     if cb not in co_markers.barcodes:
         raise KeyError(f'cb {cb} not in co_marker object')
 
-    fig, axes = chrom_subplots(co_markers.chrom_sizes, figsize=figsize)
+    chrom_sizes = co_markers.chrom_sizes
+    if chroms is not None:
+        chrom_sizes = {c: chrom_sizes[c] for c in chroms}
+    fig, axes = chrom_subplots(chrom_sizes, figsize=figsize)
     axes[0].set_ylabel('Marker coverage')
     cmap = LinearSegmentedColormap.from_list('hap_cmap', [ref_colour, alt_colour])
 
@@ -125,15 +128,15 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4),
         max_yheight = np.percentile(m, 99.5)
     ylim_offset = max_yheight * 0.05
 
-    for chrom, ax in zip(co_markers.chrom_sizes, axes):
+    for chrom, ax in zip(chrom_sizes, axes):
 
-        ax.set_xlim(-XLIM_OFFSET, co_markers.chrom_sizes[chrom] + XLIM_OFFSET)
+        ax.set_xlim(-XLIM_OFFSET, chrom_sizes[chrom] + XLIM_OFFSET)
         ylims = np.array([-max_yheight - ylim_offset, max_yheight + ylim_offset])
         ax.set_ylim(*ylims)
 
         chrom_markerplot(
             co_markers[cb, chrom],
-            co_markers.chrom_sizes[chrom],
+            chrom_sizes[chrom],
             co_markers.bin_size,
             ax=ax,
             max_yheight=max_yheight,

@@ -477,9 +477,9 @@ snco_opts.option(
 
 snco_opts.option(
     '--min-markers-per-cb',
-    subcommands=['loadbam', 'loadcsl', 'clean', 'bam2pred', 'csl2pred'],
+    subcommands=['loadbam', 'loadcsl', 'clean', 'bc1predict', 'bam2pred', 'csl2pred'],
     required=False,
-    type=click.IntRange(0, 1000),
+    type=click.IntRange(0, 100000),
     default=100,
     help='minimum total number of markers per cb (cb with lower are filtered)'
 )
@@ -487,9 +487,9 @@ snco_opts.option(
 
 snco_opts.option(
     '--min-markers-per-chrom',
-    subcommands=['loadbam', 'loadcsl', 'clean', 'bam2pred', 'csl2pred'],
+    subcommands=['loadbam', 'loadcsl', 'clean', 'bc1predict', 'bam2pred', 'csl2pred'],
     required=False,
-    type=click.IntRange(1, 1000),
+    type=click.IntRange(1, 100000),
     default=20,
     help='minimum total number of markers per chrom, per cb (cb with lower are filtered)'
 )
