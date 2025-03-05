@@ -17,7 +17,8 @@ if __name__ == '__main__':
         packages=[
             'snco',
         ],
-        scripts=['scripts/syri_vcf_to_stardiploid.py'],
+        scripts=['scripts/syri_vcf_to_stardiploid.py',
+                 'scripts/single_gamete_genotype.py'],
         install_requires=[
             'numpy',
             'scipy',
