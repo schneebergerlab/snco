@@ -18,7 +18,8 @@ if __name__ == '__main__':
             'snco',
         ],
         scripts=['scripts/syri_vcf_to_stardiploid.py',
-                 'scripts/single_gamete_genotype.py'],
+                 'scripts/single_gamete_genotype.py',
+                 'scripts/collapse_ha_specific_alns.py'],
         install_requires=[
             'numpy',
             'scipy',
