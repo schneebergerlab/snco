@@ -367,6 +367,62 @@ snco_opts.option(
 
 
 snco_opts.option(
+    '--hap-tag-type',
+    subcommands=['loadbam', 'bam2pred'],
+    required=False,
+    type=click.Choice(['star_diploid', 'multi_haplotype']),
+    default='star_diploid',
+    help='how the haplotype tag is encoded, see manual for details' # todo!
+)
+
+
+snco_opts.option(
+    '--genotype/--no-genotype', 'run_genotype',
+    subcommands=['loadbam', 'bam2pred'],
+    required=False,
+    default=False,
+    help='whether to use EM algorithm to infer genotypes (required --hap-tag-type="multi_haplotype")',
+)
+
+
+def _parse_crossing_combinations(ctx, param, value):
+    if value is not None:
+        value = set([frozenset(geno.split(':')) for geno in value.split(',')])
+    return value
+
+
+snco_opts.option(
+    '--crossing-combinations', 'genotype_crossing_combinations',
+    subcommands=['loadbam', 'bam2pred'],
+    required=False,
+    default=None,
+    callback=_parse_crossing_combinations,
+    help=('comma separated list of allowed combinations of parental haplotypes used in crosses, '
+          'encoded in format "hap1:hap2,hap1:hap3" etc')
+)
+
+
+snco_opts.option(
+    '--genotype-em-max-iter',
+    subcommands=['loadbam', 'bam2pred'],
+    required=False,
+    type=click.IntRange(1, 10_000),
+    default=1000,
+    help='the maximum number of iterations to run the genotyping EM algorithm for'
+)
+
+
+snco_opts.option(
+    '--genotype-em-min-delta',
+    subcommands=['loadbam', 'bam2pred'],
+    required=False,
+    type=click.FloatRange(0, 0.1),
+    default=1e-2,
+    help='the minimum difference in genotype probability between EM iterations, before stopping'
+)
+
+
+snco_opts.option(
     '--validate-barcodes/--no-validate',
     subcommands=['loadcsl', 'csl2pred'],
     required=False,

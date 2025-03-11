@@ -4,6 +4,7 @@ from copy import copy, deepcopy
 import json
 
 import numpy as np
+from scipy import sparse
 import pandas as pd
 
 from .bam import IntervalMarkerCounts
@@ -42,14 +43,13 @@ class BaseRecords:
             raise KeyError('chrom not in supplied chrom_sizes')
         if self._ndim == 1:
             shape = (self.nbins[chrom], )
-        elif self._ndim == 2:
+        elif self._ndim > 1:
             shape = (self.nbins[chrom], self._dim2_shape)
         else:
             raise NotImplementedError()
         return shape
 
     def _new_arr(self, chrom: str):
-        # todo: implement sparse form
         return np.full(self._get_arr_shape(chrom), self._init_val, dtype=np.float32)
 
     def _check_arr(self, arr: np.ndarray, chrom: str):
@@ -213,7 +213,8 @@ class BaseRecords:
         '''
         merge records from other into self.
         Cell barcodes in other that are not present in self will be created.
-        where barcodes are present in both, the marker arrays will be added together. 
+        where barcodes are present in both, the marker arrays will be added together.
+        for PredictionRecord instances, empty positions in self will be filled with non-empty from other
         '''
         if (stype := type(self)) != (otype := type(other)):
             raise ValueError(
@@ -237,8 +238,11 @@ class BaseRecords:
         for cb, cb_m in other.items():
             for chrom, m in cb_m.items():
                 s_m = s[cb, chrom]
-                s_m[np.isnan(s_m)] = 0
-                s[cb, chrom] = s_m + m
+                if np.isnan(self._init_val):
+                    mask = np.isnan(s_m) & np.isfinite(m)
+                    s_m[mask] = m[mask]
+                else:
+                    s_m += m
 
         if not inplace:
             return s
@@ -280,7 +284,7 @@ class BaseRecords:
                 json_serialisable[key] = cls._metadata_to_json(val, precision)
         elif isinstance(obj, BaseRecords):
             json_serialisable = obj._records_to_json(obj, precision)
-        elif isinstance(obj, (list, tuple, np.ndarray)):
+        elif isinstance(obj, (list, tuple, set, frozenset, np.ndarray)):
             json_serialisable = []
             for val in obj:
                 json_serialisable.append(cls._metadata_to_json(val, precision))

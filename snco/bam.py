@@ -29,15 +29,21 @@ class IntervalMarkerCounts:
     counts: dict = field(default_factory=dict)
 
     def __getitem__(self, index):
+        if index not in self.counts:
+            self.counts[index] = Counter()
         return self.counts[index]
 
     def __setitem__(self, index, val):
-        self.counts[index] = val
+        self.counts[index] = Counter(val)
 
     def deep_items(self):
         for cb, hap_counts in self.counts.items():
             for hap, val in hap_counts.items():
                 yield cb, hap, val
+
+    @classmethod
+    def new_like(cls, other):
+        return cls(other.chrom, other.bin_idx)
 
 
 class IntervalUMICounts:
@@ -98,6 +104,17 @@ class IntervalUMICounts:
         return collapsed
 
 
+def get_ha_samples(bam_fn):
+    with pysam.AlignmentFile(bam_fn) as bam:
+        for comment in bam.header['CO']:
+            if comment.startswith('ha_flag_accessions'):
+                samples = set(comment.split(' ')[1].split(','))
+                break
+        else:
+            raise ValueError('Could not find header comment with ha_flag accessions')
+    return sorted(samples)
+
+
 class BAMHaplotypeIntervalReader:
 
     '''
@@ -109,6 +126,8 @@ class BAMHaplotypeIntervalReader:
                  cb_tag='CB',
                  umi_tag='UB',
                  hap_tag='ha',
+                 hap_tag_type='star_diploid',
+                 allowed_haplotypes=None,
                  cb_whitelist=None,
                  umi_collapse_method='directional',
                  exclude_contigs=None):
@@ -117,6 +136,10 @@ class BAMHaplotypeIntervalReader:
         self._cb_tag = cb_tag
         self._umi_tag = umi_tag
         self._hap_tag = hap_tag
+        self._hap_tag_type = hap_tag_type
+        if allowed_haplotypes is not None:
+            allowed_haplotypes = frozenset(allowed_haplotypes)
+        self.haplotypes = allowed_haplotypes
         self.cb_whitelist = cb_whitelist
         self.umi_collapse_method = umi_collapse_method
         if exclude_contigs is None:
@@ -134,6 +157,8 @@ class BAMHaplotypeIntervalReader:
         self.nbins = {}
         for chrom, cs in self.chrom_sizes.items():
             self.nbins[chrom] = int(np.ceil(cs / self.bin_size))
+        if self._hap_tag_type == 'multi_haplotype' and self.haplotypes is None:
+            self.haplotypes = get_ha_samples(self._bam_fn)
 
     def fetch_interval_counts(self, chrom, bin_idx):
         '''
@@ -159,16 +184,27 @@ class BAMHaplotypeIntervalReader:
                     continue
 
             try:
-                hap = aln.get_tag(self._hap_tag) - 1
+                hap = aln.get_tag(self._hap_tag)
             except KeyError as exc:
                 raise IOError(
                     f'bam records do not all have the haplotype tag "{self._hap_tag}"'
                 ) from exc
 
-            # only keep alignments that unambiguously tag one of the haplotypes
-            if hap == -1:
-                continue
-
+            if self._hap_tag_type == 'star_diploid':
+                hap -= 1
+                if hap < 0:
+                    continue
+            elif self._hap_tag_type == 'multi_haplotype':
+                hap = frozenset(hap.split(',')).intersection(self.haplotypes)
+                if hap == self.haplotypes:
+                    continue
+                if not hap:
+                    raise ValueError(
+                        f'aln {aln.query_name} has no haplotypes that intersect with {self.haplotypes}'
+                    )
+            else:
+                raise ValueError(f'hap_tag_type "{self._hap_tag_type}" not recognised')
+            
             # only consider reads where the left mapping position is within the bin,
             # to prevent duplicates in adjacent bins
             if aln.reference_start < bin_start:
@@ -185,7 +221,8 @@ class BAMHaplotypeIntervalReader:
 
             # finally filter for barcodes in the whitelist
             # use 1mm correction to match cbs with no more than 1 mismatch to the whitelist
-            cb = self.cb_whitelist.correct(cb)
+            if self.cb_whitelist is not None:
+                cb = self.cb_whitelist.correct(cb)
 
             if cb is not None:
                 if self._umi_tag is not None:
