@@ -17,6 +17,8 @@ def update_probs(probs, sample_markers):
         for geno in genos_supported:
             marker_agg[geno] += probs[geno] * marker_count / n_genos
     agg_sum = sum(marker_agg.values())
+    if agg_sum == 0:
+        return probs
     return {geno: marker_agg[geno] / agg_sum for geno in probs}
 
 

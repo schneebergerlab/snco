@@ -4,6 +4,7 @@ and optionally UMI tags, into the snco.MarkerRecords format.
 '''
 import logging
 from functools import reduce
+from collections import defaultdict
 import itertools as it
 from joblib import Parallel, delayed
 
@@ -13,7 +14,7 @@ import pysam
 from .utils import read_cb_whitelist
 from .records import MarkerRecords
 from .bam import BAMHaplotypeIntervalReader, get_ha_samples, DEFAULT_EXCLUDE_CONTIGS
-from .genotype import genotype_from_bam_inv_counts
+from .genotype import genotype_from_bam_inv_counts, resolve_genotype_counts_to_co_markers
 from .clean import filter_low_coverage_barcodes
 
 log = logging.getLogger('snco')
@@ -69,17 +70,6 @@ def get_co_markers(bam_fn, processes=1, seq_type=None, run_genotype=False, genot
     '''
     chrom_sizes = get_chrom_sizes_bam(bam_fn, exclude_contigs=kwargs.get('exclude_contigs', None))
     bin_size = kwargs.get('bin_size')
-    if genotype_kwargs is None:
-        genotype_kwargs = {}
-    if run_genotype:
-        if genotype_kwargs.get('crossing_combinations', None) is None:
-            haplotypes = get_ha_samples(bam_fn)
-            genotype_kwargs['crossing_combinations'] = [frozenset(g) for g in it.combinations(haplotypes, r=2)]
-        if kwargs.get('hap_tag_type', 'star_diploid') != "multi_haplotype":
-            raise ValueError('must use "multi_haplotype" type hap tag to perform genotyping')
-    elif kwargs.get('hap_tag_type', 'star_diploid') == "multi_haplotype":
-        # TODO, allow multi_haplotype hap_tag_type when number of haplotypes is only 2
-        raise NotImplementedError('multi_haplotype hap_tag_type without genotyping not yet supported')
 
     log.debug(f'Starting job pool to process bam with {processes} processes')
     with Parallel(n_jobs=processes, backend='loky') as pool:
@@ -93,10 +83,37 @@ def get_co_markers(bam_fn, processes=1, seq_type=None, run_genotype=False, genot
         bin_size,
         seq_type=seq_type,
     )
+
+    if genotype_kwargs is None:
+        genotype_kwargs = {}
+
     if run_genotype:
+        if genotype_kwargs.get('crossing_combinations', None) is None:
+            haplotypes = get_ha_samples(bam_fn)
+            genotype_kwargs['crossing_combinations'] = [frozenset(g) for g in it.combinations(haplotypes, r=2)]
+        if kwargs.get('hap_tag_type', 'star_diploid') != "multi_haplotype":
+            raise ValueError('must use "multi_haplotype" type hap tag to perform genotyping')
+
         log.info(f'Genotyping barcodes with {len(genotype_kwargs["crossing_combinations"])} possible genotypes')
         genotypes, inv_counts = genotype_from_bam_inv_counts(inv_counts, **genotype_kwargs)
         co_markers.metadata['genotypes'] = genotypes
+
+    elif kwargs.get('hap_tag_type', 'star_diploid') == "multi_haplotype":
+        if genotype_kwargs.get('crossing_combinations', None):
+            if len(genotype_kwargs['crossing_combinations']) > 1:
+                raise ValueError('When haplotyping is switched off, only one crossing_combination can be provided')
+            geno = genotype_kwargs['crossing_combinations'].pop()
+        else:
+            haplotypes = get_ha_samples(bam_fn)
+            if len(haplotypes) == 2:
+                geno = frozenset(haplotypes)
+            else:
+                raise ValueError(
+                    'If haplotyping is switched off and crossing_combinations are not provided, the bam file '
+                    'can only contain two haplotypes'
+                )
+        genotypes_dummy = defaultdict(lambda: {'genotype': geno})
+        inv_counts = resolve_genotype_counts_to_co_markers(inv_counts, genotypes_dummy)
     for ic in inv_counts:
         co_markers.update(ic)
     return co_markers

@@ -1,3 +1,4 @@
+import sys
 import logging
 from datetime import datetime
 from collections import deque
@@ -54,8 +55,10 @@ class ClickLogHandler(logging.Handler):
     def emit(self, record):
         try:
             msg = self.format(record)
-            level = record.levelname.upper()
             click.echo(msg, err=True)
+            if record.levelno >= logging.ERROR:
+                click.echo(format_log_msg(record.levelname, 'Unable to continue, exiting...'), err=True)
+                sys.exit(1)
         except Exception:
             self.handleError(record)
 
