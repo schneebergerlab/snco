@@ -63,8 +63,20 @@ def mean_haplotype(cb_co_preds):
     return np.concatenate(list(cb_co_preds.values())).mean()
 
 
-def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=5e-3, max_phred_score=10):
+def geno_to_string(genotype):
+    if genotype is None:
+        return None
+    else:
+        return ':'.join(sorted(genotype))
+
+
+def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=2.5e-3, max_phred_score=10):
     qual_metrics = []
+    genotypes = co_markers.metadata.get(
+        'genotypes', defaultdict(
+            lambda: {'genotype': None, 'genotype_probability': np.nan, 'genotyping_nmarkers': np.nan}
+        )
+    )
     bg_frac = co_markers.metadata.get(
         'estimated_background_fraction', defaultdict(lambda: np.nan)
     )
@@ -75,6 +87,9 @@ def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=5e-3, max_phred
         cb_co_preds = co_preds[cb]
         qual_metrics.append([
             cb,
+            geno_to_string(genotypes[cb].get('genotype')),
+            genotypes[cb].get('genotype_probability'),
+            genotypes[cb].get('genotyping_nmarkers'),
             total_markers(cb_co_markers),
             bg_frac.get(cb, np.nan),
             n_crossovers(cb_co_preds, min_co_prob=nco_min_prob),
@@ -86,8 +101,8 @@ def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=5e-3, max_phred
         ])
     qual_metrics = pd.DataFrame(
         qual_metrics,
-        columns=['cb', 'total_markers',
-                 'bg_fraction', 'n_crossovers',
+        columns=['cb', 'geno_pred', 'geno_prob', 'geno_n_marker_reads',
+                 'co_n_marker_reads', 'bg_fraction', 'n_crossovers',
                  'accuracy_score', 'uncertainty_score',
                  'doublet_probability',
                  'coverage_score', 'mean_haplotype']
@@ -185,7 +200,7 @@ def write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics=None, precision=
 def run_stats(marker_json_fn, pred_json_fn, output_tsv_fn, *,
               co_markers=None, co_preds=None,
               cb_whitelist_fn=None, bin_size=25_000,
-              nco_min_prob_change=5e-3, output_precision=3):
+              nco_min_prob_change=2.5e-3, output_precision=3):
     '''
     Scores the quality of data and predictions for a set of haplotype calls
     generated with `predict`.

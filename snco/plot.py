@@ -113,7 +113,11 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4), ch
     if chroms is not None:
         chrom_sizes = {c: chrom_sizes[c] for c in chroms}
     fig, axes = chrom_subplots(chrom_sizes, figsize=figsize)
-    axes[0].set_ylabel('Marker coverage')
+    try:
+        hap1, hap2 = co_markers.metadata['genotypes'][cb]['genotype']
+    except KeyError:
+        hap1, hap2 = 'hap1', 'hap2'
+    axes[0].set_ylabel(f'Marker coverage ({hap1} vs {hap2})')
     cmap = LinearSegmentedColormap.from_list('hap_cmap', [ref_colour, alt_colour])
 
     if show_gt:

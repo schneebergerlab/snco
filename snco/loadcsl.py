@@ -1,13 +1,15 @@
 '''functions for converting cellsnp-lite output into snco.MarkerRecords format'''
 import os
 import logging
-from dataclasses import dataclass
+import itertools as it
 from scipy.io import mmread
 
 import pysam
 
 from .utils import read_cb_whitelist
 from .records import MarkerRecords
+from .bam import IntervalMarkerCounts
+from .genotype import genotype_from_bam_inv_counts
 from .clean import filter_low_coverage_barcodes
 
 log = logging.getLogger('snco')
@@ -25,10 +27,18 @@ def read_chrom_sizes(chrom_sizes_fn):
     return chrom_sizes
 
 
-def parse_sample_alleles(variant):
+def get_vcf_samples(vcf_fn, ref_name):
+    with pysam.VariantFile(vcf_fn) as vcf:
+        samples = set(vcf.header.samples)
+    samples.add(ref_name)
+    return frozenset(samples)
+
+
+def parse_sample_alleles(variant, ref_name):
     if len(variant.alleles) != 2:
         raise ValueError('Only biallelic variants are allowed')
     ref_samples = set()
+    ref_samples.add(ref_name)
     alt_samples = set()
     for sample_id, sample in variant.samples.items():
         if len(sample.alleles) > 1:
@@ -37,7 +47,7 @@ def parse_sample_alleles(variant):
             ref_samples.add(sample_id)
         else:
             alt_samples.add(sample_id)
-    return ref_samples, alt_samples
+    return frozenset(ref_samples), frozenset(alt_samples)
 
 
 class VariantRecords:
@@ -57,7 +67,7 @@ class VariantRecords:
         return self._samples[(contig, pos)]
 
 
-def read_vcf(vcf_fn, drop_samples=True):
+def read_vcf(vcf_fn, drop_samples=True, reference_name='col0'):
     with pysam.VariantFile(vcf_fn, drop_samples=drop_samples) as vcf:
         variants = VariantRecords()
         for record in vcf.fetch():
@@ -65,7 +75,7 @@ def read_vcf(vcf_fn, drop_samples=True):
                 sample_alleles = None
             else:
                 try:
-                    sample_alleles = parse_sample_alleles(record)
+                    sample_alleles = parse_sample_alleles(record, reference_name)
                 except ValueError:
                     continue
             variants.add(record.contig, record.pos, sample_alleles)
@@ -91,42 +101,59 @@ def parse_cellsnp_lite(csl_dir, validate_barcodes=True):
     return dep_mm, alt_mm, barcodes, variants
 
 
-@dataclass(frozen=True)
-class SNPCounts:
-    cb: str
-    chrom: str
-    pos: int
-    ref_count: int
-    alt_count: int
-    ref_samples: set = None
-    alt_samples: set = None
-
-
-def iter_cellsnp_lite_markers(csl_dir, cb_whitelist,
-                              sample_vcf_fn=None,
-                              validate_barcodes=True):
+def parse_cellsnp_lite_interval_counts(csl_dir, bin_size, cb_whitelist,
+                                       keep_genotype=False,
+                                       genotype_vcf_fn=None,
+                                       validate_barcodes=True,
+                                       reference_name='col0'):
     dep_mm, alt_mm, barcodes, variants = parse_cellsnp_lite(
         csl_dir, validate_barcodes=validate_barcodes
     )
-    if sample_vcf_fn is not None:
-        sample_alleles = read_vcf(sample_vcf_fn, drop_samples=False)
+    if keep_genotype:
+        if genotype_vcf_fn is None:
+            raise ValueError('must supply genotype_vcf_fn when using run_genotype')
+        genotype_alleles = read_vcf(
+            genotype_vcf_fn,
+            drop_samples=False,
+            reference_name=reference_name
+        )
     else:
-        sample_alleles = None
+        genotype_alleles = None
+
+    inv_counts = {}
+
     for cb_idx, var_idx, tot in zip(dep_mm.col, dep_mm.row, dep_mm.data):
         cb = barcodes[cb_idx]
         if cb in cb_whitelist:
             alt = alt_mm[var_idx, cb_idx]
             ref = tot - alt
             chrom, pos = variants[var_idx]
-            if sample_alleles is None:
-                yield SNPCounts(cb, chrom, pos, ref, alt)
+            bin_idx = pos // bin_size
+            inv_counts_idx = (chrom, bin_idx)
+            if inv_counts_idx not in inv_counts:
+                inv_counts[inv_counts_idx] = IntervalMarkerCounts(chrom, bin_idx)
+            if genotype_alleles is None:
+                inv_counts[inv_counts_idx][cb][0] += ref
+                inv_counts[inv_counts_idx][cb][1] += alt
             else:
-                ref_samples, alt_samples = sample_alleles.get_samples(chrom, pos)
-                yield SNPCounts(cb, chrom, pos, ref, alt, ref_samples, alt_samples)
+                ref_genos, alt_genos = genotype_alleles.get_samples(chrom, pos)
+                inv_counts[inv_counts_idx][cb][ref_genos] += ref
+                inv_counts[inv_counts_idx][cb][alt_genos] += alt
+    return list(inv_counts.values())
 
 
 def cellsnp_lite_to_co_markers(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist,
-                               validate_barcodes=True):
+                               validate_barcodes=True, run_genotype=False,
+                               genotype_vcf_fn=None, reference_name='col0',
+                               genotype_kwargs=None):
+
+    inv_counts = parse_cellsnp_lite_interval_counts(
+        csl_dir, bin_size, cb_whitelist,
+        keep_genotype=run_genotype,
+        genotype_vcf_fn=genotype_vcf_fn,
+        validate_barcodes=validate_barcodes,
+        reference_name=reference_name,
+    )
 
     chrom_sizes = read_chrom_sizes(chrom_sizes_fn)
     co_markers = MarkerRecords(
@@ -135,11 +162,18 @@ def cellsnp_lite_to_co_markers(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist,
         seq_type='csl_snps',
     )
 
-    for snp in iter_cellsnp_lite_markers(csl_dir, cb_whitelist,
-                                         validate_barcodes=validate_barcodes):
-        bin_idx = snp.pos // bin_size
-        co_markers[snp.cb, snp.chrom, bin_idx, 0] += snp.ref_count
-        co_markers[snp.cb, snp.chrom, bin_idx, 1] += snp.alt_count
+    if run_genotype:
+        if genotype_kwargs is None:
+            genotype_kwargs = {}
+        if genotype_kwargs.get('crossing_combinations', None) is None:
+            haplotypes = get_vcf_samples(genotype_vcf_fn, reference_name)
+            genotype_kwargs['crossing_combinations'] = [frozenset(g) for g in it.combinations(haplotypes, r=2)]
+        log.info(f'Genotyping barcodes with {len(genotype_kwargs["crossing_combinations"])} possible genotypes')
+        genotypes, inv_counts = genotype_from_bam_inv_counts(inv_counts, **genotype_kwargs)
+        co_markers.metadata['genotypes'] = genotypes
+
+    for ic in inv_counts:
+        co_markers.update(ic)
 
     return co_markers
 
@@ -147,7 +181,10 @@ def cellsnp_lite_to_co_markers(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist,
 def run_loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, *,
                 cb_whitelist_fn=None, bin_size=25_000,
                 min_markers_per_cb=100, min_markers_per_chrom=20,
-                validate_barcodes=True):
+                run_genotype=False, genotype_vcf_fn=None,
+                genotype_crossing_combinations=None, reference_genotype_name='col0',
+                genotype_em_max_iter=1000, genotype_em_min_delta=1e-3,
+                validate_barcodes=True, processes=1):
     '''
     Read matrix files generated by cell snp lite to generate a json file of binned
     haplotype marker distributions for each cell barcode. These can be used to
@@ -161,6 +198,15 @@ def run_loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, *,
         bin_size=bin_size,
         cb_whitelist=cb_whitelist,
         validate_barcodes=validate_barcodes,
+        run_genotype=run_genotype,
+        genotype_vcf_fn=genotype_vcf_fn,
+        reference_name=reference_genotype_name,
+        genotype_kwargs={
+            'crossing_combinations': genotype_crossing_combinations,
+            'max_iter': genotype_em_max_iter,
+            'min_delta': genotype_em_min_delta,
+            'processes': processes
+        },
     )
     n = len(co_markers)
     log.info(f'Identified {n} cell barcodes from cellsnp-lite files')
@@ -169,7 +215,7 @@ def run_loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, *,
             co_markers, min_markers_per_cb, min_markers_per_chrom
         )
         log.info(
-            f'Removed {n - len(co_markers)} barcodes with fewer than {min_markers_per_cb} markers'
+            f'Removed {n - len(co_markers)} barcodes with fewer than {min_markers_per_cb} markers '
             f'or fewer than {min_markers_per_chrom} markers per chromosome'
         )
     if output_json_fn is not None:

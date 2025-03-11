@@ -5,7 +5,7 @@ import click
 import numpy as np
 
 from .logger import click_logger
-from .bam import DEFAULT_EXCLUDE_CONTIGS
+from .bam import DEFAULT_EXCLUDE_CONTIGS, get_ha_samples
 
 log = logging.getLogger('snco')
 DEFAULT_RANDOM_SEED = 101
@@ -90,7 +90,7 @@ def validate_loadbam_input(func):
                 kwargs['umi_tag'] = None
                 kwargs['umi_collapse_method'] = None
             elif seq_type is None:
-                raise click.BadParameter("'-x' / '--seq-type' must be specified when '--umi-collapse-method' is set to 'auto'")
+                log.error("'-x' / '--seq-type' must be specified when '--umi-collapse-method' is set to 'auto'")
         elif kwargs.get('umi_collapse_method') == 'none':
             log.info('turning off UMI processing')
             kwargs['umi_tag'] = None
@@ -101,8 +101,33 @@ def validate_loadbam_input(func):
         if kwargs.get('umi_tag') == 'UB' and kwargs.get('umi_collapse_method') == 'directional':
             log.warn("'--umi-tag' is set to 'UB', which usually indicates pre-corrected UMIs, but "
                      "'--cb-correction-method' is set to 'directional'. This may lead to overcorrection")
+        if kwargs.get('run_genotype') and kwargs.get('hap_tag_type') == "star_diploid":
+            log.error('--hap-tag-type must be "multi_haplotype" when --genotype is switched on')
+        if not kwargs.get('run_genotype') and kwargs.get('hap_tag_type') == "multi_haplotype":
+            crossing_combinations = kwargs.get('genotype_crossing_combinations')
+            if crossing_combinations is not None:
+                if len(crossing_combinations) != 1:
+                    log.error('when --genotype is switched off only one --crossing-combinations can be provided')
+            else:
+                genotypes = get_ha_samples(kwargs['bam_fn'])
+                if len(genotypes) != 2:
+                    log.error(
+                        'when --genotype is switched off and no --crossing-combinations are provided, '
+                        'the bam file can only contain two haplotypes'
+                    )
         return func(**kwargs)
     return _validate
+
+
+@snco_opts.callback(['loadcsl', 'csl2pred'])
+def validate_loadcsl_input(func):
+    '''decorator to validate the input of the loadcsl command'''
+    def _validate(**kwargs):
+        if kwargs.get('run_genotype') and kwargs.get('genotype_vcf_fn') is None:
+            log.error('--genotype-vcf-fn must be provided when --haplotype is switched on')
+        return func(**kwargs)
+    return _validate
+
 
 
 @snco_opts.callback(['predict', 'bc1predict', 'bam2pred', 'csl2pred'])
@@ -113,9 +138,9 @@ def validate_pred_input(func):
         seg_size = kwargs.get('segment_size')
         tseg_size = kwargs.get('terminal_segment_size')
         if seg_size < bin_size:
-            raise click.BadParameter("'-R' / '--segment-size' cannot be less than '-N' / '--bin-size'")
+            log.error("'-R' / '--segment-size' cannot be less than '-N' / '--bin-size'")
         if tseg_size < bin_size:
-            raise click.BadParameter("'-t' / '--terminal-segment-size' cannot be less than '-N' / '--bin-size'")
+            log.error("'-t' / '--terminal-segment-size' cannot be less than '-N' / '--bin-size'")
         return func(**kwargs)
     return _validate
 
@@ -258,6 +283,15 @@ snco_opts.option(
 
 
 snco_opts.option(
+    '-g', '--genotype-vcf-fn',
+    subcommands=['loadcsl', 'csl2pred'],
+    required=False,
+    type=_input_file_type,
+    help='VCF file containing all the parental genotype SNPs'
+)
+
+
+snco_opts.option(
     '-m', '--mask-bed-fn',
     subcommands=['clean', 'bam2pred', 'csl2pred', 'bc1predict'],
     required=False,
@@ -367,6 +401,70 @@ snco_opts.option(
 
 
 snco_opts.option(
+    '--hap-tag-type',
+    subcommands=['loadbam', 'bam2pred'],
+    required=False,
+    type=click.Choice(['star_diploid', 'multi_haplotype']),
+    default='star_diploid',
+    help='how the haplotype tag is encoded, see manual for details' # todo!
+)
+
+
+snco_opts.option(
+    '--genotype/--no-genotype', 'run_genotype',
+    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred'],
+    required=False,
+    default=False,
+    help='whether to use EM algorithm to infer genotypes (requires --hap-tag-type="multi_haplotype")',
+)
+
+
+def _parse_crossing_combinations(ctx, param, value):
+    if value is not None:
+        value = set([frozenset(geno.split(':')) for geno in value.split(',')])
+    return value
+
+
+snco_opts.option(
+    '-X', '--crossing-combinations', 'genotype_crossing_combinations',
+    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred'],
+    required=False,
+    default=None,
+    callback=_parse_crossing_combinations,
+    help=('comma separated list of allowed combinations of parental haplotypes used in crosses, '
+          'encoded in format "hap1:hap2,hap1:hap3" etc')
+)
+
+
+snco_opts.option(
+    '--genotype-em-max-iter',
+    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred'],
+    required=False,
+    type=click.IntRange(1, 10_000),
+    default=1000,
+    help='the maximum number of iterations to run the genotyping EM algorithm for'
+)
+
+snco_opts.option(
+    '--genotype-em-min-delta',
+    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred'],
+    required=False,
+    type=click.FloatRange(0, 0.1),
+    default=1e-3,
+    help='the minimum difference in genotype probability between EM iterations, before stopping'
+)
+
+
+snco_opts.option(
+    '--reference-geno-name', 'reference_genotype_name',
+    subcommands=['loadcsl', 'csl2pred'],
+    required=False,
+    default='col0',
+    help='name of the reference genotype (alt genotype names are taken from vcf samples)',
+)
+
+
+snco_opts.option(
     '--validate-barcodes/--no-validate',
     subcommands=['loadcsl', 'csl2pred'],
     required=False,
@@ -399,7 +497,7 @@ def _parse_merge_suffixes(ctx, param, value):
     if value is not None:
         value = value.strip(',')
         if not re.match('^[a-zA-Z0-9,]+$', value):
-            raise click.BadParameter('merge suffixes must be alphanumeric only')
+            log.error('merge suffixes must be alphanumeric only')
         value = value.split(',')
     return value
 
@@ -624,7 +722,7 @@ snco_opts.option(
     subcommands=['stats', 'predict', 'plot', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.FloatRange(0.0, 1.0),
-    default=5e-3,
+    default=2.5e-3,
     help=('Minimum probability change to take into account when estimating stats e.g. number of '
           'crossovers from the haplotype predictions.')
 )
@@ -748,7 +846,7 @@ snco_opts.option(
 
 snco_opts.option(
     '-p', '--processes',
-    subcommands=['loadbam', 'bam2pred', 'predict', 'bc1predict', 'doublet'],
+    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred', 'predict', 'bc1predict', 'doublet'],
     required=False,
     type=click.IntRange(min=1),
     default=1,
@@ -774,17 +872,17 @@ def _check_device(ctx, param, value):
         device_type, device_number = value.split(':')
         device_number = int(device_number)
     except ValueError as exc:
-        raise click.BadParameter(
+        log.error(
             'device format should be "cpu" or device:number e.g. "cuda:0"'
-        ) from exc
+        )
     if device_type not in {'cuda', 'mps'}:
-        raise click.BadParameter(f'unrecognised device type {device_type}')
+        log.error(f'unrecognised device type {device_type}')
 
     n_devices = getattr(torch, device_type).device_count()
     if not n_devices:
-        raise click.BadParameter(f'no devices available of type {device_type}')
+        log.error(f'no devices available of type {device_type}')
     if (device_number + 1) > n_devices:
-        raise click.BadParameter(
+        log.error(
             f'device number is too high, only {n_devices} device of type {device_type} avaiable'
         )
     return torch.device(value)
