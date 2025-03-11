@@ -290,6 +290,8 @@ class BaseRecords:
                 json_serialisable.append(cls._metadata_to_json(val, precision))
         elif isinstance(obj, (float, np.floating)):
             json_serialisable = round(float(obj), precision)
+        elif isinstance(obj, np.integer):
+            json_serialisable = int(obj)
         elif isinstance(obj, (str, int, bool)) or obj is None:
             json_serialisable = obj
         elif isinstance(obj, np.bool_):

@@ -112,7 +112,7 @@ def run_loadbam(bam_fn, output_json_fn, *,
                 min_markers_per_cb=100, min_markers_per_chrom=20,
                 exclude_contigs=None, processes=1):
     '''
-    Read bam file with cell barcode, umi and haplotype tags (aligned with STAR solo+diploid), 
+    Read bam file with cell barcode, umi and haplotype tags, 
     to generate a json file of binned haplotype marker distributions for each cell barcode. 
     These can be used to call recombinations using the downstream `predict` command.
     '''

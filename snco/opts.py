@@ -258,6 +258,15 @@ snco_opts.option(
 
 
 snco_opts.option(
+    '-g', '--genotype-vcf-fn',
+    subcommands=['loadcsl', 'csl2pred'],
+    required=False,
+    type=_input_file_type,
+    help='VCF file containing all the parental genotype SNPs'
+)
+
+
+snco_opts.option(
     '-m', '--mask-bed-fn',
     subcommands=['clean', 'bam2pred', 'csl2pred', 'bc1predict'],
     required=False,
@@ -378,7 +387,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--genotype/--no-genotype', 'run_genotype',
-    subcommands=['loadbam', 'bam2pred'],
+    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred'],
     required=False,
     default=False,
     help='whether to use EM algorithm to infer genotypes (required --hap-tag-type="multi_haplotype")',
@@ -393,7 +402,7 @@ def _parse_crossing_combinations(ctx, param, value):
 
 snco_opts.option(
     '--crossing-combinations', 'genotype_crossing_combinations',
-    subcommands=['loadbam', 'bam2pred'],
+    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred'],
     required=False,
     default=None,
     callback=_parse_crossing_combinations,
@@ -404,21 +413,29 @@ snco_opts.option(
 
 snco_opts.option(
     '--genotype-em-max-iter',
-    subcommands=['loadbam', 'bam2pred'],
+    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.IntRange(1, 10_000),
     default=1000,
     help='the maximum number of iterations to run the genotyping EM algorithm for'
 )
 
-
 snco_opts.option(
     '--genotype-em-min-delta',
-    subcommands=['loadbam', 'bam2pred'],
+    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.FloatRange(0, 0.1),
     default=1e-2,
     help='the minimum difference in genotype probability between EM iterations, before stopping'
+)
+
+
+snco_opts.option(
+    '--reference-geno-name', 'reference_genotype_name',
+    subcommands=['loadcsl', 'csl2pred'],
+    required=False,
+    default='col0',
+    help='name of the reference genotype (alt genotype names are taken from vcf samples)',
 )
 
 
