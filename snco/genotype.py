@@ -17,12 +17,10 @@ def update_probs(probs, sample_markers):
         for geno in genos_supported:
             marker_agg[geno] += probs[geno] * marker_count / n_genos
     agg_sum = sum(marker_agg.values())
-    if not agg_sum:
-        return probs
     return {geno: marker_agg[geno] / agg_sum for geno in probs}
 
 
-def assign_genotype_with_em(cb, cb_geno_markers, *, crossing_combinations, max_iter=1000, min_delta=1e-2):
+def assign_genotype_with_em(cb, cb_geno_markers, *, crossing_combinations, max_iter=1000, min_delta=1e-3):
     n_genos = len(crossing_combinations)
     probs = {geno: 1 / n_genos for geno in crossing_combinations}
     for _ in range(max_iter):

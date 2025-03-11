@@ -425,7 +425,7 @@ snco_opts.option(
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.FloatRange(0, 0.1),
-    default=1e-2,
+    default=1e-3,
     help='the minimum difference in genotype probability between EM iterations, before stopping'
 )
 
@@ -697,7 +697,7 @@ snco_opts.option(
     subcommands=['stats', 'predict', 'plot', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.FloatRange(0.0, 1.0),
-    default=5e-3,
+    default=2.5e-3,
     help=('Minimum probability change to take into account when estimating stats e.g. number of '
           'crossovers from the haplotype predictions.')
 )
@@ -821,7 +821,7 @@ snco_opts.option(
 
 snco_opts.option(
     '-p', '--processes',
-    subcommands=['loadbam', 'bam2pred', 'predict', 'bc1predict', 'doublet'],
+    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred', 'predict', 'bc1predict', 'doublet'],
     required=False,
     type=click.IntRange(min=1),
     default=1,

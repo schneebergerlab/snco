@@ -108,7 +108,7 @@ def run_loadbam(bam_fn, output_json_fn, *,
                 umi_tag='UB', umi_collapse_method='directional',
                 hap_tag='ha', hap_tag_type='star_diploid',
                 run_genotype=False, genotype_crossing_combinations=None,
-                genotype_em_max_iter=1000, genotype_em_min_delta=1e-2,
+                genotype_em_max_iter=1000, genotype_em_min_delta=1e-3,
                 min_markers_per_cb=100, min_markers_per_chrom=20,
                 exclude_contigs=None, processes=1):
     '''
