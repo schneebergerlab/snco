@@ -473,6 +473,15 @@ snco_opts.option(
 )
 
 
+snco_opts.option(
+    '--count-snps-only/--count-cov-per-snp', 'snp_counts_only',
+    subcommands=['loadcsl', 'csl2pred'],
+    required=False,
+    default=False,
+    help='whether to record snp coverage or just consensus genotype of snp',
+)
+
+
 def _parse_excl_contigs(ctx, param, value):
     if value is None:
         value = DEFAULT_EXCLUDE_CONTIGS
@@ -561,6 +570,17 @@ snco_opts.option(
     default=0.5,
     help='the estimated background marker rate to allow before filtering'
 )
+
+
+snco_opts.option(
+    '--min-genotyping-prob', 'min_geno_prob',
+    subcommands=['clean', 'bam2pred', 'csl2pred'],
+    required=False,
+    type=click.FloatRange(0.0, 1.0),
+    default=0.9,
+    help='for samples with genotyping, the minimum probability of the assigned genotype'
+)
+
 
 
 snco_opts.option(

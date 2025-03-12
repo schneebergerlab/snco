@@ -21,6 +21,18 @@ def filter_low_coverage_barcodes(co_markers, min_cov=0, min_cov_per_chrom=0):
     return co_markers_f
 
 
+def filter_genotyping_score(co_markers, min_geno_prob=0.9):
+    try:
+        genotypes = co_markers.metadata['genotypes']
+    except KeyError:
+        return co_markers
+    co_markers_f = co_markers.copy()
+    for cb in co_markers_f.barcodes:
+        if genotypes[cb]['genotype_probability'] < min_geno_prob:
+            co_markers_f.pop(cb)
+    return co_markers_f
+
+
 def predict_foreground_convolution(m, ws=100):
     rs = convolve1d(m, np.ones(ws), axis=0, mode='constant', cval=0)
     fg_idx = rs.argmax(axis=1)
@@ -44,7 +56,6 @@ def estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg
         tot_count = 0
         for chrom, m in cb_co_markers.items():
             bg = _estimate_marker_background(m, conv_bins)
-
             if chrom not in bg_signal:
                 bg_signal[chrom] = bg
             else:
@@ -168,7 +179,7 @@ def run_clean(marker_json_fn, output_json_fn, *,
               co_markers=None,
               cb_whitelist_fn=None, mask_bed_fn=None, bin_size=25_000,
               min_markers_per_cb=0, min_markers_per_chrom=0, max_bin_count=20,
-              clean_bg=True, bg_window_size=2_500_000, max_frac_bg=0.2,
+              clean_bg=True, bg_window_size=2_500_000, max_frac_bg=0.2, min_geno_prob=0.9,
               mask_imbalanced=True, max_marker_imbalance=0.75,
               rng=DEFAULT_RNG):
     '''
@@ -186,6 +197,12 @@ def run_clean(marker_json_fn, output_json_fn, *,
         log.info(
             f'Removed {n - len(co_markers)} barcodes with fewer than {min_markers_per_cb} markers '
             f'or fewer than {min_markers_per_chrom} markers per chromosome'
+        )
+    n = len(co_markers)
+    if min_geno_prob:
+        co_markers = filter_genotyping_score(co_markers, min_geno_prob)
+        log.info(
+            f'Removed {n - len(co_markers)} barcodes with genotyping probability < {min_geno_prob}'
         )
 
     n = len(co_markers)

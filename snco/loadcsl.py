@@ -9,7 +9,7 @@ import pysam
 from .utils import read_cb_whitelist
 from .records import MarkerRecords
 from .bam import IntervalMarkerCounts
-from .genotype import genotype_from_bam_inv_counts
+from .genotype import genotype_from_inv_counts
 from .clean import filter_low_coverage_barcodes
 
 log = logging.getLogger('snco')
@@ -102,6 +102,7 @@ def parse_cellsnp_lite(csl_dir, validate_barcodes=True):
 
 
 def parse_cellsnp_lite_interval_counts(csl_dir, bin_size, cb_whitelist,
+                                       snp_counts_only=False,
                                        keep_genotype=False,
                                        genotype_vcf_fn=None,
                                        validate_barcodes=True,
@@ -127,6 +128,15 @@ def parse_cellsnp_lite_interval_counts(csl_dir, bin_size, cb_whitelist,
         if cb in cb_whitelist:
             alt = alt_mm[var_idx, cb_idx]
             ref = tot - alt
+            if snp_counts_only:
+                if alt > ref:
+                    alt = 1.0
+                    ref = 0.0
+                elif ref > alt:
+                    alt = 0.0
+                    ref = 1.0
+                else:
+                    continue
             chrom, pos = variants[var_idx]
             bin_idx = pos // bin_size
             inv_counts_idx = (chrom, bin_idx)
@@ -143,12 +153,13 @@ def parse_cellsnp_lite_interval_counts(csl_dir, bin_size, cb_whitelist,
 
 
 def cellsnp_lite_to_co_markers(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist,
-                               validate_barcodes=True, run_genotype=False,
-                               genotype_vcf_fn=None, reference_name='col0',
-                               genotype_kwargs=None):
+                               validate_barcodes=True, snp_counts_only=False,
+                               run_genotype=False, genotype_vcf_fn=None,
+                               reference_name='col0', genotype_kwargs=None):
 
     inv_counts = parse_cellsnp_lite_interval_counts(
         csl_dir, bin_size, cb_whitelist,
+        snp_counts_only=snp_counts_only,
         keep_genotype=run_genotype,
         genotype_vcf_fn=genotype_vcf_fn,
         validate_barcodes=validate_barcodes,
@@ -169,7 +180,7 @@ def cellsnp_lite_to_co_markers(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist,
             haplotypes = get_vcf_samples(genotype_vcf_fn, reference_name)
             genotype_kwargs['crossing_combinations'] = [frozenset(g) for g in it.combinations(haplotypes, r=2)]
         log.info(f'Genotyping barcodes with {len(genotype_kwargs["crossing_combinations"])} possible genotypes')
-        genotypes, inv_counts = genotype_from_bam_inv_counts(inv_counts, **genotype_kwargs)
+        genotypes, inv_counts = genotype_from_inv_counts(inv_counts, **genotype_kwargs)
         co_markers.metadata['genotypes'] = genotypes
 
     for ic in inv_counts:
@@ -179,7 +190,7 @@ def cellsnp_lite_to_co_markers(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist,
 
 
 def run_loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, *,
-                cb_whitelist_fn=None, bin_size=25_000,
+                cb_whitelist_fn=None, bin_size=25_000, snp_counts_only=False,
                 min_markers_per_cb=100, min_markers_per_chrom=20,
                 run_genotype=False, genotype_vcf_fn=None,
                 genotype_crossing_combinations=None, reference_genotype_name='col0',

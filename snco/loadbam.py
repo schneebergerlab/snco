@@ -14,7 +14,7 @@ import pysam
 from .utils import read_cb_whitelist
 from .records import MarkerRecords
 from .bam import BAMHaplotypeIntervalReader, get_ha_samples, DEFAULT_EXCLUDE_CONTIGS
-from .genotype import genotype_from_bam_inv_counts, resolve_genotype_counts_to_co_markers
+from .genotype import genotype_from_inv_counts, resolve_genotype_counts_to_co_markers
 from .clean import filter_low_coverage_barcodes
 
 log = logging.getLogger('snco')
@@ -95,7 +95,7 @@ def get_co_markers(bam_fn, processes=1, seq_type=None, run_genotype=False, genot
             raise ValueError('must use "multi_haplotype" type hap tag to perform genotyping')
 
         log.info(f'Genotyping barcodes with {len(genotype_kwargs["crossing_combinations"])} possible genotypes')
-        genotypes, inv_counts = genotype_from_bam_inv_counts(inv_counts, **genotype_kwargs)
+        genotypes, inv_counts = genotype_from_inv_counts(inv_counts, **genotype_kwargs)
         co_markers.metadata['genotypes'] = genotypes
 
     elif kwargs.get('hap_tag_type', 'star_diploid') == "multi_haplotype":

@@ -67,7 +67,7 @@ def resolve_genotype_counts_to_co_markers(inv_counts, genotypes):
     return resolved_inv_counts
 
 
-def genotype_from_bam_inv_counts(inv_counts, **kwargs):
+def genotype_from_inv_counts(inv_counts, **kwargs):
     genotype_markers = defaultdict(Counter)
     for ic in inv_counts:
         for cb, cb_counts in ic.counts.items():
