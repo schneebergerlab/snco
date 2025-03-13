@@ -110,7 +110,7 @@ class CellBarcodeWhitelist:
         return copy(self.whitelist_ordered)
 
 
-def umi_dedup_directional(hap_umi_counts):
+def umi_dedup_directional(umi_hap_counts):
     '''
     Deduplicate UMIs using the directional method (UMItools)
     for a collection of UMIs aligning to the same gene/genomic bin,
@@ -119,7 +119,7 @@ def umi_dedup_directional(hap_umi_counts):
     Parameters
     ----------
     umi_counts : dict of Counter
-        Dictionary of hap:UMI:count information
+        Dictionary of UMI:hap:count information
 
     Returns
     -------
@@ -127,7 +127,7 @@ def umi_dedup_directional(hap_umi_counts):
         Dictionary of deduplicated UMI:hap:count information
     '''
     edges = defaultdict(set)
-    umi_counts = reduce(add, hap_umi_counts.values())
+    umi_counts = {umi: hap_counts.total() for umi, hap_counts in umi_hap_counts.items()}
     nodes = sorted(umi_counts, key=umi_counts.__getitem__, reverse=True)
     for umi_i, umi_j in it.combinations(nodes, r=2):
         if edit_dist(umi_i, umi_j) <= 1:
@@ -135,13 +135,12 @@ def umi_dedup_directional(hap_umi_counts):
             umi_j_count = umi_counts[umi_j]
             if umi_i_count >= (2 * umi_j_count + 1):
                 edges[umi_i].add(umi_j)
-    deduped = deepcopy(hap_umi_counts)
-    for umi_counts in deduped.values():
-        for parent in nodes:
-            for child in edges[parent]:
-                try:
-                    umi_counts[parent] += umi_counts.pop(child)
-                except KeyError:
-                    # umi already merged to a different parent
-                    continue
+    deduped = deepcopy(umi_hap_counts)
+    for parent in nodes:
+        for child in edges[parent]:
+            try:
+                deduped[parent] += deduped.pop(child)
+            except KeyError:
+                # umi already merged to a different parent
+                continue
     return deduped

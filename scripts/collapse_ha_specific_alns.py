@@ -94,9 +94,8 @@ def collapse_bam_alignments(bam_fns, processes=2, infer_rg=False, position_toler
     accessions.sort()
     header.pop('RG', None)
 
-    header['CO'].append(
-        'ha_flag_accessions: ' + ','.join(accessions)
-    )
+    header['HD']['ha'] = ','.join(accessions)
+
     header['PG'].append(
         {
             'ID': os.path.split(sys.argv[0])[1],
