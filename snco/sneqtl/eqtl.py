@@ -79,6 +79,25 @@ def estimate_effective_haplotypes(hap_corrs):
     return H_eff
 
 
+def get_genotype_haplotype_dummies(parental_genotypes):
+    parental_haplotypes = parental_genotypes.str.split(':', expand=True)
+    haplotype_dummies_ordered = []
+    for _, h in parental_haplotypes.items():
+        haplotype_dummies_ordered.append(utils.get_dummies(h, prefix='phap'))
+    parental_haplotype_dummies = utils.merge_sum_overlapping_columns(haplotype_dummies_ordered)
+    if (parental_haplotype_dummies > 1).any(axis=None):
+        raise ValueError('Some parental genotypes are not hybrids e.g. col0:col0')
+    # if all crosses share a common parent, parental genotypes are sufficient
+    parental_haplotype_dummies = parental_haplotype_dummies.loc[:, ~parental_haplotype_dummies.all(axis=0)]
+    return parental_haplotype_dummies, haplotype_dummies_ordered
+
+
+def expand_haplotypes(haplotype, parental_haplotypes):
+    hap1 = utils.expanding_mul(1 - haplotype, parental_haplotypes[0])
+    hap2 = utils.expanding_mul(haplotype, parental_haplotypes[1])
+    return utils.merge_sum_overlapping_columns([hap1, hap2])
+
+
 class SNeQTLAnalysis:
 
     def __init__(self, exprs_mat, haplotypes, cb_whitelist=None, covariates=None,
@@ -98,7 +117,9 @@ class SNeQTLAnalysis:
         self.model_type = 'ols'
 
         self.interacting_variables = utils.get_dummies(interacting_variables)
-        self.parental_genotypes = utils.get_dummies(parental_genotypes)
+        self.parental_genotypes, self.parental_haplotypes = get_genotype_haplotype_dummies(
+            parental_genotypes
+        )
 
         if control_haplotypes is not None:
             control_haplotypes_exact = []
@@ -165,7 +186,7 @@ class SNeQTLAnalysis:
             haplo = self.haplotypes.loc[:, (chrom, pos)]
             haplo_variables = haplo.rename('haplo').to_frame()
             if not self.parental_genotypes.empty:
-                haplo_variables = utils.expanding_mul(
+                haplo_variables = expand_haplotypes(
                     haplo_variables, self.parental_genotypes
                 )
             if not self.interacting_variables.empty:
@@ -348,7 +369,7 @@ def run_eqtl(exprs_mat_dir, pred_json_fn, cb_stats_fn, output_prefix, gtf_fn=Non
              min_cells_exprs=0.02,
              control_principal_components=True, min_pc_var_explained=0.01,
              max_pc_haplotype_var_explained=0.05, covar_names=None,
-             model_parental_genotype=False, parental_genotype_colname='geno',
+             model_parental_genotype=False,
              celltype_haplotype_interaction=False, celltype_n_clusters=None,
              control_haplotypes=None, control_cis_haplotype=False,
              control_haplotypes_r2=0.95, cb_filter_exprs=None,
@@ -394,13 +415,17 @@ def run_eqtl(exprs_mat_dir, pred_json_fn, cb_stats_fn, output_prefix, gtf_fn=Non
         celltype_clusters = None
 
     if model_parental_genotype and cb_stats is not None:
-        parental_genotypes = cb_stats[parental_genotype_colname]
-        n_geno = len(parental_genotypes.unique())
+        parental_genotypes = cb_stats[['geno_pred']]
+        n_geno = len(parental_genotypes.geno.unique())
         if n_geno == 1:
             log.warn('All parental (diploid) genotypes are the same. Genotype will not be modelled')
             parental_genotypes = None
         else:
             log.info(f'There are {n_geno} parental (diploid) genotypes to be tested')
+            parental_genotypes.loc[
+                :, ['geno_hap1', 'geno_hap2']
+            ] = parental_genotypes.geno_pred.str.split(':', expand=True).values
+
     else:
         log.info('No parental (diploid) genotypes provided. Genotypes are assumed to be the same for all nuclei')
         parental_genotypes = None

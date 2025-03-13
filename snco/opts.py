@@ -1007,7 +1007,7 @@ sneqtl_opts.option(
     subcommands=['eqtl', 'peakcall'],
     required=False,
     type=_input_file_type,
-    help='cell barcode stats'
+    help='cell barcode stats (output of snco predict/stats)'
 )
 
 
@@ -1162,7 +1162,7 @@ sneqtl_opts.option(
     subcommands=['eqtl'],
     required=False,
     type=str,
-    default=None,
+    default='None',
     help=('expression used to filter barcodes by column in --cb-stats-fn '
           'e.g. "doublet_probability < 0.5"')
 )

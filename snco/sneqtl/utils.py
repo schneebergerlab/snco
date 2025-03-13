@@ -17,10 +17,10 @@ def whitelist_filter(df, whitelist):
         return df.loc[whitelist]
 
 
-def get_dummies(df, drop_first=False):
+def get_dummies(df, **kwargs):
     if df is None or df.empty:
         return pd.DataFrame()
-    dummies = pd.get_dummies(df, drop_first=drop_first).astype('float')
+    dummies = pd.get_dummies(df, **kwargs).astype('float')
     return dummies
 
 
@@ -57,6 +57,11 @@ def expanding_mul(df1, df2, join_char='_'):
     }, axis=1)
     product.columns = [join_char.join(colname).strip() for colname in product.columns.values]
     return product
+
+
+def merge_sum_overlapping_columns(dfs):
+    df = pd.concat(dfs, axis=1)
+    return df.T.groupby(level=0).sum().T
 
 
 def align_input(exprs_mat, haplotypes, cb_whitelist=None, covariates=None,
