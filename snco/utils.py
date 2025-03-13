@@ -1,4 +1,8 @@
 import logging
+from collections import Counter
+
+import numpy as np
+
 from .barcodes import CellBarcodeWhitelist
 from .records import MarkerRecords, PredictionRecords
 
@@ -54,3 +58,23 @@ def load_json(json_fn, cb_whitelist_fn, bin_size, data_type='markers', subset=No
             raise ValueError('No CBs from --cb-whitelist-fn are present in json-fn')
         log.info(f'{len(data)} barcodes remain after cb whitelist filtering')
     return data
+
+
+def spawn_child_rngs(rng):
+    while True:
+        yield np.random.default_rng(rng.spawn(1)[0])
+
+
+def genotyping_results_formatter(genotypes):
+    geno_counts = Counter(
+        [':'.join(sorted(cb_g['genotype'])) for cb_g in genotypes.values()]
+    )
+    fmt = 'Genotyping results:\n'
+    ljust_size = max([len(g) for g in geno_counts.keys()]) + 5
+    ljust_size = max(ljust_size, 12)
+    fmt += f'   Genotype'.ljust(ljust_size)
+    fmt += 'Num. barcodes\n'
+    for geno, count in geno_counts.most_common():
+        fmt += f'   {geno}'.ljust(ljust_size)
+        fmt += f'{count}\n'
+    return fmt

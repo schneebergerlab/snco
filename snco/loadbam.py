@@ -11,13 +11,16 @@ from joblib import Parallel, delayed
 import numpy as np
 import pysam
 
-from .utils import read_cb_whitelist
+from .utils import read_cb_whitelist, genotyping_results_formatter
 from .records import MarkerRecords
 from .bam import BAMHaplotypeIntervalReader, get_ha_samples, DEFAULT_EXCLUDE_CONTIGS
 from .genotype import genotype_from_inv_counts, resolve_genotype_counts_to_co_markers
-from .clean import filter_low_coverage_barcodes
+from .clean import filter_low_coverage_barcodes, filter_genotyping_score
+from .opts import DEFAULT_RANDOM_SEED
+
 
 log = logging.getLogger('snco')
+DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 
 
 def get_chrom_sizes_bam(bam_fn, exclude_contigs=None):
@@ -96,6 +99,8 @@ def get_co_markers(bam_fn, processes=1, seq_type=None, run_genotype=False, genot
 
         log.info(f'Genotyping barcodes with {len(genotype_kwargs["crossing_combinations"])} possible genotypes')
         genotypes, inv_counts = genotype_from_inv_counts(inv_counts, **genotype_kwargs)
+        if log.getEffectiveLevel() <= logging.DEBUG:
+            log.debug(genotyping_results_formatter(genotypes))
         co_markers.metadata['genotypes'] = genotypes
 
     elif kwargs.get('hap_tag_type', 'star_diploid') == "multi_haplotype":
@@ -126,8 +131,9 @@ def run_loadbam(bam_fn, output_json_fn, *,
                 hap_tag='ha', hap_tag_type='star_diploid',
                 run_genotype=False, genotype_crossing_combinations=None,
                 genotype_em_max_iter=1000, genotype_em_min_delta=1e-3,
-                min_markers_per_cb=100, min_markers_per_chrom=20,
-                exclude_contigs=None, processes=1):
+                genotype_em_bootstraps=25,
+                min_markers_per_cb=100, min_markers_per_chrom=20, min_geno_prob=0.9,
+                exclude_contigs=None, processes=1, rng=DEFAULT_RNG):
     '''
     Read bam file with cell barcode, umi and haplotype tags, 
     to generate a json file of binned haplotype marker distributions for each cell barcode. 
@@ -148,7 +154,10 @@ def run_loadbam(bam_fn, output_json_fn, *,
             'crossing_combinations': genotype_crossing_combinations,
             'max_iter': genotype_em_max_iter,
             'min_delta': genotype_em_min_delta,
-            'processes': processes, 
+            'n_bootstraps': genotype_em_bootstraps,
+            'min_markers_per_cb': min_markers_per_cb,
+            'processes': processes,
+            'rng': rng
         },
         cb_whitelist=cb_whitelist,
         exclude_contigs=exclude_contigs,
@@ -162,6 +171,12 @@ def run_loadbam(bam_fn, output_json_fn, *,
         log.info(
             f'Removed {n - len(co_markers)} barcodes with fewer than {min_markers_per_cb} markers '
             f'or fewer than {min_markers_per_chrom} markers per chromosome'
+        )
+    n = len(co_markers)
+    if min_geno_prob:
+        co_markers = filter_genotyping_score(co_markers, min_geno_prob)
+        log.info(
+            f'Removed {n - len(co_markers)} barcodes with genotyping probability < {min_geno_prob}'
         )
     if output_json_fn is not None:
         log.info(f'Writing markers to {output_json_fn}')

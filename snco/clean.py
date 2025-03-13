@@ -80,10 +80,13 @@ def random_bg_sample(m, bg_signal, n_bg, rng=DEFAULT_RNG):
     bg_idx = np.nonzero(m)
     m_valid = m[bg_idx]
     p = m_valid * bg_signal[bg_idx]
-    p = p / p.sum(axis=None)
+    bg = np.zeros_like(m)
+    p_denom = p.sum(axis=None)
+    if p_denom == 0:
+        return bg
+    p = p / p_denom
     n_p = p.shape[0]
     bg_c = np.bincount(rng.choice(np.arange(n_p), size=n_bg, replace=True, p=p), minlength=n_p)
-    bg = np.zeros_like(m)
     bg[bg_idx] = np.minimum(bg_c, m_valid)
     return bg
 

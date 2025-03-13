@@ -132,10 +132,12 @@ def _clean_predict_pipeline(co_markers, output_prefix, kwargs):
         clean_kwargs = snco_opts.get_kwarg_subset('clean', kwargs)
         clean_kwargs['marker_json_fn'] = None
         clean_kwargs['co_markers'] = co_markers
-        clean_kwargs['output_json_fn'] = None
+        # filtering already performed in load command
+        clean_kwargs['min_markers_per_cb'] = 0
+        clean_kwargs['min_markers_per_chrom'] = 0
+        clean_kwargs['output_json_fn'] = f'{output_prefix}.markers.json'
         co_markers = run_clean(**clean_kwargs)
 
-    co_markers.write_json(f'{output_prefix}.markers.json')
     predict_kwargs = snco_opts.get_kwarg_subset('predict', kwargs)
     predict_kwargs['marker_json_fn'] = None
     predict_kwargs['co_markers'] = co_markers
@@ -155,9 +157,6 @@ def bam_pipeline_subcommand(**kwargs):
     output_prefix = kwargs.pop('output_prefix')
     loadbam_kwargs = snco_opts.get_kwarg_subset('loadbam', kwargs)
     loadbam_kwargs['output_json_fn'] = None
-    # only filter during clean
-    loadbam_kwargs['min_markers_per_cb'] = 0
-    loadbam_kwargs['min_markers_per_chrom'] = 0
     co_markers = run_loadbam(**loadbam_kwargs)
 
     _clean_predict_pipeline(co_markers, output_prefix, kwargs)
@@ -174,9 +173,6 @@ def csl_pipeline_subcommand(**kwargs):
     output_prefix = kwargs.pop('output_prefix')
     loadcsl_kwargs = snco_opts.get_kwarg_subset('loadcsl', kwargs)
     loadcsl_kwargs['output_json_fn'] = None
-    # only filter during clean
-    loadcsl_kwargs['min_markers_per_cb'] = 0
-    loadcsl_kwargs['min_markers_per_chrom'] = 0
     co_markers = run_loadcsl(**loadcsl_kwargs)
     _clean_predict_pipeline(co_markers, output_prefix, kwargs)
 

@@ -456,6 +456,15 @@ snco_opts.option(
 
 
 snco_opts.option(
+    '--genotype-em-bootstraps',
+    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred'],
+    required=False,
+    type=click.IntRange(1, 1000),
+    default=25,
+    help='the number of bootstrap resamples to use for estimating genotype probabilities'
+)
+
+snco_opts.option(
     '--reference-geno-name', 'reference_genotype_name',
     subcommands=['loadcsl', 'csl2pred'],
     required=False,
@@ -574,7 +583,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--min-genotyping-prob', 'min_geno_prob',
-    subcommands=['clean', 'bam2pred', 'csl2pred'],
+    subcommands=['loadbam', 'loadcsl', 'clean', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.FloatRange(0.0, 1.0),
     default=0.9,
@@ -934,7 +943,7 @@ def _get_rng(ctx, param, value):
 
 snco_opts.option(
     '-r', '--random-seed', 'rng',
-    subcommands=['clean', 'sim', 'predict', 'bc1predict',
+    subcommands=['loadbam', 'loadcsl', 'clean', 'sim', 'predict', 'bc1predict',
                  'doublet', 'bam2pred', 'csl2pred', 'plot'],
     required=False,
     type=int,
