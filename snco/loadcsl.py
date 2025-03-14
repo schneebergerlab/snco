@@ -101,7 +101,12 @@ def parse_cellsnp_lite(csl_dir, validate_barcodes=True):
     dep_mm = mmread(dep_fn)
     alt_mm = mmread(alt_fn).tocsr()
     barcodes = read_cb_whitelist(barcode_fn, validate_barcodes=validate_barcodes)
+
+    # cellsnp-lite vcf files have some missing definitions in the header
+    # setting pysam verbosity to 0 prevents warnings
+    prev_verbosity = pysam.set_verbosity(0)
     variants = read_vcf(vcf_fn)
+    pysam.set_verbosity(prev_verbosity)
 
     return dep_mm, alt_mm, barcodes, variants
 

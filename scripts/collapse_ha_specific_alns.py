@@ -61,7 +61,9 @@ def collapse_bam_alignments(bam_fn, position_tolerance=10):
     bam = pysam.AlignmentFile(bam_fn, mode='rb')
 
     header = bam.header.to_dict()
-    
+
+    accessions = sorted([rg['ID'] for rg in header.pop('RG')])
+    headers['HD']['ha'] = ','.join(accessions)
 
     assert header['HD']['SO'] == "queryname"
 

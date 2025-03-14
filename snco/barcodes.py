@@ -110,7 +110,7 @@ class CellBarcodeWhitelist:
         return copy(self.whitelist_ordered)
 
 
-def umi_dedup_directional(umi_hap_counts):
+def umi_dedup_directional(umi_hap_counts, has_haplotype=True):
     '''
     Deduplicate UMIs using the directional method (UMItools)
     for a collection of UMIs aligning to the same gene/genomic bin,
@@ -119,7 +119,7 @@ def umi_dedup_directional(umi_hap_counts):
     Parameters
     ----------
     umi_counts : dict of Counter
-        Dictionary of UMI:hap:count information
+        Dictionary of UMI:hap:count information or UMI:count information
 
     Returns
     -------
@@ -127,7 +127,10 @@ def umi_dedup_directional(umi_hap_counts):
         Dictionary of deduplicated UMI:hap:count information
     '''
     edges = defaultdict(set)
-    umi_counts = {umi: hap_counts.total() for umi, hap_counts in umi_hap_counts.items()}
+    if has_haplotype:
+        umi_counts = {umi: hap_counts.total() for umi, hap_counts in umi_hap_counts.items()}
+    else:
+        umi_counts = umi_hap_counts
     nodes = sorted(umi_counts, key=umi_counts.__getitem__, reverse=True)
     for umi_i, umi_j in it.combinations(nodes, r=2):
         if edit_dist(umi_i, umi_j) <= 1:

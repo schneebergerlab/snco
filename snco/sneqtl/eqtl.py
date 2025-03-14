@@ -187,7 +187,7 @@ class SNeQTLAnalysis:
             haplo_variables = haplo.rename('haplo').to_frame()
             if not self.parental_genotypes.empty:
                 haplo_variables = expand_haplotypes(
-                    haplo_variables, self.parental_genotypes
+                    haplo_variables, self.parental_haplotypes
                 )
             if not self.interacting_variables.empty:
                 haplo_variables = utils.expanding_mul(
@@ -415,16 +415,13 @@ def run_eqtl(exprs_mat_dir, pred_json_fn, cb_stats_fn, output_prefix, gtf_fn=Non
         celltype_clusters = None
 
     if model_parental_genotype and cb_stats is not None:
-        parental_genotypes = cb_stats[['geno_pred']]
-        n_geno = len(parental_genotypes.geno.unique())
+        parental_genotypes = cb_stats['geno_pred']
+        n_geno = len(parental_genotypes.unique())
         if n_geno == 1:
             log.warn('All parental (diploid) genotypes are the same. Genotype will not be modelled')
             parental_genotypes = None
         else:
             log.info(f'There are {n_geno} parental (diploid) genotypes to be tested')
-            parental_genotypes.loc[
-                :, ['geno_hap1', 'geno_hap2']
-            ] = parental_genotypes.geno_pred.str.split(':', expand=True).values
 
     else:
         log.info('No parental (diploid) genotypes provided. Genotypes are assumed to be the same for all nuclei')

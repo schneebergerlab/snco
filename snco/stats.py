@@ -89,7 +89,7 @@ def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=2.5e-3, max_phr
             cb,
             geno_to_string(genotypes[cb].get('genotype')),
             genotypes[cb].get('genotype_probability'),
-            genotypes[cb].get('genotyping_nmarkers'),
+            np.log10(genotypes[cb].get('genotyping_nmarkers')),
             total_markers(cb_co_markers),
             bg_frac.get(cb, np.nan),
             n_crossovers(cb_co_preds, min_co_prob=nco_min_prob),

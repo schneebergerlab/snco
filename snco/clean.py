@@ -117,7 +117,7 @@ def clean_marker_background(co_markers, rng=DEFAULT_RNG):
     return co_markers_c
 
 
-def create_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.75, min_cb=100):
+def create_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.75, min_cb=20):
     tot_signal = {}
     tot_obs = {}
     for _, chrom, m in co_markers.deep_items():

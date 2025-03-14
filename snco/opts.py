@@ -1096,17 +1096,6 @@ sneqtl_opts.option(
 
 
 sneqtl_opts.option(
-    '--genotype-name', 'parental_genotype_colname',
-    subcommands=['eqtl'],
-    required=False,
-    type=str,
-    default='geno',
-    help=('the name of the column in --cb-stats-fn that contains the parental genotype '
-          'of each barcode')
-)
-
-
-sneqtl_opts.option(
     '--celltype/--no-celltype', 'celltype_haplotype_interaction',
     subcommands=['eqtl'],
     required=False,

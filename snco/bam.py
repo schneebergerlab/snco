@@ -1,4 +1,5 @@
 '''classes for reading bam files and aggregating count information'''
+import logging
 from collections import Counter
 from functools import reduce
 from dataclasses import dataclass, field
@@ -9,6 +10,7 @@ import pysam
 
 from .barcodes import umi_dedup_directional
 
+log = logging.getLogger('snco')
 
 DEFAULT_EXCLUDE_CONTIGS = set([
     'ChrM', 'ChrC', 'chrC', 'chrM', 'M', 'C', 'Mt', 'Pt',
@@ -148,7 +150,11 @@ def get_ha_samples(bam_fn):
                     samples = set(comment.split(' ')[1].split(','))
                     break
             else:
-                raise ValueError('Could not find ha_flag accession information in header')
+                # final attempt, to use RGs
+                try:
+                    samples = sorted(rg['ID'] for rg in bam.header['RG'])
+                except KeyError:
+                    raise ValueError('Could not find ha_flag accession information in header')
     return sorted(samples)
 
 
