@@ -21,7 +21,7 @@ def test_close_alignment_positions(chroms, positions, pos_tol=10):
     return same_pos
 
 
-def aln_collapser(bam_bundle_iter, pos_tol=1000):
+def aln_collapser(bam_bundle_iter, pos_tol=10):
     for _, bundle in bam_bundle_iter:
         high_score = 0
         representative_aln = None
