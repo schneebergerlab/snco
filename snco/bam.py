@@ -143,7 +143,7 @@ class IntervalUMICounts:
 def get_ha_samples(bam_fn):
     with pysam.AlignmentFile(bam_fn) as bam:
         try:
-            return set(','.split(bam.header['HD']['ha']))
+            return set(bam.header['HD']['ha'].split(','))
         except KeyError:
             for comment in bam.header['CO']:
                 if comment.startswith('ha_flag_accessions'):
@@ -238,7 +238,9 @@ class BAMHaplotypeIntervalReader:
                 if hap < 0:
                     continue
             elif self.hap_tag_type == 'multi_haplotype':
-                hap = frozenset(str(hap).split(',')).intersection(self.haplotypes)
+                hap = frozenset(str(hap).split(','))
+                if self.haplotypes is not None:
+                    hap = hap.intersection(self.haplotypes)
                 if hap == self.haplotypes:
                     # read does not align better to one haplotype than others,
                     # so is not useful for haplotyping analysis
