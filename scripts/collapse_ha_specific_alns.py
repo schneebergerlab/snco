@@ -63,7 +63,7 @@ def collapse_bam_alignments(bam_fn, position_tolerance=10):
     header = bam.header.to_dict()
 
     accessions = sorted([rg['ID'] for rg in header.pop('RG')])
-    headers['HD']['ha'] = ','.join(accessions)
+    header['HD']['ha'] = ','.join(accessions)
 
     assert header['HD']['SO'] == "queryname"
 

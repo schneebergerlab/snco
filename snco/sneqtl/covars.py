@@ -34,8 +34,13 @@ def filter_haplotype_correlated_principal_components(principal_components, haplo
 
 def get_principal_components(exprs_mat, haplotypes,
                              min_var_explained=0.01, max_pcs=50,
-                             max_pc_haplotype_var_explained=0.05):
-    pca = PCA(n_components=max_pcs, svd_solver='arpack')
+                             max_pc_haplotype_var_explained=0.05,
+                             rng=None):
+    if rng is None:
+        random_state = np.random.RandomState(DEFAULT_RANDOM_SEED)
+    else:
+        random_state = np.random.RandomState(rng.integers(1000))
+    pca = PCA(n_components=max_pcs, svd_solver='arpack', random_state=random_state)
     principal_components = pca.fit_transform(exprs_mat.T)
     stop_idx = max_pcs - np.searchsorted(
         pca.explained_variance_ratio_[::-1],

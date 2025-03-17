@@ -395,6 +395,7 @@ def run_eqtl(exprs_mat_dir, pred_json_fn, cb_stats_fn, output_prefix, gtf_fn=Non
         exprs_mat, haplotypes,
         min_var_explained=min_pc_var_explained,
         max_pc_haplotype_var_explained=max_pc_haplotype_var_explained
+        rng=rng,
     )
 
     if covar_names is not None and cb_stats is not None:

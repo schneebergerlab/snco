@@ -58,7 +58,7 @@ def generate_scrna_count_matrix(genes, cb_whitelist, bam_fn, min_mapq=255,
                         except KeyError:
                             continue
                         umi_counts[c_i][umi] += 1
-                        read_ids.add(read_id)
+                        gene_read_ids.add(read_id)
 
             for c_i, cb_umi_counts in umi_counts.items():
                 if umi_dedup_method == 'directional':
