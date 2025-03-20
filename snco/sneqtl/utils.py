@@ -1,6 +1,7 @@
 import os
 import re
 import logging
+import itertools as it
 
 import numpy as np
 import pandas as pd
@@ -40,6 +41,16 @@ def drop_first_column(df):
     if df is None or df.empty:
         return pd.DataFrame()
     return df.iloc[:, 1:]
+
+
+def aligned_concat_axis1(df_list):
+    columns = list(it.chain(*(df.columns.tolist() for df in df_list)))
+    index = df_list[0].index
+    return pd.DataFrame(
+        np.concatenate([df.values for df in df_list], axis=1),
+        index=index,
+        columns=columns
+    )
 
 
 def concat_handle_none(df_list, **kwargs):

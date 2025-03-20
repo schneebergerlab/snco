@@ -1,7 +1,9 @@
+import os
 from copy import copy
 import logging
 import itertools as it
 from functools import cached_property
+import tempfile
 
 import numpy as np
 import pandas as pd
@@ -117,9 +119,13 @@ class SNeQTLAnalysis:
         self.model_type = 'ols'
 
         self.interacting_variables = utils.get_dummies(interacting_variables)
-        self.parental_genotypes, self.parental_haplotypes = get_genotype_haplotype_dummies(
-            parental_genotypes
-        )
+        if not parental_genotypes.empty:
+            self.parental_genotypes, self.parental_haplotypes = get_genotype_haplotype_dummies(
+                parental_genotypes
+            )
+        else:
+            self.parental_genotypes = pd.DataFrame()
+            self.parental_haplotypes = pd.DataFrame()
 
         if control_haplotypes is not None:
             control_haplotypes_exact = []
@@ -217,7 +223,7 @@ class SNeQTLAnalysis:
             covars = self.covariates
             if self.control_cis_haplotype:
                 *_, cis_haplo = self.get_cis_haplotype(gene_id)
-                covars = pd.concat([covars, cis_haplo], axis=1)
+                covars = utils.aligned_concat_axis1([covars, cis_haplo])
             self._gene_specific_covariates[gene_id] = covars
         return covars
 
@@ -239,7 +245,7 @@ class SNeQTLAnalysis:
         haplo_variables = self.haplotype_variables(chrom, pos)
         m_full = fit_model(
             gene_exprs,
-            pd.concat([haplo_variables, self.get_covariates(gene_id)], axis=1),
+            utils.aligned_concat_axis1([haplo_variables, self.get_covariates(gene_id)]),
             model_type=self.model_type
         )
         return m_full
@@ -346,18 +352,33 @@ class SNeQTLAnalysis:
         return results
 
     def run_all_genes(self, genewise_fdr_correction=True, haplowise_fwer_correction=True, processes=1):
+
+        tmp_fh, tmp_fn = tempfile.mkstemp()
+        joblib.dump(self, tmp_fn)
+
+        def _run_gene_chunk(gene_ids):
+            e = joblib.load(tmp_fn)
+            res = []
+            for g_id in gene_ids:
+                res.append(e.run_gene(g_id))
+            return pd.concat(res, axis=0)
+
         with joblib.Parallel(n_jobs=processes, backend='loky') as pool:
             gene_progress = progress_bar(
-                self.gene_ids,
+                np.array_split(self.gene_ids, processes * 5),
                 label='Running eQTL',
-                item_show_func=str
+                item_show_func=lambda g_ids: g_ids[0]
             )
             with gene_progress:
                 results = pool(
-                    joblib.delayed(self.run_gene)(gene_id)
-                    for gene_id in gene_progress
+                    joblib.delayed(_run_gene_chunk)(gene_id_chunk)
+                    for gene_id_chunk in gene_progress
                 )
         results = pd.concat(results, axis=0)
+
+        os.close(tmp_fh)
+        os.remove(tmp_fn)
+
         if genewise_fdr_correction:
             results = self.apply_fdr_correction(results)
         if haplowise_fwer_correction:
