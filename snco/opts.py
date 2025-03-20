@@ -1063,7 +1063,7 @@ sneqtl_opts.option(
     subcommands=['eqtl'],
     required=False,
     type=click.FloatRange(0.01, 1.0),
-    default=0.01,
+    default=0.05,
     help='the maximum variance that a haplotype '
 )
 
