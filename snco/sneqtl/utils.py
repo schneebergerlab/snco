@@ -43,14 +43,13 @@ def drop_first_column(df):
     return df.iloc[:, 1:]
 
 
-def aligned_concat_axis1(df_list):
-    columns = list(it.chain(*(df.columns.tolist() for df in df_list)))
-    index = df_list[0].index
-    return pd.DataFrame(
-        np.concatenate([df.values for df in df_list], axis=1),
-        index=index,
-        columns=columns
-    )
+def aligned_concat_axis1(df_list, as_df=True):
+    concat_data = np.concatenate([df.values for df in df_list], axis=1)
+    if as_df:
+        columns = list(it.chain(*(df.columns.tolist() for df in df_list)))
+        index = df_list[0].index
+        concat_data = pd.DataFrame(concat_data, index=index, columns=columns)
+    return concat_data
 
 
 def concat_handle_none(df_list, **kwargs):
@@ -133,10 +132,13 @@ def read_mmformat(mtx_dirs, cb_whitelist, feat_filt=10,
     return mtx.loc[:, cb_whitelist]
 
 
-def read_expression_matrix(exprs_mat_dir, cb_whitelist, min_cells_exprs=0.02):
+def read_expression_matrix(exprs_mat_dir, cb_whitelist,
+                           rel_min_cells_exprs=0.02,
+                           abs_min_cells_exprs=100):
     exprs_mat = read_mmformat([exprs_mat_dir,], cb_whitelist)
     exprs_mat, sf = lognormalise_exprs(exprs_mat)
-    exprs_mat = exprs_mat[(exprs_mat > 0).mean(axis=1) > min_cells_exprs]
+    min_cells_exprs = max(exprs_mat.shape[1] * rel_min_cells_exprs, abs_min_cells_exprs)
+    exprs_mat = exprs_mat[(exprs_mat > 0).sum(axis=1) > min_cells_exprs]
     return exprs_mat
 
 

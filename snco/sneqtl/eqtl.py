@@ -45,18 +45,6 @@ def compare_lr_test(m_full, m_nest):
     return chi2_stat / LOD, p
 
 
-def calculate_wald_test_lod_scores(m, variables):
-    lods = []
-    pvals = []
-    coefs = []
-    for var in variables:
-        w = m.wald_test(var, scalar=True, use_f=False)
-        lods.append(w.statistic / LOD)
-        pvals.append(w.pvalue)
-        coefs.append(m.params.loc[var])
-    return lods, pvals, coefs
-
-
 def fit_model(gene_exprs, variables, model_type='ols'):
     if model_type == 'ols':
         m = sm.OLS(gene_exprs, variables, hasconst=True)
@@ -64,7 +52,9 @@ def fit_model(gene_exprs, variables, model_type='ols'):
         m = sm.Logit(gene_exprs, variables)
     else:
         raise ValueError('unknown model type')
-    return m.fit(disp=0)
+    # statsmodels ResultsWrapper.__getattribute__ is very slow, using _results bypasses it
+    m = m.fit(disp=0)._results
+    return m
 
 
 def estimate_effective_haplotypes(hap_corrs):
@@ -85,12 +75,15 @@ def get_genotype_haplotype_dummies(parental_genotypes):
     parental_haplotypes = parental_genotypes.str.split(':', expand=True)
     haplotype_dummies_ordered = []
     for _, h in parental_haplotypes.items():
-        haplotype_dummies_ordered.append(utils.get_dummies(h, prefix='phap'))
+        haplotype_dummies_ordered.append(utils.get_dummies(h))
     parental_haplotype_dummies = utils.merge_sum_overlapping_columns(haplotype_dummies_ordered)
     if (parental_haplotype_dummies > 1).any(axis=None):
         raise ValueError('Some parental genotypes are not hybrids e.g. col0:col0')
     # if all crosses share a common parent, parental genotypes are sufficient
-    parental_haplotype_dummies = parental_haplotype_dummies.loc[:, ~parental_haplotype_dummies.all(axis=0)]
+    filt = ~parental_haplotype_dummies.all(axis=0)
+    filt = filt[filt].index.values
+    parental_haplotype_dummies = parental_haplotype_dummies.loc[:, parental_haplotype_dummies.columns.isin(filt)]
+    haplotype_dummies_ordered = [h.loc[:, h.columns.isin(filt)] for h in haplotype_dummies_ordered]
     return parental_haplotype_dummies, haplotype_dummies_ordered
 
 
@@ -117,6 +110,16 @@ class SNeQTLAnalysis:
         self.haplotypes = haplotypes
         covariates = covariates
         self.model_type = 'ols'
+        self._gene_specific_covariates = {}
+        self._haplotype_specific_variables = {}
+        self._nested_models = {}
+        self._param_names = None
+        self._result_colnames = None
+        self._H_eff = None
+        self._haplo_r = None
+        self._haplo_r2 = None
+        self._store_r2 = True if control_cis_haplotype else False
+
 
         self.interacting_variables = utils.get_dummies(interacting_variables)
         if not parental_genotypes.empty:
@@ -176,14 +179,7 @@ class SNeQTLAnalysis:
         self.gene_locs = gene_locs
         self.max_r2 = control_haplotypes_r2
 
-        self._gene_specific_covariates = {}
-        self._haplotype_specific_variables = {}
-        self._nested_models = {}
-        self._param_names = None
-        self._result_colnames = None
-        self._H_eff = None
-        self._haplo_r = None
-        self._haplo_r2 = None
+        self.test_positions = np.arange(len(self.param_names))
 
     def haplotype_variables(self, chrom, pos):
         try:
@@ -214,16 +210,17 @@ class SNeQTLAnalysis:
     def get_cis_haplotype(self, gene_id):
         chrom, pos = self.gene_locs.loc[gene_id].values
         chrom, pos, haplo = self.get_closest_haplotype(chrom, pos)
-        return chrom, pos, haplo.rename(f'cishaplo-{gene_id}')
+        return chrom, pos, haplo.rename(f'cishaplo-{gene_id}').to_frame()
 
     def get_covariates(self, gene_id):
+        if not self.control_cis_haplotype:
+            return self.covariates
         try:
             covars = self._gene_specific_covariates[gene_id]
         except KeyError:
             covars = self.covariates
-            if self.control_cis_haplotype:
-                *_, cis_haplo = self.get_cis_haplotype(gene_id)
-                covars = utils.aligned_concat_axis1([covars, cis_haplo])
+            *_, cis_haplo = self.get_cis_haplotype(gene_id)
+            covars = utils.aligned_concat_axis1([covars, cis_haplo])
             self._gene_specific_covariates[gene_id] = covars
         return covars
 
@@ -233,8 +230,8 @@ class SNeQTLAnalysis:
         except KeyError:
             gene_exprs = self.exprs_mat.loc[gene_id]
             m_nest = fit_model(
-                gene_exprs,
-                self.get_covariates(gene_id),
+                gene_exprs.values,
+                self.get_covariates(gene_id).values,
                 model_type = self.model_type
             )
             self._nested_models[gene_id] = m_nest
@@ -243,12 +240,28 @@ class SNeQTLAnalysis:
     def full_model(self, gene_id, chrom, pos):
         gene_exprs = self.exprs_mat.loc[gene_id]
         haplo_variables = self.haplotype_variables(chrom, pos)
+        covariates = self.get_covariates(gene_id)
         m_full = fit_model(
-            gene_exprs,
-            utils.aligned_concat_axis1([haplo_variables, self.get_covariates(gene_id)]),
+            gene_exprs.values,
+            utils.aligned_concat_axis1([haplo_variables, covariates], as_df=False),
             model_type=self.model_type
         )
         return m_full
+
+    def parameter_specific_statistics(self, m_full):
+        test_pos = self.test_positions
+        lods = []
+        pvals = []
+
+        cov = np.diag(m_full.normalized_cov_params)
+        invcov = 1 / (cov[test_pos] * m_full.scale)
+
+        coefs = m_full.params[test_pos]
+        chi2 = coefs ** 2 * invcov
+        lods = chi2 / LOD
+        pvals = m_full.pvalues[test_pos]
+        return lods, pvals, coefs
+
 
     @property
     def param_names(self):
@@ -268,7 +281,7 @@ class SNeQTLAnalysis:
         if self._result_colnames is None:
             rn = ['gene_id', 'chrom', 'pos', 'lod_score', 'pval']
             for var in self.param_names:
-                rn.append(f'{var}_lod')
+                rn.append(f'{var}_lod_score')
                 rn.append(f'{var}_pval')
                 rn.append(f'{var}_coef')
             self._result_colnames = rn
@@ -285,20 +298,28 @@ class SNeQTLAnalysis:
     @property
     def haplo_r(self):
         if self._haplo_r is None:
-            self._haplo_r = {
+            haplo_r = {
                 chrom: h.T.corr(method='pearson')
                 for chrom, h in self.haplotypes.T.groupby(level='chrom')
             }
-        return self._haplo_r
+            if self._store_r2:
+                self._haplo_r = haplo_r
+        else:
+            haplo_r = self._haplo_r
+        return haplo_r
 
     @property
     def haplo_r2(self):
         if self._haplo_r2 is None:
-            self._haplo_r2 = {chrom: h_r ** 2 for chrom, h_r in self.haplo_r.items()}
-        return self._haplo_r2
+            haplo_r2 = {chrom: h_r ** 2 for chrom, h_r in self.haplo_r.items()}
+            if self._store_r2:
+                self._haplo_r2 = haplo_r2
+        else:
+            haplo_r2 = self._haplo_r2
+        return haplo_r2
 
     def testable_positions(self, cis_gene_id=None):
-        testable_positions = self._testable_positions.copy()
+        testable_positions = self._testable_positions
         if cis_gene_id is not None and self.control_cis_haplotype:
             chrom, pos, _ = self.get_cis_haplotype(cis_gene_id)
             pos_r2 = self.haplo_r2[chrom].loc[(chrom, pos)]
@@ -332,21 +353,21 @@ class SNeQTLAnalysis:
         )[pval_cols].transform(stats.false_discovery_control)
         return results
 
-    def run_single_test(self, gene_id, chrom, pos):
+    def run_single_test(self, gene_id, chrom, pos, as_series=True):
         m_nest = self.nested_model(gene_id)
         m_full = self.full_model(gene_id, chrom, pos)
         lrt_res = compare_lr_test(m_full, m_nest)
-        lods, pvals, coefs = calculate_wald_test_lod_scores(m_full, self.param_names)
-        return pd.Series(
-            [gene_id, chrom, pos, *lrt_res, *it.chain(*zip(lods, pvals, coefs))],
-            index=self.result_colnames
-        )
+        lods, pvals, coefs = self.parameter_specific_statistics(m_full)
+        res = [gene_id, chrom, pos, *lrt_res, *it.chain(*zip(lods, pvals, coefs))]
+        if as_series:
+            res = pd.Series(res, index=self.result_colnames)
+        return res
 
     def run_gene(self, gene_id, fwer_correction=False):
         results = []
         for chrom, pos in self.testable_positions(gene_id):
-            results.append(self.run_single_test(gene_id, chrom, pos))
-        results = pd.DataFrame(results)
+            results.append(self.run_single_test(gene_id, chrom, pos, as_series=False))
+        results = pd.DataFrame(results, columns=self.result_colnames)
         if fwer_correction:
             results = self.apply_fwer_correction(results)
         return results
@@ -356,25 +377,29 @@ class SNeQTLAnalysis:
         tmp_fh, tmp_fn = tempfile.mkstemp()
         joblib.dump(self, tmp_fn)
 
-        def _run_gene_chunk(gene_ids):
-            e = joblib.load(tmp_fn)
-            res = []
-            for g_id in gene_ids:
-                res.append(e.run_gene(g_id))
-            return pd.concat(res, axis=0)
+        with tempfile.TemporaryDirectory() as o_dir:
+            
+            def _run_gene_chunk(gene_ids):
+                e = joblib.load(tmp_fn)
+                for g_id in gene_ids:
+                    res = e.run_gene(g_id)
+                    joblib.dump(res, os.path.join(o_dir, f'{g_id}.pickle'))
 
-        with joblib.Parallel(n_jobs=processes, backend='loky') as pool:
-            gene_progress = progress_bar(
-                np.array_split(self.gene_ids, processes * 5),
-                label='Running eQTL',
-                item_show_func=lambda g_ids: g_ids[0]
-            )
-            with gene_progress:
-                results = pool(
-                    joblib.delayed(_run_gene_chunk)(gene_id_chunk)
-                    for gene_id_chunk in gene_progress
+            with joblib.Parallel(n_jobs=processes, backend='loky') as pool:
+                gene_progress = progress_bar(
+                    np.array_split(self.gene_ids, min(processes, len(self.gene_ids))),
+                    label='Running eQTL',
+                    item_show_func=lambda g_ids: str(g_ids[0]) if g_ids is not None else ''
                 )
-        results = pd.concat(results, axis=0)
+                with gene_progress:
+                    pool(
+                        joblib.delayed(_run_gene_chunk)(gene_id_chunk)
+                        for gene_id_chunk in gene_progress
+                    )
+            results = pd.concat((
+                joblib.load(os.path.join(o_dir, f'{g_id}.pickle'))
+                for g_id in self.gene_ids
+            ), axis=0, ignore_index=True)
 
         os.close(tmp_fh)
         os.remove(tmp_fn)
@@ -403,7 +428,9 @@ def run_eqtl(exprs_mat_dir, pred_json_fn, cb_stats_fn, output_prefix, gtf_fn=Non
     else:
         cb_stats = None
         cb_whitelist = None
-    exprs_mat = utils.read_expression_matrix(exprs_mat_dir, cb_whitelist, min_cells_exprs)
+    exprs_mat = utils.read_expression_matrix(
+        exprs_mat_dir, cb_whitelist, rel_min_cells_exprs=min_cells_exprs
+    )
     log.info(f'Identified {len(exprs_mat)} genes to be tested')
 
     haplotypes = PredictionRecords.read_json(pred_json_fn)
