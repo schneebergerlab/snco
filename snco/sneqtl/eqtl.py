@@ -14,7 +14,7 @@ import joblib
 from .. import PredictionRecords
 from ..opts import DEFAULT_RANDOM_SEED
 from ..logger import progress_bar
-from . import covars, utils
+from . import covars, utils, peaks
 
 log = logging.getLogger('snco')
 
@@ -387,7 +387,7 @@ class SNeQTLAnalysis:
 
             with joblib.Parallel(n_jobs=processes, backend='loky') as pool:
                 gene_progress = progress_bar(
-                    np.array_split(self.gene_ids, min(processes, len(self.gene_ids))),
+                    np.array_split(self.gene_ids, min(processes * 4, len(self.gene_ids))),
                     label='Running eQTL',
                     item_show_func=lambda g_ids: str(g_ids[0]) if g_ids is not None else ''
                 )
@@ -419,6 +419,9 @@ def run_eqtl(exprs_mat_dir, pred_json_fn, cb_stats_fn, output_prefix, gtf_fn=Non
              celltype_haplotype_interaction=False, celltype_n_clusters=None,
              control_haplotypes=None, control_cis_haplotype=False,
              control_haplotypes_r2=0.95, cb_filter_exprs=None,
+             run_peakcall=True, lod_threshold=5, rel_lod_threshold=0.1,
+             pval_threshold=1e-2, rel_prominence=0.25, ci_lod_drop=1.5,
+             min_dist_between_eqtls=3e6, cis_eqtl_range=5e5,
              processes=1, rng=DEFAULT_RNG):
 
     if cb_stats_fn is not None:
@@ -503,13 +506,30 @@ def run_eqtl(exprs_mat_dir, pred_json_fn, cb_stats_fn, output_prefix, gtf_fn=Non
     log.debug(f'Estimated {e.effective_haplotypes} effective haplotypes - this number will be used '
               'for haplotype-wise multiple testing correction')
 
-    results = e.run_all_genes(processes=processes)
+    eqtl_results = e.run_all_genes(processes=processes)
     
     log.info(f'eQTL analysis complete - writing full results to {output_prefix}.eqtls.tsv')
-    results.to_csv(
+    eqtl_results.to_csv(
         f'{output_prefix}.eqtls.tsv',
         sep='\t',
         index=False,
         header=True,
         float_format='%.4g'
     )
+    if run_peakcall:
+        if gtf_fn is None:
+            log.warn('GTF file was not provided, cannot run peakcall')
+        else:
+            peaks.run_peakcall(
+                eqtl_tsv_fn=None,
+                output_tsv_fn=f'{output_prefix}.eqtl_peaks.tsv',
+                gtf_fn=gtf_fn,
+                eqtl_results=eqtl_results,
+                lod_threshold=lod_threshold,
+                rel_lod_threshold=rel_lod_threshold,
+                pval_threshold=pval_threshold,
+                rel_prominence=rel_prominence,
+                ci_lod_drop=ci_lod_drop,
+                min_dist_between_eqtls=min_dist_between_eqtls,
+                ci_eqtl_range=ci_eqtl_range
+            )

@@ -994,7 +994,7 @@ sneqtl_opts.argument(
 
 
 sneqtl_opts.argument(
-    'eqtl-csv-fn',
+    'eqtl-tsv-fn',
     subcommands=['peakcall'],
     required=True,
     nargs=1,
@@ -1004,7 +1004,7 @@ sneqtl_opts.argument(
 
 sneqtl_opts.option(
     '-c', '--cb-stats-fn',
-    subcommands=['eqtl', 'peakcall'],
+    subcommands=['eqtl'],
     required=False,
     type=_input_file_type,
     help='cell barcode stats (output of snco predict/stats)'
@@ -1013,7 +1013,16 @@ sneqtl_opts.option(
 
 sneqtl_opts.option(
     '-o', '--output-prefix',
-    subcommands=['eqtl', 'peakcall'],
+    subcommands=['eqtl'],
+    required=True,
+    type=_output_file_type,
+    help='Output prefix'
+)
+
+
+sneqtl_opts.option(
+    '-o', '--output-tsv-fn',
+    subcommands=['peakcall'],
     required=True,
     type=_output_file_type,
     help='Output prefix'
@@ -1022,8 +1031,17 @@ sneqtl_opts.option(
 
 sneqtl_opts.option(
     '-g', '--gtf-fn',
-    subcommands=['eqtl', 'peakcall'],
+    subcommands=['eqtl'],
     required=False,
+    type=_input_file_type,
+    help='GTF file name'
+)
+
+
+sneqtl_opts.option(
+    '-g', '--gtf-fn',
+    subcommands=['peakcall'],
+    required=True,
     type=_input_file_type,
     help='GTF file name'
 )
@@ -1158,6 +1176,78 @@ sneqtl_opts.option(
 
 
 sneqtl_opts.option(
+    '--lod-threshold',
+    subcommands=['eqtl', 'peakcall'],
+    required=False,
+    type=click.FloatRange(2, 20),
+    default=5,
+    help='Absolute LOD score threshold used for peak calling'
+)
+
+
+sneqtl_opts.option(
+    '--rel-lod-threshold',
+    subcommands=['eqtl', 'peakcall'],
+    required=False,
+    type=click.FloatRange(0, 1),
+    default=0.1,
+    help=('Relative LOD score threshold used for secondary peak calling '
+          'compared to highest LOD on chromosome')
+)
+
+
+sneqtl_opts.option(
+    '--pval-threshold',
+    subcommands=['eqtl', 'peakcall'],
+    required=False,
+    type=click.FloatRange(0, 1),
+    default=1e-2,
+    help='P value threshold used for peak calling'
+)
+
+
+sneqtl_opts.option(
+    '--rel-prominence',
+    subcommands=['eqtl', 'peakcall'],
+    required=False,
+    type=click.FloatRange(0, 1),
+    default=1e-2,
+    help=('Relative prominence of LOD score used for secondary peak calling '
+          'compared to highest LOD on chromosome')
+)
+
+
+sneqtl_opts.option(
+    '--ci-lod-drop',
+    subcommands=['eqtl', 'peakcall'],
+    required=False,
+    type=click.FloatRange(1, 10),
+    default=1.5,
+    help='Drop in LOD score from peak used to calculate eQTL confidence intervals'
+)
+
+
+sneqtl_opts.option(
+    '--min-dist-between-eqtls',
+    subcommands=['eqtl', 'peakcall'],
+    required=False,
+    type=click.IntRange(0, 1e10),
+    default=3e6,
+    help='Minimum allowed distance in bases between two eQTL peaks'
+)
+
+
+sneqtl_opts.option(
+    '--cis-eqtl-range',
+    subcommands=['eqtl', 'peakcall'],
+    required=False,
+    type=click.IntRange(0, 5e6),
+    default=5e6,
+    help='Maximum distance from edge of eQTL CI boundary to gene for it to be considered a cis-eQTL'
+)
+
+
+sneqtl_opts.option(
     '-p', '--processes',
     subcommands=['eqtl',],
     required=False,
@@ -1169,7 +1259,7 @@ sneqtl_opts.option(
 
 sneqtl_opts.option(
     '-r', '--random-seed', 'rng',
-    subcommands=['eqtl', 'peakcall'],
+    subcommands=['eqtl'],
     required=False,
     type=int,
     default=DEFAULT_RANDOM_SEED,

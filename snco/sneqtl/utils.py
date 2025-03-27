@@ -199,6 +199,23 @@ def parse_gtf(gtf_fn, model_type='gene'):
 
 def read_gtf_gene_locs(gtf_fn):
     gene_locs = {}
-    for chrom, strand, gene_id, invs in  parse_gtf(gtf_fn, model_type='gene_full'):
+    for gene_id, chrom, strand, invs in  parse_gtf(gtf_fn, model_type='gene_full'):
         gene_locs[gene_id] = (chrom, (invs[0][0] + invs[-1][1]) // 2)
     return pd.DataFrame.from_dict(gene_locs, orient='index', columns=['chrom', 'pos'])
+
+
+def read_eqtl_results(eqtl_res_fn):
+    eqtl_results = pd.read_csv(
+        eqtl_res_fn,
+        sep='\t',
+        dtype={
+            'chrom': str,
+            'pos': int,
+            'lod_score': float,
+            'pval': float,
+        }
+    )
+    test_gene_id, test_chrom = eqtl_results.iloc[0].loc[['gene_id', 'chrom']]
+    test_pos = eqtl_results.query('gene_id == @test_gene_id & chrom == @test_chrom').pos.values
+    bin_size = int(np.unique(np.diff(np.sort(test_pos))))
+    return eqtl_results, bin_size
