@@ -13,6 +13,43 @@ from .bam import IntervalMarkerCounts
 log = logging.getLogger('snco')
 
 
+class RecordsGroupyBy:
+
+    '''
+    class for split-apply-combine operations on BaseRecords, inspired by pandas groupby
+    '''
+
+    def __init__(self, records, grouper):
+        self._records = records
+        if not callable(grouper):
+            if isinstance(grouper, dict):
+                grouper = grouper.get
+            else:
+                raise ValueError('grouper should be dict or callable')
+        self.group_mapping = defaultdict(list)
+        for cb in records.barcodes:
+            g = grouper(cb)
+            if g is not None:
+                self.group_mapping[g].append(cb)
+        self._items = iter(self.group_mapping.items())
+
+    def __iter__(self):
+        self._items = iter(self.group_mapping.items())
+        return self
+
+    def __next__(self):
+        g, g_cb = next(self._items)
+        g_obj = self._records.filter(g_cb, inplace=False)
+        return g, g_obj
+
+    def apply(self, func, **kwargs):
+        combined = self._records.new_like(self._records)
+        for _, group in self:
+            group_transformed = func(group, **kwargs)
+            combined.merge(group_transformed, inplace=True)
+        return combined
+
+
 class BaseRecords:
 
     '''
@@ -236,14 +273,13 @@ class BaseRecords:
         else:
             s = self.copy()
 
-        for cb, cb_m in other.items():
-            for chrom, m in cb_m.items():
-                s_m = s[cb, chrom]
-                if np.isnan(self._init_val):
-                    mask = np.isnan(s_m) & np.isfinite(m)
-                    s_m[mask] = m[mask]
-                else:
-                    s_m += m
+        for cb, chrom, m in other.deep_items():
+            s_m = s[cb, chrom]
+            if np.isnan(self._init_val):
+                mask = np.isnan(s_m) & np.isfinite(m)
+                s_m[mask] = m[mask]
+            else:
+                s_m += m
 
         if not inplace:
             return s
@@ -262,25 +298,7 @@ class BaseRecords:
             return obj
 
     def groupby(self, by):
-        if not callable(by):
-            if isinstance(by, dict):
-                grouper_func = by.get
-            else:
-                raise ValueError('grouper should be dict or callable')
-        else:
-            grouper_func = by
-        group_mapping = defaultdict(list)
-        for cb in self.barcodes:
-            g = grouper_func(cb)
-            if g is not None:
-                group_mapping[g].append(cb)
-
-        def _groupby_generator():
-            for g, g_cb in group_mapping.items():
-                g_obj = self.filter(g_cb, inplace=False)
-                yield g, g_obj
-
-        return _groupby_generator()
+        return RecordsGroupyBy(self, by)
 
     def __add__(self, other):
         if isinstance(other, BaseRecords):
