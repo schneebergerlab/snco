@@ -274,9 +274,13 @@ class BaseRecords:
             g = grouper_func(cb)
             if g is not None:
                 group_mapping[g].append(cb)
-        for g, g_cb in group_mapping.items():
-            g_obj = self.filter(g_cb, inplace=False)
-            yield g, g_obj
+
+        def _groupby_generator():
+            for g, g_cb in group_mapping.items():
+                g_obj = self.filter(g_cb, inplace=False)
+                yield g, g_obj
+
+        return _groupby_generator()
 
     def __add__(self, other):
         if isinstance(other, BaseRecords):
