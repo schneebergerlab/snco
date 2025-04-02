@@ -1174,6 +1174,14 @@ sneqtl_opts.option(
           'e.g. "doublet_probability < 0.5"')
 )
 
+sneqtl_opts.option(
+    '--peak-variable',
+    subcommands=['peakcall'],
+    required=False,
+    type=str,
+    default='overall',
+    help='the variable used for lod peak calling'
+)
 
 sneqtl_opts.option(
     '--lod-threshold',
@@ -1201,7 +1209,7 @@ sneqtl_opts.option(
     subcommands=['eqtl', 'peakcall'],
     required=False,
     type=click.FloatRange(0, 1),
-    default=1e-2,
+    default=1e-3,
     help='P value threshold used for peak calling'
 )
 
@@ -1211,7 +1219,7 @@ sneqtl_opts.option(
     subcommands=['eqtl', 'peakcall'],
     required=False,
     type=click.FloatRange(0, 1),
-    default=1e-2,
+    default=0.25,
     help=('Relative prominence of LOD score used for secondary peak calling '
           'compared to highest LOD on chromosome')
 )

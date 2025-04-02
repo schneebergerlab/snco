@@ -37,7 +37,8 @@ def lod_peak_finder(lod_scores, pvals, lod_threshold, pval_threshold,
 
 
 
-def call_eqtl_peaks_gene(gene_eqtl_results, lod_threshold=5, rel_lod_threshold=0.1,
+def call_eqtl_peaks_gene(gene_eqtl_results, lod_var='lod_score', pval_var='pval',
+                         lod_threshold=5, rel_lod_threshold=0.1,
                          pval_threshold=1e-2, rel_prominence=0.25, ci_lod_drop=1.5,
                          min_dist_between_eqtls=3e6, bin_size=25_000):
     min_dist = min_dist_between_eqtls // bin_size
@@ -45,8 +46,8 @@ def call_eqtl_peaks_gene(gene_eqtl_results, lod_threshold=5, rel_lod_threshold=0
     for _, chrom_eqtl_results in gene_eqtl_results.groupby('chrom'):
         chrom_eqtl_results = chrom_eqtl_results.sort_values('pos')
         lod_peaks = lod_peak_finder(
-            chrom_eqtl_results.lod_score.values,
-            chrom_eqtl_results.pval.values,
+            chrom_eqtl_results[lod_var].values,
+            chrom_eqtl_results[pval_var].values,
             lod_threshold=lod_threshold,
             pval_threshold=pval_threshold,
             rel_lod_threshold=rel_lod_threshold,
@@ -63,18 +64,26 @@ def call_eqtl_peaks_gene(gene_eqtl_results, lod_threshold=5, rel_lod_threshold=0
     return eqtl_peaks
 
 
-def call_eqtl_peaks(eqtl_results, gene_locs, cis_range=5e5, **kwargs):
+def call_eqtl_peaks(eqtl_results, gene_locs, peak_variable='overall', cis_range=5e5, **kwargs):
 
     lod_threshold = kwargs.get('lod_threshold', 5)
     pval_threshold = kwargs.get('pval_threshold', 1e-2)
+    if peak_variable == 'overall':
+        lod_var = 'lod_score'
+        pval_var = 'pval'
+    else:
+        lod_var = f'{peak_variable}_lod_score'
+        pval_var = f'{peak_variable}_pval'
+        if not lod_var in eqtl_results.columns or not pval_var in eqtl_results.columns:
+            raise ValueError(f'Variable "{peak_variable}" was not tested')
     def lod_filt(gene_eqtl_results):
-        return (gene_eqtl_results.lod_score.max() > lod_threshold) & \
-               (gene_eqtl_results.pval.min() < pval_threshold)
+        return (gene_eqtl_results[lod_var].max() > lod_threshold) & \
+               (gene_eqtl_results[pval_var].min() < pval_threshold)
 
     eqtl_peaks = (eqtl_results.groupby('gene_id', as_index=False, sort=False)
                               .filter(lod_filt)
                               .groupby('gene_id', as_index=False, sort=False)
-                              .apply(call_eqtl_peaks_gene, **kwargs)
+                              .apply(call_eqtl_peaks_gene, lod_var=lod_var, pval_var=pval_var, **kwargs)
                               .reset_index(drop=True))
     eqtl_peaks = pd.merge(
         eqtl_peaks,
@@ -98,7 +107,7 @@ def call_eqtl_peaks(eqtl_results, gene_locs, cis_range=5e5, **kwargs):
 
 
 def run_peakcall(eqtl_tsv_fn, output_tsv_fn, gtf_fn, *, eqtl_results=None,
-                 lod_threshold=5, rel_lod_threshold=0.1,
+                 peak_variable='overall', lod_threshold=5, rel_lod_threshold=0.1,
                  pval_threshold=1e-2, rel_prominence=0.25, ci_lod_drop=1.5,
                  min_dist_between_eqtls=3e6, cis_eqtl_range=5e5):
     if eqtl_results is None:
@@ -108,6 +117,7 @@ def run_peakcall(eqtl_tsv_fn, output_tsv_fn, gtf_fn, *, eqtl_results=None,
     log.info('Calling eQTL peaks')
     eqtl_peaks = call_eqtl_peaks(
         eqtl_results, gene_locs,
+        peak_variable=peak_variable,
         lod_threshold=lod_threshold,
         rel_lod_threshold=rel_lod_threshold,
         pval_threshold=pval_threshold,

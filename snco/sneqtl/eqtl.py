@@ -525,11 +525,12 @@ def run_eqtl(exprs_mat_dir, pred_json_fn, cb_stats_fn, output_prefix, gtf_fn=Non
                 output_tsv_fn=f'{output_prefix}.eqtl_peaks.tsv',
                 gtf_fn=gtf_fn,
                 eqtl_results=eqtl_results,
+                peak_variable='overall',
                 lod_threshold=lod_threshold,
                 rel_lod_threshold=rel_lod_threshold,
                 pval_threshold=pval_threshold,
                 rel_prominence=rel_prominence,
                 ci_lod_drop=ci_lod_drop,
                 min_dist_between_eqtls=min_dist_between_eqtls,
-                ci_eqtl_range=ci_eqtl_range
+                cis_eqtl_range=cis_eqtl_range
             )
