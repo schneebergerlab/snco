@@ -1,6 +1,7 @@
 import logging
 import sys
 from copy import copy, deepcopy
+from collections import defaultdict
 import json
 
 import numpy as np
@@ -249,12 +250,33 @@ class BaseRecords:
 
     def filter(self, cb_whitelist, inplace=True):
         cb_whitelist = set(cb_whitelist)
-        obj = self if inplace else self.copy()
-        for cb in obj.barcodes:
-            if cb not in cb_whitelist:
-                obj._records.pop(cb)
-        if not inplace:
+        if inplace:
+            for cb in self.barcodes:
+                if cb not in cb_whitelist:
+                    self._records.pop(cb)
+            return None
+        else:
+            obj = self.new_like(self)
+            for cb in cb_whitelist:
+                obj._records[cb] = self._records[cb]
             return obj
+
+    def groupby(self, by):
+        if not callable(by):
+            if isinstance(by, dict):
+                grouper_func = by.get
+            else:
+                raise ValueError('grouper should be dict or callable')
+        else:
+            grouper_func = by
+        group_mapping = defaultdict(list)
+        for cb in self.barcodes:
+            g = grouper_func(cb)
+            if g is not None:
+                group_mapping[g].append(cb)
+        for g, g_cb in group_mapping.items():
+            g_obj = self.filter(g_cb, inplace=False)
+            yield g, g_obj
 
     def __add__(self, other):
         if isinstance(other, BaseRecords):
