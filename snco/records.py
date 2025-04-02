@@ -9,45 +9,9 @@ from scipy import sparse
 import pandas as pd
 
 from .bam import IntervalMarkerCounts
+from .groupby import RecordsGroupyBy
 
 log = logging.getLogger('snco')
-
-
-class RecordsGroupyBy:
-
-    '''
-    class for split-apply-combine operations on BaseRecords, inspired by pandas groupby
-    '''
-
-    def __init__(self, records, grouper):
-        self._records = records
-        if not callable(grouper):
-            if isinstance(grouper, dict):
-                grouper = grouper.get
-            else:
-                raise ValueError('grouper should be dict or callable')
-        self.group_mapping = defaultdict(list)
-        for cb in records.barcodes:
-            g = grouper(cb)
-            if g is not None:
-                self.group_mapping[g].append(cb)
-        self._items = iter(self.group_mapping.items())
-
-    def __iter__(self):
-        self._items = iter(self.group_mapping.items())
-        return self
-
-    def __next__(self):
-        g, g_cb = next(self._items)
-        g_obj = self._records.filter(g_cb, inplace=False)
-        return g, g_obj
-
-    def apply(self, func, **kwargs):
-        combined = self._records.new_like(self._records)
-        for _, group in self:
-            group_transformed = func(group, **kwargs)
-            combined.merge(group_transformed, inplace=True)
-        return combined
 
 
 class BaseRecords:

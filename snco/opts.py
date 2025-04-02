@@ -652,6 +652,15 @@ snco_opts.option(
 
 
 snco_opts.option(
+    '--clean-by-genotype/--clean-all', 'apply_per_geno',
+    subcommands=['clean', 'bam2pred', 'csl2pred'],
+    required=False,
+    default=False,
+    help='Whether to apply cleaning functions to each genotype separately'
+)
+
+
+snco_opts.option(
     '-R', '--segment-size',
     subcommands=['predict', 'bc1predict', 'bam2pred', 'csl2pred'],
     required=False,

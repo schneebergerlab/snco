@@ -6,6 +6,7 @@ from scipy.ndimage import convolve1d
 
 from .utils import load_json
 from .records import MarkerRecords
+from .groupby import genotype_grouper, dummy_grouper
 from .opts import DEFAULT_RANDOM_SEED
 
 log = logging.getLogger('snco')
@@ -46,33 +47,36 @@ def _estimate_marker_background(m, ws=100):
     return fg_masked
 
 
-def estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg):
+def estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg,
+                                       apply_per_geno=True):
     conv_bins = conv_window_size // co_markers.bin_size
-    bg_signal = {}
-    frac_bg = {}
-    for cb in co_markers.barcodes:
-        cb_co_markers = co_markers[cb]
-        bg_count = 0
-        tot_count = 0
-        for chrom, m in cb_co_markers.items():
-            bg = _estimate_marker_background(m, conv_bins)
-            if chrom not in bg_signal:
-                bg_signal[chrom] = bg
-            else:
-                bg_signal[chrom] += bg
+    co_markers.metadata['background_signal'] = {}
+    co_markers.metadata['estimated_background_fraction'] = {}
+    for geno, geno_co_markers in co_markers.groupby(by='genotype' if apply_per_geno else 'none'):
+        bg_signal = {}
+        frac_bg = {}
+        for cb in geno_co_markers.barcodes:
+            cb_co_markers = geno_co_markers[cb]
+            bg_count = 0
+            tot_count = 0
+            for chrom, m in cb_co_markers.items():
+                bg = _estimate_marker_background(m, conv_bins)
+                if chrom not in bg_signal:
+                    bg_signal[chrom] = bg
+                else:
+                    bg_signal[chrom] += bg
 
-            bg_count += bg.sum(axis=None)
-            tot_count += m.sum(axis=None)
-        frac_bg[cb] = bg_count / tot_count
-        if frac_bg[cb] > max_frac_bg:
-            co_markers.pop(cb)
-
-    bg_signal = {
-        chrom: sig / sig.sum(axis=None)
-        for chrom, sig in bg_signal.items()
-    }
-    co_markers.metadata['background_signal'] = bg_signal
-    co_markers.metadata['estimated_background_fraction'] = frac_bg
+                bg_count += bg.sum(axis=None)
+                tot_count += m.sum(axis=None)
+            frac_bg[cb] = bg_count / tot_count
+            if frac_bg[cb] > max_frac_bg:
+                co_markers.pop(cb)
+        bg_signal = {
+            chrom: sig / sig.sum(axis=None)
+            for chrom, sig in bg_signal.items()
+        }
+        co_markers.metadata['background_signal'][geno] = bg_signal
+        co_markers.metadata['estimated_background_fraction'].update(frac_bg)
     return co_markers
 
 
@@ -106,49 +110,63 @@ def subtract_background(m, bg_signal, frac_bg, return_bg=False, rng=DEFAULT_RNG)
     return m_sub, bg
 
 
-def clean_marker_background(co_markers, rng=DEFAULT_RNG):
+def clean_marker_background(co_markers, apply_per_geno=True, rng=DEFAULT_RNG):
     bg_signal = co_markers.metadata['background_signal']
     frac_bg = co_markers.metadata['estimated_background_fraction']
+    if apply_per_geno:
+        geno_grouper = genotype_grouper(co_markers)
+    else:
+        geno_grouper = dummy_grouper(co_markers)
     co_markers_c = MarkerRecords.new_like(co_markers)
     for cb, chrom, m in co_markers.deep_items():
+        geno = geno_grouper(cb)
         co_markers_c[cb, chrom] = subtract_background(
-            m, bg_signal[chrom], frac_bg[cb], rng=rng
+            m, bg_signal[geno][chrom], frac_bg[cb], rng=rng
         )
     return co_markers_c
 
 
-def create_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.75, min_cb=20):
-    tot_signal = {}
-    tot_obs = {}
-    for _, chrom, m in co_markers.deep_items():
-        if chrom not in tot_signal:
-            tot_signal[chrom] = m.copy()
-            tot_obs[chrom] = np.minimum(m.sum(axis=1), 1)
-        else:
-            tot_signal[chrom] += m
-            tot_obs[chrom] += np.minimum(m.sum(axis=1), 1)
-
+def create_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.75, min_cb=20,
+                                    apply_per_geno=True):
     imbalance_mask = {}
-    n_masked = 0
-    for chrom, m in tot_signal.items():
-        with np.errstate(invalid='ignore'):
-            bin_sum = m.sum(axis=1)
-            ratio = m[:, 0] / bin_sum
-        np.nan_to_num(ratio, nan=0.5, copy=False)
-        ratio_mask = (ratio > max_imbalance_mask) | (ratio < (1 - max_imbalance_mask))
-        count_mask = tot_obs[chrom] >= min_cb
-        mask = np.logical_and(ratio_mask, count_mask)
-        n_masked += mask.sum(axis=None)
-        imbalance_mask[chrom] = np.stack([mask, mask], axis=1)
+    for geno, geno_co_markers in co_markers.groupby(by='genotype' if apply_per_geno else 'none'):
+        tot_signal = {}
+        tot_obs = {}
+        for _, chrom, m in geno_co_markers.deep_items():
+            if chrom not in tot_signal:
+                tot_signal[chrom] = m.copy()
+                tot_obs[chrom] = np.minimum(m.sum(axis=1), 1)
+            else:
+                tot_signal[chrom] += m
+                tot_obs[chrom] += np.minimum(m.sum(axis=1), 1)
+        imbalance_mask[geno] = {}
+        n_masked = 0
+        for chrom, m in tot_signal.items():
+            with np.errstate(invalid='ignore'):
+                bin_sum = m.sum(axis=1)
+                ratio = m[:, 0] / bin_sum
+            np.nan_to_num(ratio, nan=0.5, copy=False)
+            ratio_mask = (ratio > max_imbalance_mask) | (ratio < (1 - max_imbalance_mask))
+            count_mask = tot_obs[chrom] >= min_cb
+            mask = np.logical_and(ratio_mask, count_mask)
+            n_masked += mask.sum(axis=None)
+            imbalance_mask[geno][chrom] = np.stack([mask, mask], axis=1)
     co_markers.metadata['haplotype_imbalance_mask'] = imbalance_mask
     return imbalance_mask, n_masked
 
 
-def apply_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.9):
-    mask, n_masked = create_haplotype_imbalance_mask(co_markers, max_imbalance_mask)
+def apply_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.9, apply_per_geno=True):
+    mask, n_masked = create_haplotype_imbalance_mask(
+        co_markers, max_imbalance_mask, apply_per_geno=apply_per_geno
+    )
+    if apply_per_geno:
+        geno_grouper = genotype_grouper(co_markers)
+    else:
+        geno_grouper = dummy_grouper(co_markers)
     co_markers_m = MarkerRecords.new_like(co_markers)
     for cb, chrom, m in co_markers.deep_items():
-        co_markers_m[cb, chrom] = np.where(mask[chrom], 0, m)
+        geno = geno_grouper(cb)
+        co_markers_m[cb, chrom] = np.where(mask[geno][chrom], 0, m)
     return co_markers_m, n_masked
 
 
@@ -179,11 +197,10 @@ def mask_regions_bed(co_markers, mask_bed_fn):
 
 
 def run_clean(marker_json_fn, output_json_fn, *,
-              co_markers=None,
-              cb_whitelist_fn=None, mask_bed_fn=None, bin_size=25_000,
+              co_markers=None, cb_whitelist_fn=None, mask_bed_fn=None, bin_size=25_000,
               min_markers_per_cb=0, min_markers_per_chrom=0, max_bin_count=20,
               clean_bg=True, bg_window_size=2_500_000, max_frac_bg=0.2, min_geno_prob=0.9,
-              mask_imbalanced=True, max_marker_imbalance=0.75,
+              mask_imbalanced=True, max_marker_imbalance=0.75, apply_per_geno=True,
               rng=DEFAULT_RNG):
     '''
     Removes predicted background markers, that result from ambient nucleic acids, 
@@ -211,7 +228,9 @@ def run_clean(marker_json_fn, output_json_fn, *,
     n = len(co_markers)
     # estimate ambient marker rate for each CB and try to scrub common background markers
     log.info('Estimating background marker rates.')
-    co_markers = estimate_overall_background_signal(co_markers, bg_window_size, max_frac_bg)
+    co_markers = estimate_overall_background_signal(
+        co_markers, bg_window_size, max_frac_bg, apply_per_geno=apply_per_geno
+    )
     log.info(
         f'Removed {n - len(co_markers)} barcodes with greater than {max_frac_bg * 100}%'
         ' background contamination'
@@ -222,13 +241,15 @@ def run_clean(marker_json_fn, output_json_fn, *,
     log.info(f'Average estimated background fraction is {av_bg:.3f}')
     if clean_bg:
         log.info('Attempting to filter likely background markers')
-        co_markers = clean_marker_background(co_markers, rng=rng)
+        co_markers = clean_marker_background(
+            co_markers, apply_per_geno=apply_per_geno, rng=rng)
 
     if mask_imbalanced:
         # mask any bins that still have extreme imbalance
         # (e.g. due to extreme allele-specific expression differences)
         co_markers, n_masked = apply_haplotype_imbalance_mask(
-            co_markers, max_marker_imbalance
+            co_markers, max_marker_imbalance,
+            apply_per_geno=apply_per_geno,
         )
         tot_bins = sum(co_markers.nbins.values())
         log.info(
