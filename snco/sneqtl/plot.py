@@ -127,7 +127,10 @@ class eQTLPlotter:
             y=gene_eqtl_results.y.apply(self._col_transform)
         )
         if self.gene_locs is not None:
-            gene_chrom, gene_pos = self.gene_locs.get(gene_id, (None, None))
+            try:
+                gene_chrom, gene_pos = self.gene_locs.loc[gene_id]
+            except KeyError:
+                gene_chrom, gene_pos = None
         else:
             gene_chrom, gene_pos = None, None
         fig, axes = chrom_subplots(self.chrom_sizes, figsize=self.figsize)
@@ -145,9 +148,10 @@ class eQTLPlotter:
             )
             if chrom == gene_chrom:
                 ax.axvline(gene_pos, ls='-', color='#252525', zorder=-1)
-            for _, se in self.eqtl_peaks.query('gene_id == @gene_id & chrom_eqtl == @chrom').iterrows():
-                ax.axvline(se.pos_eqtl, ls='--', color='#777777', zorder=-1)
-                ax.axvspan(se.left_ci_eqtl, se.right_ci_eqtl, color='#777777', zorder=-1, alpha=0.2)
+            if self.eqtl_peaks is not None:
+                for _, se in self.eqtl_peaks.query('gene_id == @gene_id & chrom_eqtl == @chrom').iterrows():
+                    ax.axvline(se.pos_eqtl, ls='--', color='#777777', zorder=-1)
+                    ax.axvspan(se.left_ci_eqtl, se.right_ci_eqtl, color='#777777', zorder=-1, alpha=0.2)
 
         axes[0].set_ylabel(self.ylabel)
         for ax in axes[:-1]:
@@ -156,3 +160,118 @@ class eQTLPlotter:
 
         plt.tight_layout(pad=0.2)
         return axes
+
+
+class HaplotypeExpressionPlotter:
+
+    def __init__(self, haplotypes, exprs_mat, eqtls=None, gene_locs=None,
+                 parental_genotypes=None, celltypes=None, cb_whitelist=None,
+                 palette=DEFAULT_PALETTE, figsize=(12.5, 3)):
+        if cb_whitelist is None:
+            self.cb_whitelist = list(
+                set(haplotypes.barcodes).intersection(exprs_mat.columns)
+            )
+            if not len(self.cb_whitelist):
+                raise ValueError('haplotypes and exprs_mat barcodes do not overlap')
+        self.haplotypes = haplotypes.filter(self.cb_whitelist, inplace=False)
+        self.exprs_mat = exprs_mat.loc[:, self.cb_whitelist]
+        self.eqtls = eqtls
+        self.gene_locs = gene_locs
+        if parental_genotypes is not None:
+            parental_genotypes = parental_genotypes.loc[self.cb_whitelist].rename('Genotype')
+        self.parental_genotypes = parental_genotypes
+        if celltypes is not None:
+            celltypes = celltypes.loc[self.cb_whitelist].rename('Cell/Nucleus type')
+        self.celltypes = celltypes
+        self.palette = palette
+        self.figsize = figsize
+
+    def get_haplotype(self, gene_id, haplotype_type, haplotype_chrom=None, haplotype_pos=None):
+        if haplotype_type == 'cis':
+            gene_loc = self.gene_locs.loc[gene_id]
+            haplotype = self.haplotypes.get_haplotype(gene_loc.chrom, gene_loc.pos, self.cb_whitelist)
+            label = 'cis-haplotype'
+        elif haplotype_type == 'best_hit':
+            if self.eqtls is None:
+                raise ValueError('eqtls were not provided')
+            gene_eqtls = self.eqtls.query('gene_id == @gene_id')
+            if not len(gene_eqtls):
+                raise ValueError('cannot find best_hit, gene was not tested')
+            best_hit = gene_eqtls.loc[gene_eqtls.lod_score.idxmax()]
+            haplotype = self.haplotypes.get_haplotype(best_hit.chrom, best_hit.pos, self.cb_whitelist)
+            label= f'Haplotype at {best_hit.chrom}:{best_hit.pos}'
+        elif haplotype_type == 'specified':
+            if haplotype_chrom is None:
+                raise ValueError('If haplotype_type == "specified", at least haplotype_chrom must be supplied')
+            if haplotype_pos is not None:
+                haplotype_pos = int(haplotype_pos)
+                haplotype = self.haplotypes.get_haplotype(haplotype_chrom, haplotype_pos, self.cb_whitelist)
+            else:
+                if self.eqtls is None:
+                    raise ValueError('eqtls were not provided')
+                gene_eqtls = self.eqtls.query('gene_id == @gene_id & chrom == @haplotype_chrom')
+                if not len(gene_eqtls):
+                    raise ValueError('cannot find best_hit, gene was not tested')
+                best_hit = gene_eqtls.loc[gene_eqtls.lod_score.idxmax()]
+                haplotype_pos = best_hit.pos
+                haplotype = self.haplotypes.get_haplotype(haplotype_chrom, haplotype_pos, self.cb_whitelist)
+            label= f'Haplotype at {haplotype_chrom}:{haplotype_pos}'
+        haplotype = haplotype.round().map({0: 'Parent 1', 1: 'Parent 2'})
+        return haplotype.rename(label)
+
+    def _assign_variable(self, vartype, gene_id, haplotype_subtype, haplotype_chrom, haplotype_pos):
+        if vartype == 'haplotype':
+            variable = self.get_haplotype(gene_id, haplotype_subtype, haplotype_chrom, haplotype_pos)
+        elif vartype == 'genotype':
+            if self.parental_genotypes is None:
+                raise ValueError('parental_genotypes were not provided')
+            variable = self.parental_genotypes
+        elif vartype == 'celltype':
+            if self.celltypes is None:
+                raise ValueError('celltypes were not provided')
+            variable = self.celltypes
+        elif vartype is None:
+            variable = None
+        else:
+            raise NotImplementedError(f'Variables x and hue should be one of "haplotype", "genotype" or "celltype"')
+        return variable
+
+    def __call__(self, gene_id, x='haplotype', hue=None,
+                 x_haplotype_subtype='cis', x_haplotype_chrom=None, x_haplotype_pos=None,
+                 hue_haplotype_subtype=None, hue_haplotype_chrom=None, hue_haplotype_pos=None,
+                 celltype_filter_func=None, genotype_filter_func=None, cb_whitelist=None,
+                 ax=None, figsize=(6, 3), title=None, **violin_kwargs):
+        x = self._assign_variable(
+            x, gene_id, x_haplotype_subtype, x_haplotype_chrom, x_haplotype_pos
+        )
+        if hue is None:
+            hue = x
+        else:
+            hue = self._assign_variable(
+                hue, gene_id, hue_haplotype_subtype, hue_haplotype_chrom, hue_haplotype_pos
+            )
+        y = self.exprs_mat.loc[gene_id]
+
+        if cb_whitelist is None:
+            cb_whitelist = self.cb_whitelist
+
+        if celltype_filter_func is not None:
+            celltype_cb_whitelist = self.celltypes[celltype_filter_func].index.tolist()
+            cb_whitelist = list(set(cb_whitelist).intersection(celltype_cb_whitelist))
+
+        if genotype_filter_func is not None:
+            genotype_cb_whitelist = self.parental_genotypes[genotype_filter_func].index.tolist()
+            cb_whitelist = list(set(cb_whitelist).intersection(genotype_cb_whitelist))
+
+        x = x[cb_whitelist]
+        y = y[cb_whitelist]
+        hue = hue[cb_whitelist]
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize)
+
+        sns.violinplot(x=x, y=y, hue=hue, ax=ax, **violin_kwargs)
+        ax.set_ylabel(f'{gene_id} log2 gene expression')
+        if title is not None:
+            ax.set_title(title)
+        return ax

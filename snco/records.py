@@ -459,3 +459,12 @@ class PredictionRecords(BaseRecords):
             index.append(cb)
             frame.append(np.concatenate([self[cb, chrom] for chrom in self.chrom_sizes]))
         return pd.DataFrame(frame, index=index, columns=columns)
+
+    def get_haplotype(self, chrom, pos, cb_whitelist=None):
+        idx = int(pos // self.bin_size)
+        series = []
+        if cb_whitelist is None:
+            cb_whitelist = self.barcodes
+        for cb in cb_whitelist:
+            series.append(self._records[cb][chrom][idx])
+        return pd.Series(series, index=cb_whitelist, name=f'{chrom}:{pos:d}')
