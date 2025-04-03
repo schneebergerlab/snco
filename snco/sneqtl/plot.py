@@ -6,43 +6,11 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import Normalize, LinearSegmentedColormap
 import seaborn as sns
 
-from ..plot import chrom_subplots
+from ..plot import chrom_subplots, chrom2d_subplots
 
 DEFAULT_PALETTE = sns.color_palette(
     ['#0072b2', '#d55e00', '#009e73', '#f0e442', '#cc79a7', '#56b4e9', '#e69f00']
 )
-
-def chrom2d_subplots(chrom_sizes, figsize=(10, 10), xtick_every=1e7):
-
-    fig, axes = plt.subplots(
-        figsize=figsize,
-        ncols=len(chrom_sizes),
-        nrows=len(chrom_sizes),
-        width_ratios=list(chrom_sizes.values()),
-        height_ratios=list(chrom_sizes.values())[::-1],
-        sharey='row',
-        sharex='col'
-    )
-    axes = axes[::-1]
-
-    for chrom, ax in zip(chrom_sizes, axes[0]):
-        ax.set_xlim(0, chrom_sizes[chrom])
-        xticks = np.arange(0, chrom_sizes[chrom], xtick_every)
-        ax.set_xticks(xticks)
-        ax.set_xticklabels([int(i // 1e6) for i in xticks])
-        chrom_label = re.sub('^[Cc]hr', '', chrom)
-        ax.set_xlabel(f'Chr{chrom_label} (Mb)')
-
-    for chrom, ax in zip(chrom_sizes, axes[:, 0]):
-        ax.set_ylim(0, chrom_sizes[chrom])
-        yticks = np.arange(0, chrom_sizes[chrom], xtick_every)
-        ax.set_yticks(yticks)
-        ax.set_yticklabels([int(i // 1e6) for i in yticks])
-        chrom_label = re.sub('^[Cc]hr', '', chrom)
-        ax.set_ylabel(f'Chr{chrom_label} (Mb)')
-
-    plt.tight_layout()
-    return fig, axes
 
 
 def eqtl_scatterplot(eqtl_peaks, chrom_sizes,
