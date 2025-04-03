@@ -14,7 +14,7 @@ from .groupby import RecordsGroupyBy
 log = logging.getLogger('snco')
 
 
-class BaseRecords:
+class BaseRecords(object):
 
     '''
     base class for MarkerRecords and PredictionRecords classes
@@ -114,6 +114,15 @@ class BaseRecords:
                 return m[arr_idx[0], arr_idx[1]]
             raise KeyError('Too many indices to array')
         raise KeyError(index)
+
+    def __getattr__(self, attribute):
+        try:
+            return self.metadata[attribute]
+        except KeyError:
+            raise AttributeError(f"'{type(self)}' object has no attribute '{attribute}'")
+
+    def __dir__(self):
+        return object.__dir__(self) + list(self.metadata.keys())
 
     def _ipython_key_completions_(self):
         return self._records.keys()
@@ -260,6 +269,12 @@ class BaseRecords:
             for cb in cb_whitelist:
                 obj._records[cb] = self._records[cb]
             return obj
+
+    def query(self, func):
+        return self.filter(
+            (cb for cb in self.barcodes if func(cb)),
+            inplace=False
+        )
 
     def groupby(self, by):
         return RecordsGroupyBy(self, by)
