@@ -14,6 +14,23 @@ DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 
 
 def filter_low_coverage_barcodes(co_markers, min_cov=0, min_cov_per_chrom=0):
+    """
+    Remove cell barcodes with insufficient total or per-chromosome marker coverage.
+
+    Parameters
+    ----------
+    co_markers : MarkerRecords
+        Marker records object containing marker matrices per barcode and chromosome.
+    min_cov : int, default=0
+        Minimum total number of markers required across all chromosomes.
+    min_cov_per_chrom : int, default=0
+        Minimum number of markers required per chromosome.
+
+    Returns
+    -------
+    MarkerRecords
+        Filtered marker records.
+    """
     co_markers_f = co_markers.copy()
     for cb in co_markers_f.barcodes:
         m_counts = [m.sum(axis=None) for m in co_markers_f[cb].values()]
@@ -23,6 +40,21 @@ def filter_low_coverage_barcodes(co_markers, min_cov=0, min_cov_per_chrom=0):
 
 
 def filter_genotyping_score(co_markers, min_geno_prob=0.9):
+    """
+    Remove barcodes with genotyping probability below a given threshold.
+
+    Parameters
+    ----------
+    co_markers : MarkerRecords
+        Marker records with metadata containing genotyping probabilities.
+    min_geno_prob : float, default=0.9
+        Minimum allowed genotype probability.
+
+    Returns
+    -------
+    MarkerRecords
+        Filtered marker records.
+    """
     try:
         genotypes = co_markers.metadata['genotypes']
     except KeyError:
@@ -35,12 +67,42 @@ def filter_genotyping_score(co_markers, min_geno_prob=0.9):
 
 
 def predict_foreground_convolution(m, ws=100):
+    """
+    Predict foreground signal by convolution across bins.
+
+    Parameters
+    ----------
+    m : np.ndarray
+        Marker count matrix with shape (bins, haplotypes).
+    ws : int, default=100
+        Width of the convolution window in bins.
+
+    Returns
+    -------
+    np.ndarray
+        Array of foreground haplotype indices per bin.
+    """
     rs = convolve1d(m, np.ones(ws), axis=0, mode='constant', cval=0)
     fg_idx = rs.argmax(axis=1)
     return fg_idx
 
 
 def _estimate_marker_background(m, ws=100):
+    """
+    Estimate background signal by masking out predicted foreground signal.
+
+    Parameters
+    ----------
+    m : np.ndarray
+        Marker count matrix with shape (bins, haplotypes).
+    ws : int, default=100
+        Width of the convolution window in bins.
+
+    Returns
+    -------
+    np.ndarray
+        Background marker matrix with foreground masked with zeros.
+    """
     fg_idx = predict_foreground_convolution(m, ws)
     fg_masked = m.copy()
     fg_masked[np.arange(len(m)), fg_idx] = 0
@@ -49,6 +111,25 @@ def _estimate_marker_background(m, ws=100):
 
 def estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg,
                                        apply_per_geno=True):
+    """
+    Estimate and store background signal and barcode-level background contamination.
+
+    Parameters
+    ----------
+    co_markers : MarkerRecords
+        Marker records to process.
+    conv_window_size : int
+        Width of the background convolution window in base pairs.
+    max_frac_bg : float
+        Maximum tolerated background contamination fraction per barcode.
+    apply_per_geno : bool, default=True
+        Estimate background separately for each genotype.
+
+    Returns
+    -------
+    MarkerRecords
+        Filtered marker records with updated metadata.
+    """
     conv_bins = conv_window_size // co_markers.bin_size
     co_markers.metadata['background_signal'] = {}
     co_markers.metadata['estimated_background_fraction'] = {}
@@ -81,6 +162,25 @@ def estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg
 
 
 def random_bg_sample(m, bg_signal, n_bg, rng=DEFAULT_RNG):
+    """
+    Randomly sample background signal proportionally to observed counts and background model.
+
+    Parameters
+    ----------
+    m : np.ndarray
+        Marker count matrix with shape (bins, haplotypes).
+    bg_signal : np.ndarray
+        Background probabilities with shape (bins, haplotypes).
+    n_bg : int
+        Number of background markers to sample.
+    rng : np.random.Generator, optional
+        Random number generator.
+
+    Returns
+    -------
+    np.ndarray
+        Matrix of sampled background markers.
+    """
     bg_idx = np.nonzero(m)
     m_valid = m[bg_idx]
     p = m_valid * bg_signal[bg_idx]
@@ -96,6 +196,27 @@ def random_bg_sample(m, bg_signal, n_bg, rng=DEFAULT_RNG):
 
 
 def subtract_background(m, bg_signal, frac_bg, return_bg=False, rng=DEFAULT_RNG):
+    """
+    Subtract background signal from marker matrix.
+
+    Parameters
+    ----------
+    m : np.ndarray
+        Marker count matrix with shape (bins, haplotypes).
+    bg_signal : np.ndarray
+        Background probabilities with shape (bins, haplotypes).
+    frac_bg : float
+        Estimated background fraction for barcode.
+    return_bg : bool, default=False
+        Whether to return background matrix as well as background-subtracted marker matrix
+    rng : np.random.Generator, optional
+        Random number generator.
+
+    Returns
+    -------
+    np.ndarray or tuple of np.ndarray
+        Background-subtracted marker matrix (and optionally the background matrix).
+    """
     tot = m.sum(axis=None)
     if tot:
         n_bg = round(tot * frac_bg)
@@ -111,6 +232,23 @@ def subtract_background(m, bg_signal, frac_bg, return_bg=False, rng=DEFAULT_RNG)
 
 
 def clean_marker_background(co_markers, apply_per_geno=True, rng=DEFAULT_RNG):
+    """
+    Subtract estimated background signal from marker data for each barcode.
+
+    Parameters
+    ----------
+    co_markers : MarkerRecords
+        Marker records with background metadata.
+    apply_per_geno : bool, default=True
+        Whether to clean using genotype-specific background.
+    rng : np.random.Generator, optional
+        Random number generator.
+
+    Returns
+    -------
+    MarkerRecords
+        Background-cleaned marker records.
+    """
     bg_signal = co_markers.metadata['background_signal']
     frac_bg = co_markers.metadata['estimated_background_fraction']
     if apply_per_geno:
@@ -128,6 +266,27 @@ def clean_marker_background(co_markers, apply_per_geno=True, rng=DEFAULT_RNG):
 
 def create_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.75, min_cb=20,
                                     apply_per_geno=True):
+    """
+    Create a mask for bins with high haplotype imbalance.
+
+    Parameters
+    ----------
+    co_markers : MarkerRecords
+        Marker data with haplotype-specific read counts.
+    max_imbalance_mask : float, default=0.75
+        Maximum allowed haplotype ratio before masking.
+    min_cb : int, default=20
+        Minimum number of cell barcodes required per bin.
+    apply_per_geno : bool, default=True
+        Mask separately per genotype.
+
+    Returns
+    -------
+    dict
+        Dictionary of masks by genotype and chromosome.
+    int
+        Total number of bins masked.
+    """
     imbalance_mask = {}
     for geno, geno_co_markers in co_markers.groupby(by='genotype' if apply_per_geno else 'none'):
         tot_signal = {}
@@ -156,6 +315,25 @@ def create_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.75, min_cb=
 
 
 def apply_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.9, apply_per_geno=True):
+    """
+    Apply mask to bins with excessive haplotype imbalance.
+
+    Parameters
+    ----------
+    co_markers : MarkerRecords
+        Marker data to mask.
+    max_imbalance_mask : float, default=0.9
+        Maximum allowed imbalance ratio.
+    apply_per_geno : bool, default=True
+        Apply masking per genotype.
+
+    Returns
+    -------
+    MarkerRecords
+        Masked marker records.
+    int
+        Number of bins masked.
+    """
     mask, n_masked = create_haplotype_imbalance_mask(
         co_markers, max_imbalance_mask, apply_per_geno=apply_per_geno
     )
@@ -171,6 +349,21 @@ def apply_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.9, apply_per
 
 
 def apply_marker_threshold(co_markers, max_marker_threshold):
+    """
+    Cap bin counts to a maximum marker threshold.
+
+    Parameters
+    ----------
+    co_markers : MarkerRecords
+        Marker data.
+    max_marker_threshold : int
+        Maximum allowed marker count per bin.
+
+    Returns
+    -------
+    MarkerRecords
+        Thresholded marker records.
+    """
     co_markers_t = MarkerRecords.new_like(co_markers)
     for cb, chrom, m in co_markers.deep_items():
         co_markers_t[cb, chrom] = np.minimum(m, max_marker_threshold)
@@ -178,6 +371,21 @@ def apply_marker_threshold(co_markers, max_marker_threshold):
 
 
 def mask_regions_bed(co_markers, mask_bed_fn):
+    """
+    Mask regions listed in a BED file.
+
+    Parameters
+    ----------
+    co_markers : MarkerRecords
+        Marker data to be masked.
+    mask_bed_fn : str
+        Path to BED file with regions to mask.
+
+    Returns
+    -------
+    MarkerRecords
+        Masked marker records.
+    """
     co_markers_m = co_markers.copy()
     mask_invs = pd.read_csv(
         mask_bed_fn,
@@ -202,10 +410,52 @@ def run_clean(marker_json_fn, output_json_fn, *,
               clean_bg=True, bg_window_size=2_500_000, max_frac_bg=0.2, min_geno_prob=0.9,
               mask_imbalanced=True, max_marker_imbalance=0.75, apply_per_geno=True,
               rng=DEFAULT_RNG):
-    '''
-    Removes predicted background markers, that result from ambient nucleic acids, 
-    from each cell barcode.
-    '''
+    """
+    Complete pipeline for cleaning single-cell marker data by removing ambient background,
+    extremely imbalanced bins and poorly supported barcodes.
+
+    Parameters
+    ----------
+    marker_json_fn : str
+        Input JSON file with marker data.
+    output_json_fn : str
+        Path to write cleaned marker data.
+    co_markers : MarkerRecords, optional
+        Pre-loaded marker records.
+    cb_whitelist_fn : str, optional
+        File path to barcode whitelist.
+    mask_bed_fn : str, optional
+        BED file of regions to mask.
+    bin_size : int, default=25000
+        Bin size for aggregation in base pairs.
+    min_markers_per_cb : int, default=0
+        Minimum total markers required for a barcode.
+    min_markers_per_chrom : int, default=0
+        Minimum markers per chromosome per barcode.
+    max_bin_count : int, default=20
+        Maximum marker count allowed per bin.
+    clean_bg : bool, default=True
+        Whether to subtract estimated background signal.
+    bg_window_size : int, default=2500000
+        Size of convolution window for background estimation.
+    max_frac_bg : float, default=0.2
+        Maximum tolerated background contamination.
+    min_geno_prob : float, default=0.9
+        Minimum genotype confidence required.
+    mask_imbalanced : bool, default=True
+        Whether to mask bins with haplotype imbalance.
+    max_marker_imbalance : float, default=0.75
+        Maximum tolerated haplotype ratio before masking.
+    apply_per_geno : bool, default=True
+        Apply all corrections separately per genotype.
+    rng : np.random.Generator, optional
+        Random number generator.
+
+    Returns
+    -------
+    MarkerRecords
+        Cleaned marker records.
+    """
     if co_markers is None:
         co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
 
