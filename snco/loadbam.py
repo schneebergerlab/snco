@@ -24,9 +24,21 @@ DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 
 
 def get_chrom_sizes_bam(bam_fn, exclude_contigs=None):
-    '''
-    load dict of chromosome lengths from the header of a bam file
-    '''
+    """
+    Load a dictionary of chromosome lengths from the header of a BAM file.
+
+    Parameters
+    ----------
+    bam_fn : str
+        The BAM file path.
+    exclude_contigs : list of str, optional
+        List of contig names to exclude (default is `DEFAULT_EXCLUDE_CONTIGS`).
+
+    Returns
+    -------
+    dict
+        A dictionary where keys are chromosome names and values are their respective lengths.
+    """
     if exclude_contigs is None:
         exclude_contigs = DEFAULT_EXCLUDE_CONTIGS
     with pysam.AlignmentFile(bam_fn) as bam:
@@ -37,10 +49,28 @@ def get_chrom_sizes_bam(bam_fn, exclude_contigs=None):
 
 
 def single_chrom_co_markers(bam_fn, chrom, bin_start, bin_end, **kwargs):
-    '''
-    For a single bam file/chrom combination, create a MarkerRecords object
+    """
+    For a single BAM file/chromosome combination, create a `MarkerRecords` object 
     storing the haplotype marker information.
-    '''
+
+    Parameters
+    ----------
+    bam_fn : str
+        The BAM file path.
+    chrom : str
+        The chromosome name.
+    bin_start : int
+        The starting bin index for processing.
+    bin_end : int
+        The ending bin index for processing.
+    kwargs : dict
+        Additional keyword arguments passed to `BAMHaplotypeIntervalReader`.
+
+    Returns
+    -------
+    list
+        A list of IntervalMarkerCounts records for the specified region in the BAM file.
+    """
     chrom_inv_counts = []
     with BAMHaplotypeIntervalReader(bam_fn, **kwargs) as bam:
         for bin_idx in range(bin_start, bin_end):
@@ -49,7 +79,24 @@ def single_chrom_co_markers(bam_fn, chrom, bin_start, bin_end, **kwargs):
 
 
 def chrom_chunks(chrom_sizes, bin_size, nchunks):
-    '''produce approximately nchunks slices covering all the bins in chrom_nbins'''
+    """
+    Generate chunks of chromosome bins for parallel processing.
+
+    Parameters
+    ----------
+    chrom_sizes : dict
+        A dictionary where keys are chromosome names and values are their respective lengths.
+    bin_size : int
+        The bin size in base pairs.
+    nchunks : int
+        The number of chunks to divide the bins into.
+
+    Yields
+    ------
+    tuple
+        Tuples of `(chrom, start, end)` where `chrom` is the chromosome name and
+        `start` and `end` are the bin indices defining a chunk.
+    """
     tot = 0
     chrom_nbins = {}
     for chrom, cs in chrom_sizes.items():
@@ -67,10 +114,30 @@ def chrom_chunks(chrom_sizes, bin_size, nchunks):
 
 
 def get_co_markers(bam_fn, processes=1, seq_type=None, run_genotype=False, genotype_kwargs=None, **kwargs):
-    '''
-    Read from a bam file, identify reads aligning to each haplotype for each cell barcode,
-    and summarise into a MarkerRecords object.
-    '''
+    """
+    Read from a BAM file, identify reads aligning to each haplotype for each cell barcode,
+    and summarize the data into a `MarkerRecords` object.
+
+    Parameters
+    ----------
+    bam_fn : str
+        The BAM file path.
+    processes : int, optional
+        The number of parallel processes to use (default is 1).
+    seq_type : str, optional
+        The type of sequencing data (e.g., "10x_atac", "10x_rna", "bd_rna", "takara", "wgs").
+    run_genotype : bool, optional
+        If True, perform genotyping of parental accessions based on interval counts (default is False).
+    genotype_kwargs : dict, optional
+        Additional arguments passed to the genotyping function (default is None).
+    kwargs : dict
+        Additional arguments passed to the BAM file processing functions.
+
+    Returns
+    -------
+    MarkerRecords
+        A `MarkerRecords` object containing aggregated haplotype marker information for the cell barcodes.
+    """
     chrom_sizes = get_chrom_sizes_bam(bam_fn, exclude_contigs=kwargs.get('exclude_contigs', None))
     bin_size = kwargs.get('bin_size')
 
@@ -134,11 +201,63 @@ def run_loadbam(bam_fn, output_json_fn, *,
                 genotype_em_bootstraps=25,
                 min_markers_per_cb=100, min_markers_per_chrom=20, min_geno_prob=0.9,
                 exclude_contigs=None, processes=1, rng=DEFAULT_RNG):
-    '''
-    Read bam file with cell barcode, umi and haplotype tags, 
-    to generate a json file of binned haplotype marker distributions for each cell barcode. 
-    These can be used to call recombinations using the downstream `predict` command.
-    '''
+ """
+    Read a BAM file with cell barcode, UMI, and haplotype tags, and generate a JSON file 
+    containing binned haplotype marker distributions for each cell barcode.
+
+    Parameters
+    ----------
+    bam_fn : str
+        The BAM file path.
+    output_json_fn : str
+        The output JSON file path to store the processed marker records.
+    cb_whitelist_fn : str, optional
+        Path to a cell barcode whitelist file (default is None).
+    bin_size : int, optional
+        The size of each bin in base pairs (default is 25,000).
+    seq_type : str, optional
+        The type of sequencing data (default is None).
+    cb_tag : str, optional
+        The tag used to identify cell barcodes in the BAM file (default is 'CB').
+    cb_correction_method : str, optional
+        Method for correcting cell barcode tags (default is 'exact').
+    umi_tag : str, optional
+        The tag used to identify UMIs in the BAM file (default is 'UB').
+    umi_collapse_method : str, optional
+        Method for collapsing UMIs (default is 'directional').
+    hap_tag : str, optional
+        The tag used to identify haplotypes in the BAM file (default is 'ha').
+    hap_tag_type : str, optional
+        The haplotype tag type (default is 'star_diploid').
+    run_genotype : bool, optional
+        If True, perform genotyping (default is False).
+    genotype_crossing_combinations : list of frozenset, optional
+        List of allowed crossing combinations for genotyping (default is None).
+    genotype_em_max_iter : int, optional
+        Maximum number of EM iterations for genotyping (default is 1000).
+    genotype_em_min_delta : float, optional
+        Minimum change in probabilities for convergence (default is 1e-3).
+    genotype_em_bootstraps : int, optional
+        Number of bootstrap re-samples for genotyping (default is 25).
+    min_markers_per_cb : int, optional
+        Minimum number of markers required per barcode (default is 100).
+    min_markers_per_chrom : int, optional
+        Minimum number of markers required per chromosome (default is 20).
+    min_geno_prob : float, optional
+        Minimum genotyping probability, barcodes with lower probabilities are filtered
+        (default is 0.9).
+    exclude_contigs : list of str, optional
+        List of contig names to exclude (default is None).
+    processes : int, optional
+        Number of parallel processes to use (default is 1).
+    rng : np.random.Generator, optional
+        Random number generator (default is `DEFAULT_RNG`).
+
+    Returns
+    -------
+    MarkerRecords
+        A `MarkerRecords` object containing processed haplotype marker distributions.
+    """
     cb_whitelist = read_cb_whitelist(cb_whitelist_fn, cb_correction_method)
     co_markers = get_co_markers(
         bam_fn, processes=processes,
