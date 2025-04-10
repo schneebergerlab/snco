@@ -16,9 +16,12 @@ log = logging.getLogger('snco')
 
 class BaseRecords(object):
 
-    '''
-    base class for MarkerRecords and PredictionRecords classes
-    '''
+    """
+    Base class for `MarkerRecords` and `PredictionRecords`.
+
+    This class stores cell barcode records across chromosomes with data represented
+    in numpy arrays. It supports indexing, merging, filtering, grouping, and serialization.
+    """
 
     def __init__(self,
                  chrom_sizes: dict[str, int],
@@ -26,6 +29,20 @@ class BaseRecords(object):
                  seq_type: str | None = None,
                  metadata: dict | None = None,
                  frozen=False):
+        """
+        Parameters
+        ----------
+        chrom_sizes : dict of str to int
+            Dictionary mapping chromosome names to chromosome sizes.
+        bin_size : int
+            The size of each genomic bin.
+        seq_type : str or None, optional
+            A string describing the sequencing data type.
+        metadata : dict or None, optional
+            Additional metadata for the record set.
+        frozen : bool, default=False
+            If True, prevents creation of new keys in the records.
+        """
         self.chrom_sizes = chrom_sizes
         self.bin_size = bin_size
         self.seq_type = seq_type
@@ -68,6 +85,19 @@ class BaseRecords(object):
             self._check_arr(arr, chrom)
 
     def get_chrom(self, chrom):
+        """
+        Return a 2D array of all records for a given chromosome.
+
+        Parameters
+        ----------
+        chrom : str
+            Chromosome name.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape (n_cell_barcodes, nbins) or (n_cell_barcodes, nbins, dim2_shape).
+        """
         arrs = []
         for cb in self.keys():
             try:
@@ -78,6 +108,19 @@ class BaseRecords(object):
         return np.asarray(arrs)
 
     def iter_chrom(self, chrom):
+        """
+        Iterate over all cell barcodes for a given chromosome.
+
+        Parameters
+        ----------
+        chrom : str
+            Chromosome name.
+
+        Yields
+        ------
+        tuple
+            (cell barcode, numpy array) for each record.
+        """
         for cb in self.keys():
             try:
                 yield cb, self._records[cb][chrom]
@@ -179,6 +222,12 @@ class BaseRecords(object):
         '''iterable of top level keys (i.e. cell barcodes)'''
         return self._records.keys()
 
+    def deep_keys(self):
+        '''iterable of deep keys (cell barcode, chrom pairs)'''
+        for cb, sd in self._records.items():
+            for chrom in sd:
+                yield chrom, sd
+
     def values(self):
         '''iterable of top level values (i.e. dict[chrom: marker array])'''
         return self._records.values()
@@ -189,11 +238,24 @@ class BaseRecords(object):
             yield from sd.values()
 
     def pop(self, cb):
+        '''remove and return a barcode from the dataset'''
         return self._records.pop(cb)
 
     @classmethod
     def new_like(cls, other):
-        '''create an empty records object with metadata properties from other'''
+        """
+        Create a new empty object like another `BaseRecords` instance.
+
+        Parameters
+        ----------
+        other : BaseRecords
+            Template object to mimic.
+
+        Returns
+        -------
+        BaseRecords
+            New instance with copied metadata and structure.
+        """
         # do not use deepcopy directly, as this will unnecessarily copy _records
         new_instance = cls(
             copy(other.chrom_sizes),
@@ -225,7 +287,19 @@ class BaseRecords(object):
         merge records from other into self.
         Cell barcodes in other that are not present in self will be created.
         where barcodes are present in both, the marker arrays will be added together.
-        for PredictionRecord instances, empty positions in self will be filled with non-empty from other
+        NaN positions in self will be filled with non-NaN from other
+
+        Parameters
+        ----------
+        other : BaseRecords
+            Another records object to merge.
+        inplace : bool, default=False
+            Whether to modify this object in-place.
+
+        Returns
+        -------
+        BaseRecords or None
+            The merged object or None if in-place.
         '''
         if (stype := type(self)) != (otype := type(other)):
             raise ValueError(
@@ -258,6 +332,22 @@ class BaseRecords(object):
             return s
 
     def filter(self, cb_whitelist, inplace=True):
+        """
+        Filter the records to include only cell barcodes in the provided whitelist.
+
+        Parameters
+        ----------
+        cb_whitelist : list or set
+            A collection of cell barcodes to retain in the records.
+        inplace : bool, default=True
+            If True, modifies the current object in place.
+            If False, returns a new filtered instance.
+
+        Returns
+        -------
+        BaseRecords or None
+            The filtered records object if `inplace=False`, otherwise None.
+        """
         cb_whitelist = set(cb_whitelist)
         if inplace:
             for cb in self.barcodes:
@@ -271,12 +361,46 @@ class BaseRecords(object):
             return obj
 
     def query(self, func):
+        """
+        Query the records using a function applied to each cell barcode.
+
+        Parameters
+        ----------
+        func : callable
+            A function that accepts a cell barcode (str) and returns True
+            if the barcode should be included.
+
+        Returns
+        -------
+        BaseRecords
+            A new records object containing only barcodes for which `func` returns True.
+        """
         return self.filter(
             (cb for cb in self.barcodes if func(cb)),
             inplace=False
         )
 
     def groupby(self, by):
+        """
+        Group records by a provided mapping from barcodes to group labels.
+
+        Parameters
+        ----------
+        by : str, dict-like or callable
+            Grouping strategy. Can be a string ('none', 'genotype'), a dictionary
+            mapping cell barcodes to group labels, or a callable that takes a barcode
+            and returns a group label.
+
+        Returns
+        -------
+        RecordsGroupyBy
+            A RecordsGroupyBy object that allows group-wise operations over the records.
+
+        Raises
+        ------
+        ValueError
+            If the grouper is not recognized or invalid.
+        """
         return RecordsGroupyBy(self, by)
 
     def __add__(self, other):
@@ -330,7 +454,19 @@ class BaseRecords(object):
         raise NotImplementedError()
 
     def to_json(self, precision: int = 2):
-        '''dump records obejct to a json string'''
+        """
+        Convert the records object to a JSON string.
+
+        Parameters
+        ----------
+        precision : int, optional
+            Decimal precision for floats.
+
+        Returns
+        -------
+        str
+            JSON-formatted string.
+        """
         return json.dumps({
             'dtype': self.__class__.__name__,
             'cmd': self._cmd + [' '.join(sys.argv)],
@@ -343,13 +479,43 @@ class BaseRecords(object):
         })
 
     def write_json(self, fp: str, precision: int = 2):
-        '''write json representation of a MarkerRecords obejct to a file'''
+        """
+        Write JSON representation to file.
+
+        Parameters
+        ----------
+        fp : str
+            File path.
+        precision : int, optional
+            Decimal precision for floats.
+        """
         with open(fp, 'w') as f:
             f.write(self.to_json(precision=precision))
 
     @classmethod
     def read_json(cls, fp: str, subset: list | set | None = None, frozen=False):
-        '''read records object from a json file'''
+        """
+        Read a `BaseRecords` object from a JSON file.
+
+        Parameters
+        ----------
+        fp : str
+            File path.
+        subset : list or set, optional
+            Subset of cell barcodes to load.
+        frozen : bool, default=False
+            Whether to freeze the object after loading.
+
+        Returns
+        -------
+        BaseRecords
+            The loaded records object.
+
+        Raises
+        ------
+        ValueError
+            If the file contents do not match the expected class.
+        """
         with open(fp) as f:
             obj = json.load(f)
         if obj['dtype'] != cls.__name__:
@@ -375,6 +541,75 @@ class BaseRecords(object):
 
 
 class MarkerRecords(BaseRecords):
+    """
+    Records storage class for interval-based marker counts.
+
+    This class stores cell barcode records across chromosomes with data represented
+    in numpy arrays. It supports indexing, merging, filtering, grouping, and serialization.
+
+    Attributes
+    ----------
+
+    chrom_sizes : dict of str to int
+        Dictionary mapping chromosome names to chromosome sizes.
+    bin_size : int
+        The size of each genomic bin.
+    nbins : dict of str to int
+        Dictionary mapping chromosome names to the number of bins per chromosome.
+    seq_type : str or None
+        A string describing the sequencing data type.
+    metadata : dict
+        Additional metadata for the record set.
+    frozen : bool
+        If True, prevents creation of new keys in the records.
+    barcodes: list
+        List of cell barcodes stored in the Records object
+
+    Methods
+    -------
+    keys()
+        Returns iterable of barcodes for object
+    deep_keys()
+        Returns iterable of (barcode, chrom) pairs for object
+    values()
+        Return iterable of dicts containing chrom: array mappings for object
+    deep_values()
+        Return iterable of array data for object
+    items()
+        Return iterable of barcode value pairs where values are dicts containing chrom: array mappings
+    deep_items()
+        Return iterable of (barcode, chrom, array) triplets
+    pop(cb)
+        Remove and return barcode data from object
+    copy()
+        Make a copy of self
+    filter(barcodes, inplace=False)
+        Filters a BaseRecords object to create one containing only the specified barcodes.
+    new_like(template)
+        Returns a new, empty BaseRecords object with the same structure as `template`.
+    merge(other, inplace=False)
+        Merges another BaseRecords into the current one.
+    query(expr)
+        Filters records based on an expression or condition.
+    update(interval_counts)
+        Update the object with counts from an IntervalCounts object
+    groupby(grouper)
+        Groups records using a given grouper function or strategy.
+    get_chrom(chrom)
+        Return a 2D array of all records for a given chromosome.
+    iter_chrom(chrom)
+        Iterate over all cell barcodes for a given chromosome.
+    total_marker_count(cb)
+        Return the total number of markers for a barcode across all chromosomes
+    add_cb_suffix(suffix, inplace=False)
+        Append a suffix to all cell barcodes in object
+    to_json(precision=2)
+        Convert the records object to a JSON string.
+    write_json(fp, precision=2)
+        Write the records object to a JSON file path.
+    read_json(fp, subset=None, frozen=False)
+        Read a BaseRecords object from a file path
+    """
 
     def __init__(self,
                  chrom_sizes: dict[str, int],
@@ -382,15 +617,49 @@ class MarkerRecords(BaseRecords):
                  seq_type: str | None = None,
                  metadata: dict | None = None,
                  frozen: bool = False):
+        """
+        Records storage class for interval-based marker counts.
+
+        This class stores cell barcode records across chromosomes with data represented
+        in numpy arrays. It supports indexing, merging, filtering, grouping, and serialization.
+
+        Parameters
+        ----------
+        chrom_sizes : dict of str to int
+            Dictionary mapping chromosome names to chromosome sizes.
+        bin_size : int
+            The size of each genomic bin.
+        seq_type : str or None, optional
+            A string describing the sequencing data type.
+        metadata : dict or None, optional
+            Additional metadata for the record set.
+        frozen : bool, default=False
+            If True, prevents creation of new keys in the records.
+        """
         super().__init__(chrom_sizes, bin_size, seq_type, metadata, frozen)
         self._ndim = 2
         self._dim2_shape = 2
         self._init_val = 0.0
 
     def update(self, interval_counts):
-        '''
-        update MarkerRecords object with values from a IntervalMarkerCounts object.
-        '''
+        """
+        Update this object with values from an `IntervalMarkerCounts` object.
+
+        Parameters
+        ----------
+        interval_counts : IntervalMarkerCounts
+            Object containing new data to merge in.
+
+        Returns
+        -------
+        MarkerRecords
+            Self, after update.
+
+        Raises
+        ------
+        ValueError
+            If input is not an `IntervalMarkerCounts` instance.
+        """
         if not isinstance(interval_counts, IntervalMarkerCounts):
             raise ValueError(
                 f'can only update {type(self).__name__} with IntervalMarkerCounts object'
@@ -408,6 +677,19 @@ class MarkerRecords(BaseRecords):
         raise NotImplementedError()
 
     def total_marker_count(self, cb):
+        """
+        Compute the total marker count across all chromosomes for a given cell barcode.
+
+        Parameters
+        ----------
+        cb : str
+            Cell barcode.
+
+        Returns
+        -------
+        float
+            Sum of marker counts for barcode across all chromosomes.
+        """
         tot = 0
         for m in self[cb].values():
             tot += m.sum(axis=None)
@@ -427,6 +709,75 @@ class MarkerRecords(BaseRecords):
 
 
 class PredictionRecords(BaseRecords):
+    """
+    Records storage class for interval-based haplotype predictions.
+
+    This class stores cell barcode records across chromosomes with data represented
+    in numpy arrays. It supports indexing, merging, filtering, grouping, and serialization.
+
+    Attributes
+    ----------
+
+    chrom_sizes : dict of str to int
+        Dictionary mapping chromosome names to chromosome sizes.
+    bin_size : int
+        The size of each genomic bin.
+    nbins : dict of str to int
+        Dictionary mapping chromosome names to the number of bins per chromosome.
+    seq_type : str or None
+        A string describing the sequencing data type.
+    metadata : dict
+        Additional metadata for the record set.
+    frozen : bool
+        If True, prevents creation of new keys in the records.
+    barcodes: list
+        List of cell barcodes stored in the Records object
+
+    Methods
+    -------
+    keys()
+        Returns iterable of barcodes for object
+    deep_keys()
+        Returns iterable of (barcode, chrom) pairs for object
+    values()
+        Return iterable of dicts containing chrom: array mappings for object
+    deep_values()
+        Return iterable of array data for object
+    items()
+        Return iterable of barcode value pairs where values are dicts containing chrom: array mappings
+    deep_items()
+        Return iterable of (barcode, chrom, array) triplets
+    pop(cb)
+        Remove and return barcode data from object
+    copy()
+        Make a copy of self
+    filter(barcodes, inplace=False)
+        Filters a BaseRecords object to create one containing only the specified barcodes.
+    new_like(template)
+        Returns a new, empty BaseRecords object with the same structure as `template`.
+    merge(other, inplace=False)
+        Merges another BaseRecords into the current one.
+    query(expr)
+        Filters records based on an expression or condition.
+    groupby(grouper)
+        Groups records using a given grouper function or strategy.
+    get_chrom(chrom)
+        Return a 2D array of all records for a given chromosome.
+    get_haplotype(chrom, pos, cb_whitelist)
+        Retrieve prediction values across cell barcodes for a specific position.
+    iter_chrom(chrom)
+        Iterate over all cell barcodes for a given chromosome.
+    add_cb_suffix(suffix, inplace=False)
+        Append a suffix to all cell barcodes in object
+    to_json(precision=2)
+        Convert the records object to a JSON string.
+    to_frame(cb_whitelist=None):
+        Convert the records object to a pandas DataFrame
+    write_json(fp, precision=2)
+        Write the records object to a JSON file path.
+    read_json(fp, subset=None, frozen=False)
+        Read a BaseRecords object from a file path
+    """
 
     def __init__(self,
                  chrom_sizes: dict[str, int],
@@ -434,6 +785,25 @@ class PredictionRecords(BaseRecords):
                  seq_type: str | None = None,
                  metadata: dict | None = None,
                  frozen: bool = False):
+        """
+        Records storage class for interval-based haplotype predictions.
+
+        This class stores cell barcode records across chromosomes with data represented
+        in numpy arrays. It supports indexing, merging, filtering, grouping, and serialization.
+
+        Parameters
+        ----------
+        chrom_sizes : dict of str to int
+            Dictionary mapping chromosome names to chromosome sizes.
+        bin_size : int
+            The size of each genomic bin.
+        seq_type : str or None, optional
+            A string describing the sequencing data type.
+        metadata : dict or None, optional
+            Additional metadata for the record set.
+        frozen : bool, default=False
+            If True, prevents creation of new keys in the records.
+        """
         super().__init__(chrom_sizes, bin_size, seq_type, metadata, frozen)
         self._ndim = 1
         self._dim2_shape = np.nan
@@ -445,22 +815,51 @@ class PredictionRecords(BaseRecords):
     def _json_to_arr(self, obj, chrom):
         return np.array(obj)
 
-    def to_frame(self):
-        '''Convert PredictionRecords object to a pandas.DataFrame'''
+    def to_frame(self, cb_whitelist=None):
+        """
+        Convert the `PredictionRecords` object to a pandas DataFrame.
+
+        Parameters
+        ----------
+        cb_whitelist : list or None, optional
+            List of cell barcodes to filter.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with shape (n_cells, n_bins) and multi-indexed columns with levels (chrom, pos).
+        """
         frame = []
-        index = []
         columns = pd.MultiIndex.from_tuples(
             [(chrom, i * self.bin_size)
              for chrom in self.chrom_sizes
              for i in range(self.nbins[chrom])],
             names=['chrom', 'pos']
         )
-        for cb in self.barcodes:
-            index.append(cb)
+        if cb_whitelist is None:
+            cb_whitelist = self.barcodes
+        for cb in cb_whitelist:
             frame.append(np.concatenate([self[cb, chrom] for chrom in self.chrom_sizes]))
-        return pd.DataFrame(frame, index=index, columns=columns)
+        return pd.DataFrame(frame, index=cb_whitelist, columns=columns)
 
     def get_haplotype(self, chrom, pos, cb_whitelist=None):
+        """
+        Retrieve prediction values across cell barcodes for a specific position.
+
+        Parameters
+        ----------
+        chrom : str
+            Chromosome name.
+        pos : int
+            Genomic position in basepairs.
+        cb_whitelist : list or None, optional
+            List of cell barcodes to filter.
+
+        Returns
+        -------
+        pd.Series
+            Series of prediction values indexed by cell barcode.
+        """
         idx = int(pos // self.bin_size)
         series = []
         if cb_whitelist is None:

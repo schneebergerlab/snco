@@ -25,6 +25,14 @@ DEFAULT_DEVICE = torch.device('cpu')
 
 
 def interp_nan_inplace(arr):
+    """
+    Interpolates NaN values in-place within a NumPy array using linear interpolation.
+
+    Parameters
+    ----------
+    arr : np.ndarray
+        A NumPy array potentially containing NaN values. This array is modified in-place.
+    """
     nan_mask = np.isnan(arr)
     if nan_mask.any():
         real_mask = ~nan_mask
@@ -35,6 +43,22 @@ def interp_nan_inplace(arr):
 
 
 class RigidHMM:
+    """
+    Implements a rigid Hidden Markov Model (rHMM) for modeling haplotype transitions
+    with fixed structure and constrained transition probabilities.
+
+    Parameters
+    ----------
+    rfactor : int
+        Number of bins in a genomic segment - constrains the minimum distance between transitions.
+    term_rfactor : int
+        Number of bins in a terminal genomic segment - constrains the minimum distance between 
+        end of sequence and transitions.
+    trans_prob : float
+        Probability of transition between rigid states.
+    device : torch.device, optional
+        Device on which to allocate model (default: CPU).
+    """
 
     haplotypes = (0, 1)
     _Transitions = namedtuple(
@@ -147,7 +171,18 @@ class RigidHMM:
                     )
 
     def initialise_model(self, fg_lambda, bg_lambda, empty_fraction):
-        # todo: implement sparse version for when rfactor is very large
+        """
+        Initializes the DenseHMM model using estimated Poisson parameters.
+
+        Parameters
+        ----------
+        fg_lambda : float
+            Foreground (signal) Poisson mean.
+        bg_lambda : float
+            Background Poisson mean.
+        empty_fraction : float
+            Fraction of empty bins in zero inflated model.
+        """
         self.fg_lambda = fg_lambda
         self.bg_lambda = bg_lambda
         self.empty_fraction = empty_fraction
@@ -163,6 +198,23 @@ class RigidHMM:
         )
 
     def estimate_params(self, X):
+        """
+        Estimates zero inflated Poisson mixture parameters from input data.
+
+        Parameters
+        ----------
+        X : list of np.ndarray
+            List of 2D arrays containing haplotype-specific read/variant counts per barcode.
+
+        Returns
+        -------
+        fg_lambda : float
+            Estimated mean for foreground component.
+        bg_lambda : float
+            Estimated mean for background component.
+        empty_fraction : float
+            Estimated fraction of empty bins in zero inflated model.
+        """
         X_fg = []
         X_bg = []
         for x in X:
@@ -184,6 +236,14 @@ class RigidHMM:
         return fg_lambda, bg_lambda, empty_fraction
 
     def fit(self, X):
+        """
+        Fits the rHMM model to input data by estimating parameters and initializing the model.
+
+        Parameters
+        ----------
+        X : list of np.ndarray
+            List of 2D arrays containing haplotype-specific read/variant counts per barcode.
+        """
         fg_lambda, bg_lambda, empty_fraction = self.estimate_params(X)
         log.debug(
             'Estimated model parameters from data: '
@@ -192,6 +252,21 @@ class RigidHMM:
         self.initialise_model(fg_lambda, bg_lambda, empty_fraction)
 
     def predict(self, X, batch_size=128):
+        """
+        Predicts haplotype probabilities for input marker arrays.
+
+        Parameters
+        ----------
+        X : list of np.ndarray
+            List of 2D arrays containing haplotype-specific read/variant counts per barcode.
+        batch_size : int, optional
+            Batch size for model prediction (default: 128).
+
+        Returns
+        -------
+        np.ndarray
+            Array of predicted probabilities.
+        """
         proba = []
         for X_batch in np.array_split(X, int(np.ceil(len(X) / batch_size))):
             X_batch = torch.from_numpy(X_batch)
@@ -220,22 +295,68 @@ class RigidHMM:
 
 def create_rhmm(co_markers, cm_per_mb=4.5,
                 segment_size=1_000_000, terminal_segment_size=50_000,
-                model_lambdas=None, device=DEFAULT_DEVICE):
+                model_lambdas=None, empty_fraction=None, device=DEFAULT_DEVICE):
+    """
+    Constructs a RigidHMM instance and fits it to the crossover marker data.
+
+    Parameters
+    ----------
+    co_markers : MarkerRecords
+        MarkerRecords dataset with haplotype specific read/variant information.
+    cm_per_mb : float, optional
+        Recombination rate in centimorgans per megabase (default: 4.5).
+    segment_size : int, optional
+        Size of internal genomic segments, i.e. minimum distance between crossovers 
+        (default: 1,000,000 bp).
+    terminal_segment_size : int, optional
+        Size of terminal genomic segments, i.e. minimum distance between crossovers and 
+        ends of chromosomes (default: 50,000 bp).
+    model_lambdas : tuple of float, optional
+        Tuple of (background_lambda, foreground_lambda). If None, estimate from data.
+    empty_fraction : float, optional
+        Estimated fraction of empty bins in zero inflated model. If None, estimate from data.
+    device : torch.device, optional
+        Device to initialize the model on (default: cpu).
+
+    Returns
+    -------
+    RigidHMM
+        Initialized and optionally fitted RigidHMM instance.
+    """
     bin_size = co_markers.bin_size
     rfactor = segment_size // bin_size
     term_rfactor = terminal_segment_size // bin_size
     trans_prob = cm_per_mb * (bin_size / 1e8)
     rhmm = RigidHMM(rfactor, term_rfactor, trans_prob, device)
-    if model_lambdas is None:
+    if model_lambdas is None or empty_fraction is None:
         X = list(co_markers.deep_values())
         rhmm.fit(X)
     else:
         bg_lambda, fg_lambda = sorted(model_lambdas)
-        rhmm.initialise_model(fg_lambda, bg_lambda)
+        rhmm.initialise_model(fg_lambda, bg_lambda, empty_fraction)
     return rhmm
 
 
-def detect_crossovers(co_markers, rhmm, batch_size=1_000, processes=1):
+def detect_crossovers(co_markers, rhmm, batch_size=128, processes=1):
+    """
+    Applies an rHMM to predict crossovers from marker data.
+
+    Parameters
+    ----------
+    co_markers : MarkerRecords
+        MarkerRecords dataset with haplotype specific read/variant information.
+    rhmm : RigidHMM
+        Fitted RigidHMM model.
+    batch_size : int, optional
+        Batch size for prediction (default: 128).
+    processes : int, optional
+        Number of threads for prediction (default: 1).
+
+    Returns
+    -------
+    PredictionRecords
+        PredictionRecords dataset with haplotype probabilities.
+    """
     seen_barcodes = co_markers.barcodes
     co_preds = PredictionRecords.new_like(co_markers)
     torch.set_num_threads(processes)
@@ -255,6 +376,23 @@ def detect_crossovers(co_markers, rhmm, batch_size=1_000, processes=1):
 
 
 def k_nearest_neighbours_classifier(X_train, y_train, k_neighbours):
+    """
+    Constructs a k-nearest neighbors classifier using KDTree.
+
+    Parameters
+    ----------
+    X_train : array-like
+        Training feature matrix.
+    y_train : array-like
+        Labels corresponding to training data.
+    k_neighbours : int
+        Number of neighbors to use in prediction.
+
+    Returns
+    -------
+    callable
+        A function that takes an array `X_predict` and returns predicted probabilities.
+    """
     X_train = np.array(X_train)
     y_train = np.array(y_train)
     kd = KDTree(X_train)
@@ -267,6 +405,23 @@ def k_nearest_neighbours_classifier(X_train, y_train, k_neighbours):
 
 
 def generate_doublet_prediction_features(co_markers, co_preds):
+    """
+    Generates feature vectors for predicting doublet barcodes.
+
+    Parameters
+    ----------
+    co_markers : MarkerRecords
+        MarkerRecords dataset with haplotype specific read/variant information.
+    co_preds : PredictionRecords
+        PredictionRecords dataset with matched haplotype probabilities.
+
+    Returns
+    -------
+    X : np.ndarray
+        Feature matrix for each barcode.
+    barcodes : list of str
+        Corresponding barcode identifiers.
+    """
     X = []
     barcodes = []
     for cb, cb_co_markers in co_markers.items():
@@ -283,6 +438,19 @@ def generate_doublet_prediction_features(co_markers, co_preds):
 
 
 def min_max_normalise(*X_arrs):
+    """
+    Applies min-max normalization across multiple feature matrices.
+
+    Parameters
+    ----------
+    *X_arrs : list of np.ndarray
+        One or more feature matrices to normalize jointly.
+
+    Returns
+    -------
+    list of np.ndarray
+        Normalized feature matrices.
+    """
     X_min = np.min([X.min(axis=0) for X in X_arrs], axis=0)
     X_max = np.max([X.max(axis=0) for X in X_arrs], axis=0)
     return [(X - X_min) / (X_max - X_min) for X in X_arrs]
@@ -291,6 +459,29 @@ def min_max_normalise(*X_arrs):
 def predict_doublet_barcodes(true_co_markers, true_co_preds,
                              sim_co_markers, sim_co_preds,
                              k_neighbours, rng=DEFAULT_RNG):
+    """
+    Predicts doublets among barcodes by training a KNN classifier on simulated doublets.
+
+    Parameters
+    ----------
+    true_co_markers : MarkerRecords
+        Original MarkerRecords dataset with haplotype specific read/variant information.
+    true_co_preds : PredictionRecords
+        Haplotype predictions for original markers.
+    sim_co_markers : MarkerDataset
+        Simulated MarkerRecords dataset with synthetic doublets.
+    sim_co_preds : PredictionRecords
+        Haplotype predictions for simulated markers.
+    k_neighbours : int
+        Number of neighbors to use in KNN.
+    rng : np.random.Generator, optional
+        Random number generator instance.
+
+    Returns
+    -------
+    PredictionRecords
+        Updated predictions for original dataset including doublet probability annnotations.
+    """
     X_true, cb_true = generate_doublet_prediction_features(
         true_co_markers, true_co_preds
     )
@@ -325,6 +516,33 @@ def predict_doublet_barcodes(true_co_markers, true_co_preds,
 
 def doublet_detector(co_markers, co_preds, rhmm, n_doublets, k_neighbours,
                      batch_size=1000, processes=1, rng=DEFAULT_RNG):
+    """
+    Detects and flags doublet cell barcodes using simulated doublets and KNN.
+
+    Parameters
+    ----------
+    co_markers : MarkerDataset
+        Original MarkerRecords dataset with haplotype specific read/variant information.
+    co_preds : PredictionRecords
+        Haplotype predictions for original markers.
+    rhmm : RigidHMM
+        Fitted rHMM model.
+    n_doublets : float or int
+        Number or fraction of simulated doublets.
+    k_neighbours : float or int
+        Number or fraction of neighbors to use in KNN.
+    batch_size : int, optional
+        Batch size for rHMM prediction (default: 1000).
+    processes : int, optional
+        Number of threads (default: 1).
+    rng : np.random.Generator, optional
+        Random number generator.
+
+    Returns
+    -------
+    PredictionRecords
+        Updated predictions for dataset including doublet probability annnotations.
+    """
     if n_doublets > 1:
         n_sim = int(min(n_doublets, len(co_markers) // 2))
     else:
@@ -363,10 +581,55 @@ def run_predict(marker_json_fn, output_json_fn, *,
                 output_precision=3, processes=1,
                 batch_size=1_000, device=DEFAULT_DEVICE,
                 rng=DEFAULT_RNG):
-    '''
-    Uses rigid hidden Markov model to predict the haplotypes of each cell barcode
-    at each genomic bin.
-    '''
+    """
+    Runs the full haplotype prediction pipeline from marker JSON to output.
+
+    Parameters
+    ----------
+    marker_json_fn : str
+        Path to input JSON with haplotype specific marker data.
+    output_json_fn : str
+        Path to output predictions JSON file.
+    co_markers : MarkerDataset, optional
+        Loaded haplotype specific marker dataset.
+    cb_whitelist_fn : str, optional
+        Path to barcode whitelist file.
+    bin_size : int, optional
+        Genomic bin size (default: 25,000).
+    segment_size : int, optional
+        Size of internal segments for modeling (default: 1,000,000).
+    terminal_segment_size : int, optional
+        Size of terminal segments (default: 50,000).
+    cm_per_mb : float, optional
+        Centimorgan per megabase rate (default: 4.5).
+    model_lambdas : tuple of float, optional
+        Optional Poisson lambdas.
+    predict_doublets : bool, optional
+        Whether to detect doublets (default: True).
+    n_doublets : float or int, optional
+        Number or fraction of doublets to simulate (default: 0.25).
+    k_neighbours : float or int, optional
+        Number or fraction of neighbors for KNN (default: 0.25).
+    generate_stats : bool, optional
+        Whether to generate prediction statistics (default: True).
+    nco_min_prob_change : float, optional
+        Threshold for detecting non-crossover changes (default: 2.5e-3).
+    output_precision : int, optional
+        Decimal precision for JSON output.
+    processes : int, optional
+        Number of threads (default: 1).
+    batch_size : int, optional
+        Batch size for prediction.
+    device : torch.device, optional
+        Device to run models on.
+    rng : np.random.Generator, optional
+        Random number generator.
+
+    Returns
+    -------
+    PredictionRecords
+        Final predictions including crossover and optional doublet annotations.
+    """
     if co_markers is None:
         co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
     rhmm = create_rhmm(
@@ -407,6 +670,43 @@ def run_doublet(marker_json_fn, pred_json_fn, output_json_fn, *,
                 n_doublets=0.25, k_neighbours=0.25,
                 generate_stats=True, output_precision=3, batch_size=1_000,
                 processes=1, device=DEFAULT_DEVICE, rng=DEFAULT_RNG):
+    """
+    Loads pre-existing crossover predictions and performs doublet detection.
+
+    Parameters
+    ----------
+    marker_json_fn : str
+        Path to crossover marker JSON.
+    pred_json_fn : str
+        Path to precomputed predictions JSON.
+    output_json_fn : str
+        Output path to write updated predictions.
+    cb_whitelist_fn : str, optional
+        Whitelist file for barcodes.
+    bin_size : int, optional
+        Genomic bin size (default: 25,000).
+    n_doublets : float or int, optional
+        Number or fraction of doublets to simulate.
+    k_neighbours : float or int, optional
+        Number or fraction of KNN neighbors.
+    generate_stats : bool, optional
+        Whether to generate output statistics (default: True).
+    output_precision : int, optional
+        Decimal precision for output (default: 3).
+    batch_size : int, optional
+        Batch size for HMM prediction.
+    processes : int, optional
+        Number of threads to use.
+    device : torch.device, optional
+        Model device (default: CPU).
+    rng : np.random.Generator, optional
+        Random number generator instance.
+
+    Returns
+    -------
+    PredictionRecords
+        Crossover/haplotype predictions with doublet probabilities added.
+    """
     co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
     co_preds = load_json(
         pred_json_fn, cb_whitelist_fn, bin_size, data_type='predictions'

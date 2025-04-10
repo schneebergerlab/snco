@@ -2,12 +2,47 @@ from collections import defaultdict
 
 
 def dummy_grouper(records, dummy_name='ungrouped'):
+    """
+    Returns a grouper function that assigns all records to a single group.
+
+    Parameters
+    ----------
+    records : BaseRecords
+        The records object (unused but included for API consistency).
+    dummy_name : str, default='ungrouped'
+        The name of the group to assign all records to.
+
+    Returns
+    -------
+    callable
+        A function that takes a cell barcode and returns `dummy_name`.
+    """
     def _dummy_grouper(cb):
         return dummy_name
     return _dummy_grouper
 
 
 def genotype_grouper(records):
+    """
+    Returns a grouper function that groups records by genotype.
+
+    Parameters
+    ----------
+    records : BaseRecords
+        The records object containing metadata with genotype information.
+
+    Returns
+    -------
+    callable
+        A function that maps each cell barcode to a genotype string.
+
+    Raises
+    ------
+    ValueError
+        If the `genotypes` metadata is not present in the Records object.
+    KeyError
+        If a cell barcode is not found in the genotypes metadata.
+    """
     genotypes = records.metadata.get('genotypes')
     if genotypes is None:
         raise ValueError('Genotype metadata not present, cannot group by genotype')
@@ -21,7 +56,6 @@ def genotype_grouper(records):
 
 
 class RecordsGroupyBy:
-
     '''
     class for split-apply-combine operations on BaseRecords, inspired by pandas groupby
     '''
@@ -60,6 +94,21 @@ class RecordsGroupyBy:
         return g, g_obj
 
     def apply(self, func, **kwargs):
+        """
+        Applies a function to each group and combines the results.
+
+        Parameters
+        ----------
+        func : callable
+            A function that takes a BaseRecords object (group) and returns a transformed BaseRecords object.
+        **kwargs
+            Additional keyword arguments to pass to the function.
+
+        Returns
+        -------
+        BaseRecords
+            A new BaseRecords object containing the merged result of applying `func` to each group.
+        """
         combined = self._records.new_like(self._records)
         for _, group in self:
             group_transformed = func(group, **kwargs)
