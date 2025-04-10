@@ -111,6 +111,17 @@ def stats_subcommand(**kwargs):
     run_stats(**kwargs)
 
 
+@main.command('segdist')
+@snco_opts('segdist')
+def segdist_subcommand(**kwargs):
+    '''
+    Scores the quality of data and predictions for a set of haplotype calls
+    generated with `predict`.
+    '''
+    from .distortion import run_segdist
+    run_segdist(**kwargs)
+
+
 @main.command('plot')
 @snco_opts('plot')
 def plot_subcommand(**kwargs):

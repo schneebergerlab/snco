@@ -66,7 +66,7 @@ class OptionRegistry:
 snco_opts = OptionRegistry(
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
                  'sim', 'concat', 'clean', 'predict', 'bc1predict',
-                 'doublet', 'stats', 'plot']
+                 'doublet', 'stats', 'plot', 'segdist']
 )
 
 
@@ -155,7 +155,7 @@ def log_parameters(func):
 
 snco_opts.callback(['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
                      'sim', 'concat', 'clean', 'predict', 'bc1predict',
-                     'doublet', 'stats', 'plot'])(log_parameters)
+                     'doublet', 'stats', 'plot', 'segdist'])(log_parameters)
 
 
 _input_file_type = click.Path(exists=True, file_okay=True, dir_okay=False)
@@ -201,7 +201,7 @@ snco_opts.argument(
 
 snco_opts.argument(
     'pred-json-fn',
-    subcommands=['doublet', 'stats'],
+    subcommands=['doublet', 'stats', 'segdist'],
     required=True,
     nargs=1,
     type=_input_file_type,
@@ -246,7 +246,7 @@ snco_opts.option(
 
 snco_opts.option(
     '-o', '--output-tsv-fn',
-    subcommands=['stats'],
+    subcommands=['stats', 'segdist'],
     required=True,
     type=_output_file_type,
     help='Output TSV file name.'
@@ -266,7 +266,8 @@ snco_opts.option(
 snco_opts.option(
     '-c', '--cb-whitelist-fn',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                 'sim', 'clean', 'predict', 'bc1predict', 'doublet', 'stats', 'plot'],
+                 'sim', 'clean', 'predict', 'bc1predict', 'doublet', 'stats',
+                 'plot', 'segdist'],
     required=False,
     type=_input_file_type,
     help='Text file containing whitelisted cell barcodes, one per line'
@@ -313,7 +314,7 @@ snco_opts.option(
     '-N', '--bin-size',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
                  'sim', 'clean', 'predict', 'bc1predict',
-                 'doublet', 'stats'],
+                 'doublet', 'stats', 'segdist'],
     required=False,
     type=click.IntRange(1000, 100_000),
     default=25_000,
@@ -881,10 +882,30 @@ snco_opts.option(
     help='hex colour to use for alternative (hap2) markers (markerplot)'
 )
 
+snco_opts.option(
+    '--segdist-order',
+    subcommands=['segdist'],
+    required=False,
+    type=click.IntRange(1, 4),
+    default=1,
+    help='Number of loci to jointly test for distortion.'
+)
+
+
+snco_opts.option(
+    '--downsample-resolution',
+    subcommands=['segdist'],
+    required=False,
+    type=click.IntRange(25_000, 10_000_000),
+    default=250_000,
+    help='Resolution to downsample the prediction matrix to before testing.'
+)
+
 
 snco_opts.option(
     '-p', '--processes',
-    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred', 'predict', 'bc1predict', 'doublet'],
+    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred', 'predict',
+                 'bc1predict', 'doublet', 'segdist'],
     required=False,
     type=click.IntRange(min=1),
     default=1,
@@ -894,7 +915,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--output-precision',
-    subcommands=['predict', 'bc1predict', 'doublet', 'bam2pred', 'csl2pred', 'stats'],
+    subcommands=['predict', 'bc1predict', 'doublet', 'bam2pred', 'csl2pred', 'stats', 'segdist'],
     required=False,
     type=click.IntRange(1, 10),
     default=3,
@@ -966,7 +987,7 @@ snco_opts.option(
     '-v', '--verbosity',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
                  'sim', 'concat', 'clean', 'predict', 'bc1predict',
-                 'doublet', 'stats', 'plot'],
+                 'doublet', 'stats', 'plot', 'segdist'],
     required=False,
     expose_value=False,
     metavar='LVL',
