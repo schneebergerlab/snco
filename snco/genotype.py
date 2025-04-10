@@ -12,6 +12,24 @@ DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 
 
 def update_probs(probs, sample_markers):
+    """
+    Update genotype probabilities based on observed marker counts.
+
+    Parameters
+    ----------
+    probs : dict
+        A dictionary of genotype probabilities for a barcode where keys are genotypes 
+        (frozensets of two parental haplotypes) and values are the corresponding probabilities.
+    sample_markers : dict
+        A dictionary where keys are haplotype sets (frozensets) and values are the observed 
+        counts of markers supporting that haplotype set, for a given cell barcode.
+
+    Returns
+    -------
+    dict
+        Updated genotype probabilities where keys are genotypes and values are the updated 
+        probabilities.
+    """
     marker_agg = Counter()
     for haps, marker_count in sample_markers.items():
         n_genos = 0
@@ -29,6 +47,24 @@ def update_probs(probs, sample_markers):
 
 
 def random_resample_geno_markers(cb_geno_markers, n_resamples, rng):
+    """
+    Randomly resample genotype markers with replacement.
+
+    Parameters
+    ----------
+    cb_geno_markers : dict
+        A dictionary where keys are haplotype sets (frozensets) and values are the observed 
+        counts of markers supporting that haplotype set, for a given cell barcode.
+    n_resamples : int
+        The number of resamples to perform.
+    rng : np.random.Generator
+        Random number generator for reproducibility.
+
+    Yields
+    ------
+    Counter
+        A resampled set of genotype markers with counts, sampled with replacement.
+    """
     genos = list(cb_geno_markers.keys())
     counts = np.array(list(cb_geno_markers.values()))
     tot = counts.sum()
@@ -41,6 +77,42 @@ def random_resample_geno_markers(cb_geno_markers, n_resamples, rng):
 def assign_genotype_with_em(cb, cb_geno_markers, *, crossing_combinations,
                             max_iter=1000, min_delta=1e-3, n_bootstraps=25,
                             rng=DEFAULT_RNG):
+    """
+    Assign a genotype to a cell barcode using Expectation-Maximization (EM) and bootstrap re-sampling.
+
+    Parameters
+    ----------
+    cb : str
+        The cell barcode for which to assign a genotype.
+    cb_geno_markers : dict
+        A dictionary where keys are frozensets of haplotypes and values are the observed 
+        counts of markers supporting that haplotype set, for a given cell barcode.
+    crossing_combinations : list
+        List of genotype combinations (frozensets of pairs of haplotypes) to consider for the EM algorithm.
+    max_iter : int, optional
+        The maximum number of iterations for the EM algorithm (default is 1000).
+    min_delta : float, optional
+        The minimum change in probabilities between iterations to stop the algorithm (default is 1e-3).
+    n_bootstraps : int, optional
+        The number of bootstrap samples to use for estimating genotype probabilities (default is 25).
+    rng : np.random.Generator, optional
+        Random number generator for reproducibility (default is `DEFAULT_RNG`).
+
+    Returns
+    -------
+    cb : str
+        The cell barcode.
+    geno_metadata : dict
+        A dictionary containing the assigned genotype and related metadata:
+        - 'genotype' : frozenset
+            The assigned genotype.
+        - 'genotype_probability' : float
+            The probability of the assigned genotype.
+        - 'all_probabilities' : list of tuple
+            A list of all possible genotypes with their estimated probabilities.
+        - 'genotyping_nmarkers' : int
+            The number of markers used for genotyping.
+    """
     n_genos = len(crossing_combinations)
     init_probs = {geno: 1 / n_genos for geno in crossing_combinations}
     prob_bootstraps = defaultdict(list)
@@ -70,6 +142,26 @@ def assign_genotype_with_em(cb, cb_geno_markers, *, crossing_combinations,
 
 
 def parallel_assign_genotypes(genotype_markers, *, processes=1, rng=DEFAULT_RNG, **kwargs):
+    """
+    Assign genotypes to multiple cell barcodes in parallel using EM and bootstrap sampling.
+
+    Parameters
+    ----------
+    genotype_markers : dict
+        A dictionary where keys are cell barcodes and values are counters of haplotype markers 
+        for each barcode.
+    processes : int, optional
+        The number of processes to use for parallel computation (default is 1).
+    rng : np.random.Generator, optional
+        Random number generator for reproducibility (default is `DEFAULT_RNG`).
+    **kwargs : keyword arguments
+        Additional parameters passed to the `assign_genotype_with_em` function.
+
+    Returns
+    -------
+    dict
+        A dictionary where keys are cell barcodes and values are their genotype metadata.
+    """
     n_cb = len(genotype_markers)
     # use sorted cb list to ensure deterministic results across runs
     barcodes = sorted(genotype_markers)
@@ -81,6 +173,23 @@ def parallel_assign_genotypes(genotype_markers, *, processes=1, rng=DEFAULT_RNG,
 
 
 def resolve_genotype_counts_to_co_markers(inv_counts, genotypes):
+    """
+    Resolve genotype counts for a set of barcodes into a format compatible with crossover calling
+
+    Parameters
+    ----------
+    inv_counts : list of IntervalMarkerCounts
+        A list of `IntervalMarkerCounts` objects, each representing marker counts identifying
+        different haplotypes for a set of barcodes.
+    genotypes : dict
+        A dictionary where keys are cell barcodes and values are their assigned genotype metadata.
+
+    Returns
+    -------
+    list of IntervalMarkerCounts
+        A list of resolved `IntervalMarkerCounts` objects with markers uniquely identifying the two
+        haplotypes of the assigned genotype for each cell barcode.
+    """
     resolved_inv_counts = []
     for ic in inv_counts:
         resolved_ic = IntervalMarkerCounts.new_like(ic)
@@ -102,6 +211,28 @@ def resolve_genotype_counts_to_co_markers(inv_counts, genotypes):
 
 
 def genotype_from_inv_counts(inv_counts, min_markers_per_cb=100, **kwargs):
+    """
+    Generate genotypes and crossover markers from interval counts using EM and bootstrap sampling.
+
+    Parameters
+    ----------
+    inv_counts : list of IntervalMarkerCounts
+        A list of `IntervalMarkerCounts` objects, each representing counts of markers
+        across different cell barcodes.
+    min_markers_per_cb : int, optional
+        The minimum number of markers required for a barcode to be considered (default is 100).
+    **kwargs : keyword arguments
+        Additional parameters passed to the `parallel_assign_genotypes` and `assign_genotype_with_em`
+        functions.
+
+    Returns
+    -------
+    genotypes : dict
+        A dictionary where keys are cell barcodes and values are their assigned genotype metadata.
+    resolved_inv_counts : list of IntervalMarkerCounts
+        A list of resolved `IntervalMarkerCounts` objects with markers differentiating the two
+        haplotypes of the assigned genotype, to be used for recombination mapping.
+    """
     genotype_markers = defaultdict(Counter)
     for ic in inv_counts:
         for cb, cb_counts in ic.counts.items():
