@@ -201,7 +201,7 @@ def run_loadbam(bam_fn, output_json_fn, *,
                 genotype_em_bootstraps=25,
                 min_markers_per_cb=100, min_markers_per_chrom=20, min_geno_prob=0.9,
                 exclude_contigs=None, processes=1, rng=DEFAULT_RNG):
- """
+    """
     Read a BAM file with cell barcode, UMI, and haplotype tags, and generate a JSON file 
     containing binned haplotype marker distributions for each cell barcode.
 
