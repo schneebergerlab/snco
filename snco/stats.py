@@ -12,6 +12,19 @@ log = logging.getLogger('snco')
 
 
 def total_markers(cb_co_markers):
+    """
+    Calculates the total number of markers for a cell barcode.
+
+    Parameters
+    ----------
+    cb_co_markers : dict
+        A dictionary where keys are chromosomes and values are arrays representing marker counts.
+
+    Returns
+    -------
+    float
+        The log-transformed total number of markers (base 10).
+    """
     tot = 0
     for m in cb_co_markers.values():
         tot += m.sum(axis=None)
@@ -19,6 +32,22 @@ def total_markers(cb_co_markers):
 
 
 def n_crossovers(cb_co_preds, min_co_prob=5e-3):
+"""
+    Counts the number of crossovers detected for a barcode based on prediction probabilities.
+
+    Parameters
+    ----------
+    cb_co_preds : dict
+        A dictionary where keys are chromosomes and values are arrays representing haplotype probabilities.
+    min_co_prob : float, optional
+        The minimum probability threshold for accumulating the crossover probability between two bins
+        (default is 5e-3).
+
+    Returns
+    -------
+    float
+        The estimated total number of crossovers (as a float) detected across all barcodes.
+    """
     nco = 0
     for p in cb_co_preds.values():
         p_co = np.abs(np.diff(p))
@@ -28,6 +57,23 @@ def n_crossovers(cb_co_preds, min_co_prob=5e-3):
 
 
 def accuracy_score(cb_co_markers, cb_co_preds, max_score=10):
+    """
+    Calculates a measure of prediction accuracy based on haplotype predictions and observed markers.
+
+    Parameters
+    ----------
+    cb_co_markers : dict
+        A dictionary where keys are chromosomes and values are arrays representing marker counts.
+    cb_co_preds : 
+        A dictionary where keys are chromosomes and values are arrays representing haplotype probabilities.
+    max_score : int, optional
+        The maximum score for accuracy (default is 10).
+
+    Returns
+    -------
+    float
+        The accuracy score on a phred-like scale, capped at the provided `max_score`.
+    """
     nom = 0
     denom = 0
     for chrom, m in cb_co_markers.items():
@@ -38,6 +84,19 @@ def accuracy_score(cb_co_markers, cb_co_preds, max_score=10):
 
 
 def uncertainty_score(cb_co_preds):
+    """
+    Calculates a measure of model uncertainty based on haplotype predictions.
+
+    Parameters
+    ----------
+    cb_co_preds : dict
+        A dictionary where keys are chromosomes and values are arrays representing haplotype probabilities.
+
+    Returns
+    -------
+    float
+        The uncertainty score (log-transformed auc of difference between prediction and prediction probability).
+    """
     auc = 0
     for p in cb_co_preds.values():
         hu = np.abs(p - (p > 0.5))
@@ -47,6 +106,21 @@ def uncertainty_score(cb_co_preds):
 
 
 def coverage_score(cb_co_markers, max_score=10):
+    """
+    Calculates a measure of coverage of the genome based on the markers for a cell barcode.
+
+    Parameters
+    ----------
+    cb_co_markers : dict
+        A dictionary where keys are chromosomes and values are arrays representing marker data.
+    max_score : int, optional
+        The maximum score for coverage (default is 10).
+
+    Returns
+    -------
+    float
+        The coverage score on a phred-like scale, capped at the provided `max_score`.
+    """
     cov = 0
     tot = 0
     for m in cb_co_markers.values():
@@ -60,10 +134,26 @@ def coverage_score(cb_co_markers, max_score=10):
 
 
 def mean_haplotype(cb_co_preds):
+    """
+    Calculates the mean haplotype of a barcode.
+
+    Parameters
+    ----------
+    cb_co_preds : dict
+        A dictionary where keys are chromosomes and values are arrays representing haplotype probabilities.
+
+    Returns
+    -------
+    float
+        The mean haplotype value for the barcode.
+    """
     return np.concatenate(list(cb_co_preds.values())).mean()
 
 
 def geno_to_string(genotype):
+    '''
+    convert a genotype frozenset to a string
+    '''
     if genotype is None:
         return None
     else:
@@ -71,6 +161,25 @@ def geno_to_string(genotype):
 
 
 def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=2.5e-3, max_phred_score=10):
+    """
+    Calculates various quality metrics for each cell barcode's marker and prediction data.
+
+    Parameters
+    ----------
+    co_markers : MarkerRecords
+        A MarkerRecords object representing observed marker data.
+    co_preds : PredictionRecords
+        A PredictionRecords object representing predicted haplotypes for the dataset.
+    nco_min_prob : float, optional
+        The minimum difference in haplotype probability between two bins for calculating crossovers (default is 2.5e-3).
+    max_phred_score : int, optional
+        The maximum score for metrics calculated on phred-like scale (default is 10).
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing the calculated quality metrics for each cell barcode.
+    """
     qual_metrics = []
     genotypes = co_markers.metadata.get(
         'genotypes', defaultdict(
@@ -111,6 +220,25 @@ def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=2.5e-3, max_phr
 
 
 def gt_haplotype_accuracy_score(cb_co_preds, cb_co_gt, thresholded=False, max_score=10):
+    """
+    Calculates the accuracy score for genotypes based on predicted and ground truth haplotypes.
+
+    Parameters
+    ----------
+    cb_co_preds : dict
+        A dictionary where keys are chromosomes and values are arrays representing haplotype probabilities.
+    cb_co_gt : dict
+        A dictionary where keys are chromosomes and values are arrays representing ground truth haplotypes.
+    thresholded : bool, optional
+        If True, thresholds the predictions at 0.5 before calculating the accuracy score (default is False).
+    max_score : int, optional
+        The maximum score for accuracy (default is 10).
+
+    Returns
+    -------
+    float
+        The haplotype accuracy score on a phred-like scale, capped at the provided `max_score`.
+    """
     dev = 0
     nbins = 0
     for chrom, p in cb_co_preds.items():
@@ -133,6 +261,23 @@ def _co_score(p, gt, ws=40):
 
 
 def gt_co_score(cb_co_preds, cb_co_gt, window_size=40):
+    """
+    Calculates the crossover score between predicted and ground truth haplotypes.
+
+    Parameters
+    ----------
+    cb_co_preds : dict
+        A dictionary where keys are chromosomes and values are arrays representing haplotype probabilities.
+    cb_co_gt : dict
+        A dictionary where keys are chromosomes and values are arrays representing ground truth haplotypes.
+    window_size : int, optional
+        The window size for the filter (default is 40).
+
+    Returns
+    -------
+    float
+        The calculated crossover score, or NaN if no crossovers are detected.
+    """
     n_co = n_crossovers(cb_co_gt)
     if not n_co:
         return np.nan
@@ -156,6 +301,22 @@ def _max_detectable_cos(m, gt):
 
 
 def gt_max_detectable_cos(cb_co_markers, cb_co_gt):
+    """
+    Calculates the maximum number of crossovers from the ground truth that could possibly be detected using
+    the given distribution of markers - some crossovers are invisible due to lack of markers in segments.
+
+    Parameters
+    ----------
+    cb_co_markers : dict
+        A dictionary where keys are chromosomes and values are arrays representing marker data.
+    cb_co_gt : dict
+        A dictionary where keys are chromosomes and values are arrays representing ground truth data.
+
+    Returns
+    -------
+    int
+        The total number of detectable crossovers across all barcodes.
+    """
     dcos = 0
     for chrom, m in cb_co_markers.items():
         gt = cb_co_gt[chrom]
@@ -164,6 +325,25 @@ def gt_max_detectable_cos(cb_co_markers, cb_co_gt):
 
 
 def calculate_score_metrics(co_markers, co_preds, ground_truth, max_phred_score=10):
+    """
+    Calculates score metrics for each cell barcode, comparing predictions to ground truth.
+
+    Parameters
+    ----------
+    co_markers : MarkerRecords
+        A MarkerRecords object representing observed marker data.
+    co_preds : PredictionRecords
+        A PredictionRecords object representing predicted haplotypes for the dataset.
+    ground_truth : dict
+        A PredictionRecords object representing ground truth data.
+    max_phred_score : int, optional
+        The maximum phred score (default is 10).
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing the calculated score metrics for each cell barcode.
+    """
     score_metrics = []
     for cb, cb_co_preds in co_preds.items():
         cb_co_markers = co_markers[cb]
@@ -191,7 +371,10 @@ def calculate_score_metrics(co_markers, co_preds, ground_truth, max_phred_score=
     return score_metrics
 
 
-def write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics=None, precision=3):
+def _write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics=None, precision=3):
+    '''
+    Write the statistics to a tsv file using pandas
+    '''
     if score_metrics is not None:
         qual_metrics = qual_metrics.merge(score_metrics, on='cb', how='outer')
     qual_metrics.to_csv(output_tsv_fn, sep='\t', index=False, float_format=f'%.{precision}g')
@@ -201,10 +384,38 @@ def run_stats(marker_json_fn, pred_json_fn, output_tsv_fn, *,
               co_markers=None, co_preds=None,
               cb_whitelist_fn=None, bin_size=25_000,
               nco_min_prob_change=2.5e-3, output_precision=3):
-    '''
-    Scores the quality of data and predictions for a set of haplotype calls
-    generated with `predict`.
-    '''
+    """
+    Scores the quality of data and predictions for a set of haplotype calls 
+    generated with `predict`. This function computes quality metrics and, if 
+    available, benchmarking metrics using ground truth data, and writes the 
+    results to a TSV file.
+
+    Parameters
+    ----------
+    marker_json_fn : str
+        Path to the JSON file containing the marker data.
+    pred_json_fn : str
+        Path to the JSON file containing the predicted data.
+    output_tsv_fn : str
+        Path where the output TSV file will be saved.
+    co_markers : MarkerRecords, optional
+        A MarkerRecords object (default is None, in which case it is loaded from `marker_json_fn`).
+    co_preds : PredictionRecords, optional
+        A PredictionRecords object (default is None, in which case  it is loaded from `pred_json_fn`).
+    cb_whitelist_fn : str, optional
+        Path to a file containing a whitelist of cell barcodes (default is None).
+    bin_size : int, optional
+        The size of the genomic bins for data (default is 25,000).
+    nco_min_prob_change : float, optional
+        The minimum crossover probability change (default is 2.5e-3).
+    output_precision : int, optional
+        The precision for floating point numbers in the output TSV (default is 3).
+
+    Raises
+    ------
+    ValueError
+        If the barcodes in `co_markers` and `co_preds` do not match.
+    """
     if co_markers is None:
         co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
     if co_preds is None:
