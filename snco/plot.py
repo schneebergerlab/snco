@@ -1,3 +1,19 @@
+"""
+Plotting functions for visualizing recombination landscapes, allele ratios,
+segregation distortion, and marker plots for snco datasets.
+
+Functions
+---------
+chrom_subplots : Create correctly sized subplots for chromosomes of a genome.
+chrom2d_subplots : Create correctly sized 2D subplots for chromosome pairs of a genome.
+chrom2dtriangle_subplots : Create triangular 2D subplots for chromosome pairs of a genome.
+chrom_markerplot : Plot marker coverage for a barcode for a single chromosome.
+single_cell_markerplot : Plot marker coverage for a single cell barcode.
+plot_recombination_landscape : Plot recombination landscape for a set of predictions.
+plot_allele_ratio : Plot allele ratio for predictions.
+plot_segregation_distortion : Plot segregation distortions in 1D or 2D for predictions.
+run_plot : Generate a plot (e.g., markerplot, recombination) for a specific cell barcode (cli).
+"""
 import re
 import logging
 import itertools as it
@@ -19,7 +35,29 @@ XLIM_OFFSET = 1e4
 
 def chrom_subplots(chrom_sizes, figsize=(18, 5), xtick_every=1e7,
                    span_features=None, span_kwargs=None):
+    """
+    Create correctly proportioned subplots for individual chromosomes.
 
+    Parameters
+    ----------
+    chrom_sizes : dict
+        Dictionary with chromosome names as keys and chromosome sizes as values (in base pairs).
+    figsize : tuple, optional
+        Figure size (width, height) in inches. Default is (18, 5).
+    xtick_every : float, optional
+        Distance between x-ticks in base pairs. Default is 10 Mb (10e7).
+    span_features : dict, optional
+        Dictionary containing chromosome-specific features (e.g. centromeres) to highlight. Default is None.
+    span_kwargs : dict, optional
+        Additional keyword arguments for ax.axvspan. Default is None.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The figure object containing the subplots.
+    axes : list of matplotlib.axes.Axes
+        List of axes for each subplot.
+    """
     fig, axes = plt.subplots(
         figsize=figsize,
         ncols=len(chrom_sizes),
@@ -53,7 +91,25 @@ def chrom_subplots(chrom_sizes, figsize=(18, 5), xtick_every=1e7,
 
 
 def chrom2d_subplots(chrom_sizes, figsize=(10, 10), xtick_every=1e7):
+    """
+    Create correctly proportioned 2D subplots for chromosome pairs.
 
+    Parameters
+    ----------
+    chrom_sizes : dict
+        Dictionary with chromosome names as keys and chromosome sizes as values (in base pairs).
+    figsize : tuple, optional
+        Figure size (width, height) in inches. Default is (10, 10).
+    xtick_every : float, optional
+        Distance between x-ticks in base pairs. Default is 10 Mb (10e7).
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The figure object containing the subplots.
+    axes : numpy.ndarray
+        2D array of axes for the subplot grid.
+    """
     fig, axes = plt.subplots(
         figsize=figsize,
         ncols=len(chrom_sizes),
@@ -86,7 +142,25 @@ def chrom2d_subplots(chrom_sizes, figsize=(10, 10), xtick_every=1e7):
 
 
 def chrom2dtriangle_subplots(chrom_sizes, figsize=(10, 10), xtick_every=1e7):
+    """
+    Create triangular 2D subplots for chromosome pairs.
 
+    Parameters
+    ----------
+    chrom_sizes : dict
+        Dictionary with chromosome names as keys and chromosome sizes as values (in base pairs).
+    figsize : tuple, optional
+        Figure size (width, height) in inches. Default is (10, 10).
+    xtick_every : float, optional
+        Distance between x-ticks in base pairs. Default is 10 Mb (10e7).
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The figure object containing the subplots.
+    axes : numpy.ndarray
+        2D array of axes for the triangular subplot grid.
+    """
     fig, axes = plt.subplots(
         figsize=figsize,
         ncols=len(chrom_sizes) - 1,
@@ -135,7 +209,33 @@ def chrom2dtriangle_subplots(chrom_sizes, figsize=(10, 10), xtick_every=1e7):
 
 def chrom_markerplot(co_markers, chrom_size, bin_size, ax=None, max_yheight=20,
                      ref_colour='#0072b2', alt_colour='#d55e00', ori_colour='#252525'):
+    """
+    Plot the marker coverage for a barcode for a single chromosome.
 
+    Parameters
+    ----------
+    co_markers : numpy.ndarray
+        The barcode marker data for a specific chromosome.
+    chrom_size : int
+        The size of the chromosome in base pairs.
+    bin_size : int
+        The size of each bin in base pairs.
+    ax : matplotlib.axes.Axes, optional
+        The axes to plot the markers on. Default is None, which creates new axes.
+    max_yheight : int, optional
+        The maximum y value for the plot. Default is 20.
+    ref_colour : str, optional
+        The color to use for reference markers. Default is '#0072b2'.
+    alt_colour : str, optional
+        The color to use for alternate markers. Default is '#d55e00'.
+    ori_colour : str, optional
+        The color to use for the origin. Default is '#252525'.
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+        The axes with the plotted markers.
+    """
     ref_markers = co_markers[:, 0].copy()
     ref_markers[ref_markers > max_yheight] = max_yheight
     alt_markers = co_markers[:, 1].copy()
@@ -188,7 +288,49 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4), ch
                            show_mesh_prob=True, annotate_co_number=True,
                            nco_min_prob_change=5e-3, show_gt=True,
                            max_yheight='auto', ref_colour='#0072b2', alt_colour='#d55e00'):
+    """
+    Plot the marker coverage and crossover probabilities for a single cell across chromosomes.
 
+    Parameters
+    ----------
+    cb : str
+        The barcode of the single cell to plot.
+    co_markers : MarkerRecords
+        MarkerRecords object containing the marker data for the dataset.
+    co_preds : PredictionRecords, optional
+        PredictionRecords object containing the haplotype predictions. Default is None.
+    figsize : tuple, optional
+        The size of the figure (width, height) in inches. Default is (18, 4).
+    chroms : list of str, optional
+        A list of chromosome names to plot. If None, all chromosomes will be plotted. Default is None.
+    show_mesh_prob : bool, optional
+        Whether to display the haplotype probability mesh. Default is True.
+    annotate_co_number : bool, optional
+        Whether to annotate the number of crossovers for each chromosome. Default is True.
+    nco_min_prob_change : float, optional
+        The minimum probability change to consider when counting crossovers for annotation. Default is 5e-3.
+    show_gt : bool, optional
+        Whether to show the ground truth crossover locations for simulated data, where available. Default is True.
+    max_yheight : float or 'auto', optional
+        The maximum y-axis height for the plots. If 'auto', the 99.5th percentile of all marker values 
+        is used. Default is 'auto'.
+    ref_colour : str, optional
+        The color for the reference markers. Default is '#0072b2'.
+    alt_colour : str, optional
+        The color for the alternate markers. Default is '#d55e00'.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The generated figure containing the marker coverage plots.
+    axes : list of matplotlib.axes.Axes
+        The list of axes objects for the subplots.
+    
+    Raises
+    ------
+    KeyError
+        If the provided `cb` (cell barcode) is not found in `co_markers`.
+    """
     if cb not in co_markers.barcodes:
         raise KeyError(f'cb {cb} not in co_marker object')
 
@@ -253,13 +395,49 @@ def plot_recombination_landscape(co_preds, co_markers=None,
                                  cb_whitelist=None,
                                  rolling_mean_window_size=1_000_000,
                                  nboots=100, ci=95,
-                                 min_prob=0.01,
+                                 min_prob=5e-3,
                                  axes=None,
                                  figsize=(12, 4),
                                  colour=None,
                                  label=None,
                                  rng=DEFAULT_RNG):
+    """
+    Plot the recombination landscape across chromosomes for multiple cell barcodes.
 
+    Parameters
+    ----------
+    co_preds : PredictionRecords
+        PredictionRecords object containing the haplotype predictions.
+    co_markers : MarkerRecords, optional
+        MarkerRecords object containing the marker data for the dataset. When provided, used for calculating edge
+        effects only at chromosome ends only. Default is None.
+    cb_whitelist : list of str, optional
+        A list of cell barcodes to include in the analysis. If None, all barcodes are included. Default is None.
+    rolling_mean_window_size : int, optional
+        The size of the window for computing the rolling mean (in base pairs). Default is 1,000,000.
+    nboots : int, optional
+        The number of bootstrap iterations for calculating confidence intervals. Default is 100.
+    ci : int, optional
+        The confidence interval percentage. Default is 95.
+    min_prob : float, optional
+        The minimum probability change to consider when counting crossovers. Default is 5e-3.
+    axes : list of matplotlib.axes.Axes, optional
+        The axes to plot on. If None, new axes are created. Default is None.
+    figsize : tuple, optional
+        The size of the figure (width, height) in inches. Default is (12, 4).
+    colour : str, optional
+        The colour to use for the plot lines and fills. If None, a colour is selected from the default palette.
+        Default is None.
+    label : str, optional
+        The label for the plot legend. If None, no legend is added. Default is None.
+    rng : numpy.random.Generator, optional
+        The random number generator to use for bootstrapping. Default is `DEFAULT_RNG`.
+
+    Returns
+    -------
+    axes : list of matplotlib.axes.Axes
+        The axes containing the recombination landscape plots.
+    """
     if axes is None:
         fig, axes = chrom_subplots(co_preds.chrom_sizes, figsize=figsize)
     else:
@@ -298,8 +476,8 @@ def plot_recombination_landscape(co_preds, co_markers=None,
             color=colour
         )
     axes[0].set_ylabel('cM / Mb')
-    axes[-1].plot([], [], color=colour, label=label)
     if label is not None:
+        axes[-1].plot([], [], color=colour, label=label)
         axes[-1].legend()
     plt.tight_layout()
     return axes
@@ -312,6 +490,36 @@ def plot_allele_ratio(co_preds, cb_whitelist=None,
                       colour=None,
                       label=None,
                       rng=DEFAULT_RNG):
+    """
+    Plot the allele ratio across chromosomes for multiple cells with bootstrapped confidence intervals.
+
+    Parameters
+    ----------
+    co_preds : PredictionRecords
+        PredictionRecords object containing the haplotype predictions.
+    cb_whitelist : list of str, optional
+        A list of cell barcodes to include in the analysis. If None, all barcodes are included. Default is None.
+    nboots : int, optional
+        The number of bootstrap iterations for calculating confidence intervals. Default is 100.
+    ci : int, optional
+        The confidence interval percentage. Default is 95.
+    axes : list of matplotlib.axes.Axes, optional
+        The axes to plot on. If None, new axes are created. Default is None.
+    figsize : tuple, optional
+        The size of the figure (width, height) in inches. Default is (12, 4).
+    colour : str, optional
+        The colour to use for the plot lines and fills. If None, a colour is selected from the default palette.
+        Default is None.
+    label : str, optional
+        The label for the plot legend. If None, no legend is added. Default is None.
+    rng : numpy.random.Generator, optional
+        The random number generator to use for bootstrapping. Default is `DEFAULT_RNG`.
+
+    Returns
+    -------
+    axes : list of matplotlib.axes.Axes
+        The axes containing the allele ratio plots.
+    """
     if axes is None:
         fig, axes = chrom_subplots(co_preds.chrom_sizes, figsize=figsize)
     else:
@@ -342,9 +550,9 @@ def plot_allele_ratio(co_preds, cb_whitelist=None,
             color=colour
         )
     axes[0].set_ylabel('Allele ratio')
-    axes[-1].plot([], [], color=colour, label=label)
     axes[0].set_ylim(0, 1)
     if label is not None:
+        axes[-1].plot([], [], color=colour, label=label)
         axes[-1].legend()
     plt.tight_layout()
     return axes
@@ -396,7 +604,69 @@ def plot_segregation_distortion(co_preds, cb_whitelist=None,
                                 axes=None, figwidth=12, figheight=4,
                                 colour=None, cmap='Blues',
                                 vmin=None, vmax=None, label=None):
+    """
+    Plot segregation distortion LOD scores for haplotype predictions.
 
+    This function visualizes the segregation distortion of inherited haplotypes in either 1D or 2D plots.
+    It calculates the segregation distortion using the specified order and plots it on a set of subplots. 
+    The order of distortion can either be 1 (single locus, for single-chromosome plots)
+    or 2 (two-locus, for pairwise chromosome plots).
+
+    Parameters
+    ----------
+    co_preds : PredictionRecords
+        PredictionRecords object containing the haplotype predictions.
+    cb_whitelist : list of str, optional
+        A list of cell barcodes to include in the analysis. If None, all barcodes are included.
+        Default is None.
+    order : int, optional
+        The order of distortion to plot. Can either be 1 (single-chromosome distortion) or 2
+        (pairwise chromosome distortion). Default is 1.
+    resolution : int, optional
+        The resolution of the plot in base pairs. Default is 250,000.
+    processes : int, optional
+        The number of processes to use for parallel computation of distortion. Default is 1.
+    axes : list of matplotlib.axes.Axes or None, optional
+        The axes to plot on. If None, new axes are created. Default is None.
+    figwidth : int, optional
+        The width of the figure in inches. Default is 12.
+    figheight : int, optional
+        The height of the figure in inches. Default is 4.
+    colour : str, optional
+        The color to use for the 1D plot lines and areas. If None, a colour is selected from the default palette.
+        Default is None.
+    cmap : str, optional
+        The colormap to use for the 2D plot. Default is 'Blues'.
+    vmin : float, optional
+        The minimum value for the color scale in the 2D plot. If None, it defaults to 0. Default is None.
+    vmax : float, optional
+        The maximum value for the color scale in the 2D plot. If None, it defaults to the maximum LOD score.
+        Default is None.
+    label : str, optional
+        The label for the plot legend or figure title. If None, no label is added. Default is None.
+
+    Returns
+    -------
+    axes : list of matplotlib.axes.Axes
+        The axes containing the segregation distortion plots.
+
+    Raises
+    ------
+    ValueError
+        If `order` is not 1 or 2, a ValueError is raised.
+    
+    Notes
+    -----
+    - For `order=1`, the function generates a 1D plot for each chromosome, showing the LOD score of the segregation distortion.
+    - For `order=2`, the function generates a triangular 2D heatmap showing the pairwise segregation distortion between
+      chromosome pairs.
+    - The function calls the `snco.distortion.segregation_distortion()` function to compute the distortion values and uses the 
+      appropriate plotting function depending on the specified `order`.
+
+    See Also
+    --------
+    snco.distortion.segregation_distortion
+    """
     if order not in (1, 2):
         raise ValueError('Can only generate plots for distortions of order 1 or 2')
 
@@ -427,12 +697,77 @@ def run_plot(cell_barcode, marker_json_fn, pred_json_fn, output_fig_fn=None,
              show_pred=True, show_co_num=True, show_gt=True, max_yheight=20,
              window_size=1_000_000, nboots=100, confidence_intervals=95,
              ref_colour='#0072b2', alt_colour='#d55e00', rng=DEFAULT_RNG):
+    """
+    Generate and save a plot for the given cell barcode and crossover marker data.
+
+    This function loads crossover marker data and optional prediction data, then generates a plot based
+    on the specified plot type. It can create either a marker plot or a recombination landscape plot, 
+    with various customizable options for visualizing the data.
+
+    Parameters
+    ----------
+    cell_barcode : str
+        The cell barcode to plot data for. Required if `plot_type` is 'markerplot'.
+    marker_json_fn : str
+        File path to the JSON file containing crossover marker data.
+    pred_json_fn : str, optional
+        File path to the JSON file containing crossover prediction data. If None, no predictions are used.
+    output_fig_fn : str, optional
+        File path to save the generated plot. If None, the plot is not saved. Default is None.
+    cb_whitelist_fn : str, optional
+        File path to a whitelist of cell barcodes to include. Default is None (no filtering).
+    plot_type : str, optional
+        The type of plot to generate. Can be 'markerplot' or 'recombination'. Default is 'markerplot'.
+    figsize : tuple of (float, float), optional
+        The size of the plot figure in inches. Default is (18, 4).
+    display_plot : bool, optional
+        Whether to display the plot using `plt.show()`. Default is False (do not display).
+    show_pred : bool, optional
+        Whether to display crossover prediction probability mesh in the plot. Default is True.
+    show_co_num : bool, optional
+        Whether to annotate the number of crossovers in the plot. Default is True.
+    show_gt : bool, optional
+        Whether to show genotype lines in the plot. Default is True.
+    max_yheight : float, optional
+        The maximum y-axis height for the plot. Default is 20.
+    window_size : int, optional
+        The rolling window size (in base pairs) for calculating recombination landscapes. Default is 1,000,000.
+    nboots : int, optional
+        The number of bootstrap iterations for calculating confidence intervals in recombination landscapes. Default is 100.
+    confidence_intervals : int, optional
+        The confidence interval percentage for recombination landscape plots. Default is 95.
+    ref_colour : str, optional
+        The color for the reference allele in the plot. Default is '#0072b2'.
+    alt_colour : str, optional
+        The color for the alternate allele in the plot. Default is '#d55e00'.
+    rng : numpy.random.Generator, optional
+        The random number generator for bootstrapping. Default is the global `DEFAULT_RNG`.
+
+    Returns
+    -------
+    None
+        This function generates and optionally saves a plot. No value is returned.
+
+    Raises
+    ------
+    ValueError
+    - If `plot_type` is 'markerplot' and `cell_barcode` is None, a ValueError is raised.
+    - If `plot_type` is 'recombination' and `pred_json_fn` is None, a ValueError is raised.
+
+    Notes
+    -----
+    - For `plot_type='markerplot'`, a single-cell marker plot is generated for the specified cell barcode.
+    - For `plot_type='recombination'`, a recombination landscape plot is generated for the whole dataset,
+      based on the haplotype predictions.
+    """
     co_markers = load_json(marker_json_fn, cb_whitelist_fn=cb_whitelist_fn, bin_size=None)
     if pred_json_fn is not None:
         co_preds = load_json(
             pred_json_fn, cb_whitelist_fn=None, bin_size=None, data_type='predictions'
         )
     else:
+        if plot_type == 'recombination':
+            raise ValueError('Must specify a pred_json_fn for plot-type "recombination"')
         co_preds = None
 
     if plot_type == 'markerplot':
