@@ -8,6 +8,40 @@ DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 
 
 def nonzero_range(arr, axis=-1):
+    """
+    Returns a boolean mask indicating the range of nonzero values along a given axis.
+
+    This function identifies the continuous range of nonzero values along a specified axis
+    by using forward and reverse cumulative logical OR operations. It returns `True` for positions
+    where there are nonzero values at or flanking the position on both sides, and `False` elsewhere.
+
+    Parameters
+    ----------
+    arr : ndarray
+        Input array of any shape, containing the data to check for nonzero values.
+    axis : int, optional
+        The axis along which to identify nonzero ranges. The default is the last axis (-1).
+
+    Returns
+    -------
+    ndarray
+        A boolean mask of the same shape as the input array, with `True` where there are nonzero
+        values at or flanking positions on both sides and `False` otherwise.
+
+    Example
+    -------
+    Consider the following 1D array:
+
+    >>> arr = np.array([0, 1, 0, 3, 0, 0, 4, 0])
+
+    Applying `nonzero_range(arr)` will return a boolean mask for the nonzero values:
+
+    >>> nonzero_range(arr)
+    array([False,  True, False,  True, False, False,  True, False])
+
+    The mask indicates the range of nonzero values along the array, marking `True` where nonzero
+    values occur.
+    """
     arr = arr.astype(bool)
     fwd = np.logical_or.accumulate(arr, axis=axis)
     rev = np.flip(
@@ -21,6 +55,24 @@ def nonzero_range(arr, axis=-1):
 
 
 def calculate_cm_denominator(co_markers):
+    """
+    Calculate the denominator for recombination rate calculations based on marker data.
+
+    This function calculates the denominators for each chromosome, which are used to scale
+    the recombination landscape during computation. The denominators are based on the presence
+    of markers flanking each position, calculated using the `nonzero_range` function.
+
+    Parameters
+    ----------
+    co_markers : MarkerRecords
+        Marker records object containing marker matrices per barcode and chromosome.
+
+    Returns
+    -------
+    dict
+        A dictionary where the keys are chromosome names and the values are the denominators
+        for recombination calculations for each chromosome.
+    """
     denom = {}
     for chrom in co_markers.chrom_sizes:
         denom[chrom] = nonzero_range(
@@ -34,9 +86,43 @@ def recombination_landscape(co_preds,
                             co_markers=None,
                             rolling_mean_window_size=1_000_000,
                             nboots=100,
-                            min_prob=0.01,
+                            min_prob=5e-3,
                             rng=DEFAULT_RNG):
+    """
+    Calculate the recombination landscape for a PredictionRecords dataset.
 
+    This function estimates the recombination rate per megabase for each chromosome by calculating
+    the gradient of haplotype probabilities across bins, and bootstrapping the values to assess
+    the uncertainty in the landscape. If a co_markers dataset is provided, it uses it to calculate 
+    denominators to scale the recombination rate at chromosome ends, where lack of markers may
+    limit sensitivity.
+
+    Parameters
+    ----------
+    co_preds : PredictionRecords
+        PredictionRecords object containing the haplotype predictions.
+    co_markers : MarkerRecords, optional
+        Marker records object used to scale the recombination rate. If None, no scaling is performed.
+    rolling_mean_window_size : int, optional
+        The size of the window for the rolling mean filter (default is 1,000,000).
+    nboots : int, optional
+        The number of bootstrap samples to draw for uncertainty estimation (default is 100).
+    min_prob : float, optional
+        The minimum threshold for crossover prediction gradients (default is 5e-3).
+    rng : np.random.Generator, optional
+        A random number generator for bootstrapping (default is `DEFAULT_RNG`).
+
+    Returns
+    -------
+    dict
+        A dictionary where the keys are chromosome names and the values are arrays of recombination
+        rates per megabase, calculated from bootstrapped samples.
+
+    Raises
+    ------
+    ValueError
+        If the barcodes of the co-predictions and co-markers do not match.
+    """
     nf = 1_000_000 // co_preds.bin_size
     ws = rolling_mean_window_size // co_preds.bin_size
     filt = np.ones(ws) / ws
