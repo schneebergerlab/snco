@@ -32,7 +32,7 @@ def total_markers(cb_co_markers):
 
 
 def n_crossovers(cb_co_preds, min_co_prob=5e-3):
-"""
+    """
     Counts the number of crossovers detected for a barcode based on prediction probabilities.
 
     Parameters
@@ -436,4 +436,4 @@ def run_stats(marker_json_fn, pred_json_fn, output_tsv_fn, *,
         score_metrics = None
 
     log.info(f'Writing stats to {output_tsv_fn}')
-    write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics, precision=output_precision)
+    _write_metric_tsv(output_tsv_fn, qual_metrics, score_metrics, precision=output_precision)

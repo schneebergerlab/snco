@@ -435,6 +435,8 @@ def plot_recombination_landscape(co_preds, co_markers=None,
 
     Returns
     -------
+    fig : matplotlib.figure.Figure
+        The generated figure containing the recombination landscape plots.
     axes : list of matplotlib.axes.Axes
         The axes containing the recombination landscape plots.
     """
@@ -480,7 +482,7 @@ def plot_recombination_landscape(co_preds, co_markers=None,
         axes[-1].plot([], [], color=colour, label=label)
         axes[-1].legend()
     plt.tight_layout()
-    return axes
+    return fig, axes
 
 
 def plot_allele_ratio(co_preds, cb_whitelist=None,
@@ -517,6 +519,8 @@ def plot_allele_ratio(co_preds, cb_whitelist=None,
 
     Returns
     -------
+    fig : matplotlib.figure.Figure
+        The generated figure containing the marker coverage plots.
     axes : list of matplotlib.axes.Axes
         The axes containing the allele ratio plots.
     """
@@ -555,7 +559,7 @@ def plot_allele_ratio(co_preds, cb_whitelist=None,
         axes[-1].plot([], [], color=colour, label=label)
         axes[-1].legend()
     plt.tight_layout()
-    return axes
+    return fig, axes
 
 
 def _plot_segdist_1d(seg_dist, chrom_sizes, fig, axes, colour=None, label=None):

@@ -231,7 +231,7 @@ class BaseRecords(object):
         n_cells = len(self._records)
         chroms = ', '.join(list(self.chrom_sizes))
         is_frozen = self.frozen
-        return (f"{self.__class__.__name__}(cells: {n_cells}, "
+        return (f"{self.__class__.__qualname__}(cells: {n_cells}, "
                 f"chromosomes: {{{chroms}, }}, frozen: {is_frozen})")
 
     def _repr_table_info(self):
@@ -240,7 +240,7 @@ class BaseRecords(object):
     def _repr_html_(self):
         n_cb = len(self)
         n_chroms = len(self.chrom_sizes)
-        cls_name = self.__class__.__name__
+        cls_name = self.__class__.__qualname__
 
         rows, stat_name = self._repr_table_info()
         records_info = f"""
@@ -367,7 +367,7 @@ class BaseRecords(object):
         '''
         if (stype := type(self)) != (otype := type(other)):
             raise ValueError(
-                f'cannot merge {stype.__name__} object with object of type {otype.__name__}'
+                f'cannot merge {stype.__qualname__} object with object of type {otype.__qualname__}'
             )
         if self.chrom_sizes != other.chrom_sizes:
             raise ValueError('chrom_sizes do not match')
@@ -532,7 +532,7 @@ class BaseRecords(object):
             JSON-formatted string.
         """
         return json.dumps({
-            'dtype': self.__class__.__name__,
+            'dtype': self.__class__.__qualname__,
             'cmd': self._cmd + [' '.join(sys.argv)],
             'bin_size': self.bin_size,
             'sequencing_data_type': self.seq_type,
@@ -582,8 +582,8 @@ class BaseRecords(object):
         """
         with open(fp) as f:
             obj = json.load(f)
-        if obj['dtype'] != cls.__name__:
-            raise ValueError(f'json file does not match signature for {cls.__name__}')
+        if obj['dtype'] != cls.__qualname__:
+            raise ValueError(f'json file does not match signature for {cls.__qualname__}')
         new_instance = cls(obj['chrom_sizes'],
                            obj['bin_size'],
                            seq_type=obj['sequencing_data_type'],
@@ -726,7 +726,7 @@ class MarkerRecords(BaseRecords):
         """
         if not isinstance(interval_counts, IntervalMarkerCounts):
             raise ValueError(
-                f'can only update {type(self).__name__} with IntervalMarkerCounts object'
+                f'can only update {type(self).__qualname__} with IntervalMarkerCounts object'
             )
         chrom, bin_idx = interval_counts.chrom, interval_counts.bin_idx
         for cb, hap, val in interval_counts.deep_items():
@@ -897,7 +897,7 @@ class PredictionRecords(BaseRecords):
                 p_co = np.abs(np.diff(hp))
                 p_co = np.where(p_co < 5e3, p_co, 0)
                 n_co = p_co.sum()
-                cb_info.append(f'{chrom}: {n_co}')
+                cb_info.append(f'{chrom}: {n_co:.2f}')
             cb_info = ', '.join(cb_info)
             rows.append(f"<tr><td>{cb}</td><td>{cb_info}</td></tr>")
         return ''.join(rows), 'Estimated crossovers'
