@@ -84,7 +84,7 @@ class BaseRecords(object):
         for chrom, arr in sd.items():
             self._check_arr(arr, chrom)
 
-    def get_chrom(self, chrom):
+    def get_chrom(self, chrom, cb_whitelist=None):
         """
         Return a 2D array of all records for a given chromosome.
 
@@ -99,7 +99,9 @@ class BaseRecords(object):
             Array of shape (n_cell_barcodes, nbins) or (n_cell_barcodes, nbins, dim2_shape).
         """
         arrs = []
-        for cb in self.keys():
+        if cb_whitelist is None:
+            cb_whitelist = self.barcodes
+        for cb in cb_whitelist:
             try:
                 m = self._records[cb][chrom]
             except KeyError:
@@ -126,37 +128,52 @@ class BaseRecords(object):
                 yield cb, self._records[cb][chrom]
             except KeyError:
                 yield cb, self[cb, chrom]
+    
+    def _get_cb_record(self, cb):
+        if cb not in self._records:
+            if self.frozen:
+                raise KeyError(f"Cell barcode '{cb}' not found")
+            self._records[cb] = {}
+        return self._records[cb]
+
+    def _get_or_create_array(self, cb, chrom):
+        cb_record = self._get_cb_record(cb)
+        if chrom not in cb_record:
+            if chrom not in self.chrom_sizes:
+                raise ValueError(f"Chromosome {chrom} not in chrom_sizes")
+            cb_record[chrom] = self._new_arr(chrom)
+        return cb_record[chrom]
+
+    def _getitem_tuple(self, index):
+        if len(index) == 2:
+            cb, chrom = index
+            if not isinstance(cb, str):
+                if cb is Ellipsis:
+                    return self.get_chrom(chrom)
+                elif isinstance(cb, (list, tuple, set, frozenset, np.ndarray)):
+                    return self.get_chrom(chrom, cb_whitelist=list(cb))
+                raise KeyError(f'Invalid index type: {cb}')
+            return self._get_or_create_array(cb, chrom)
+    
+        elif len(index) > 2:
+            cb, chrom, *arr_idx = index
+            if len(arr_idx) > self._ndim:
+                raise IndexError(
+                    f"Too many indices ({len(arr_idx)}) for array with ndim={self._ndim}"
+                )
+            arr = self._get_or_create_array(cb, chrom)
+            return arr[tuple(arr_idx)]  # handles 1D/2D cleanly
+
+        raise IndexError(f"Too many indices: {index}")
 
     def __getitem__(self, index):
         if isinstance(index, str):
-            if index not in self._records:
-                if self.frozen:
-                    raise KeyError(f'Cell barcode {index} not in records')
-                self._records[index] = {}
-            return self._records[index]
-        if len(index) == 2:
-            cb, chrom = index
-            if cb is Ellipsis:
-                return self.get_chrom(chrom)
-            try:
-                cb_record = self._records[cb]
-            except KeyError:
-                cb_record = self[cb]
-            if chrom not in cb_record:
-                cb_record[chrom] = self._new_arr(chrom)
-            return cb_record[chrom]
-        if len(index) > 2:
-            cb, chrom, *arr_idx = index
-            try:
-                m = self._records[cb][chrom]
-            except KeyError:
-                m = self[cb, chrom]
-            if len(arr_idx) == 1:
-                return m[arr_idx[0]]
-            if (self._ndim == 2) and (len(arr_idx) == 2):
-                return m[arr_idx[0], arr_idx[1]]
-            raise KeyError('Too many indices to array')
-        raise KeyError(index)
+            return self._get_cb_record(index)
+        
+        if isinstance(index, tuple):
+            return self._getitem_tuple(index)
+    
+        raise KeyError(f"Invalid index type: {index}")
 
     def __getattr__(self, attribute):
         try:
@@ -170,39 +187,79 @@ class BaseRecords(object):
     def _ipython_key_completions_(self):
         return self._records.keys()
 
+    def _set_cb_record(self, cb, val):
+        self._check_subdict(val)
+        self._records[cb] = val
+    
+    def _setitem_tuple(self, index, value):
+        if len(index) == 2:
+            cb, chrom = index
+            self._check_arr(value, chrom)
+            self._get_cb_record(cb)[chrom] = value
+    
+        elif len(index) > 2:
+            cb, chrom, *arr_idx = index
+            if len(arr_idx) > self._ndim:
+                raise IndexError(f"Too many indices ({len(arr_idx)}) for array with ndim={self._ndim}")
+            arr = self._get_or_create_array(cb, chrom)
+            arr[tuple(arr_idx)] = value
+        else:
+            raise KeyError(f"Invalid tuple index: {index}")
+
     def __setitem__(self, index, value):
         if isinstance(index, str):
-            self._check_subdict(value)
-            self._records[index] = value
-        elif isinstance(index, tuple):
-            if len(index) == 2:
-                cb, chrom = index
-                self._check_arr(value, chrom)
-                try:
-                    cb_record = self._records[cb]
-                except KeyError:
-                    cb_record = self[cb]
-                cb_record[chrom] = value
-            elif len(index) > 2:
-                cb, chrom, *arr_idx = index
-                try:
-                    m = self._records[cb][chrom]
-                except KeyError:
-                    m = self[cb, chrom]
-                if len(arr_idx) == 1:
-                    m[arr_idx[0]] = value
-                elif (self._ndim == 2) and (len(arr_idx) == 2):
-                    m[arr_idx[0], arr_idx[1]] = value
-                else:
-                    raise KeyError('Too many indices to array')
-        else:
-            raise KeyError(index)
+            return self._set_cb_record(index, value)
+        
+        if isinstance(index, tuple):
+            return self._setitem_tuple(index, value)
+    
+        raise KeyError(f"Invalid index: {index}")
+
+    def __contains__(self, cb):
+        return cb in self._records
+    
+    def __delitem__(self, cb):
+        del self._records[cb]
 
     def __iter__(self):
         return iter(self._records)
 
     def __len__(self):
         return len(self._records)
+
+    def __repr__(self):
+        n_cells = len(self._records)
+        chroms = ', '.join(list(self.chrom_sizes))
+        is_frozen = self.frozen
+        return (f"{self.__class__.__name__}(cells: {n_cells}, "
+                f"chromosomes: {{{chroms}, }}, frozen: {is_frozen})")
+
+    def _repr_table_info(self):
+        raise NotImplementedError() 
+
+    def _repr_html_(self):
+        n_cb = len(self)
+        n_chroms = len(self.chrom_sizes)
+        cls_name = self.__class__.__name__
+
+        rows, stat_name = self._repr_table_info()
+        records_info = f"""
+        <div style="font-family: sans-serif">
+            <p>{cls_name} object with <strong>{n_cb}</strong> barcodes across <strong>{n_chroms}</strong> chromosomes.</p>
+            <table border="1" cellpadding="4" cellspacing="0">
+                <thead>
+                    <tr>
+                        <th>Cell barcode</th>
+                        <th>{stat_name}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows}
+                </tbody>
+            </table>
+        </div>
+        """
+        return records_info
 
     @property
     def barcodes(self):
@@ -267,7 +324,14 @@ class BaseRecords(object):
         return new_instance
 
     def copy(self):
-        '''create a copy of a records object'''
+        '''
+        create a copy of a records object
+        
+        Returns
+        -------
+        BaseRecords
+            New instance with copied metadata and structure.
+        '''
         new_instance = self.new_like(self)
         new_instance._records = deepcopy(self._records)
         return new_instance
@@ -676,6 +740,14 @@ class MarkerRecords(BaseRecords):
             return self.update(other)
         raise NotImplementedError()
 
+    def _repr_table_info(self):
+        rows = []
+        for cb in self.barcodes[:10]:
+            # table shows counts per chromosome
+            cb_info = ', '.join(f'{chrom}: {int(self[cb, chrom].sum())}' for chrom in self.chrom_sizes)
+            rows.append(f"<tr><td>{cb}</td><td>{cb_info}</td></tr>")
+        return ''.join(rows), 'Marker counts'
+
     def total_marker_count(self, cb):
         """
         Compute the total marker count across all chromosomes for a given cell barcode.
@@ -814,6 +886,21 @@ class PredictionRecords(BaseRecords):
 
     def _json_to_arr(self, obj, chrom):
         return np.array(obj)
+
+    def _repr_table_info(self):
+        rows = []
+        for cb in self.barcodes[:10]:
+            # table shows estimated crossovers per chromosome
+            cb_info = []
+            for chrom in self.chrom_sizes:
+                hp = self[cb, chrom]
+                p_co = np.abs(np.diff(hp))
+                p_co = np.where(p_co < 5e3, p_co, 0)
+                n_co = p_co.sum()
+                cb_info.append(f'{chrom}: {n_co}')
+            cb_info = ', '.join(cb_info)
+            rows.append(f"<tr><td>{cb}</td><td>{cb_info}</td></tr>")
+        return ''.join(rows), 'Estimated crossovers'
 
     def to_frame(self, cb_whitelist=None):
         """
