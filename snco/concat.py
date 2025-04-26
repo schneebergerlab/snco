@@ -1,17 +1,43 @@
+from .records import BaseRecords
 from .utils import load_json
 
 
 def concatenate_records(record_objs, merge_suffixes=None):
+    """
+    Concatenates multiple record objects, optionally appending unique suffixes
+    to cell barcodes to avoid collisions.
+
+    Parameters
+    ----------
+    record_objs : list
+        List of record objects to concatenate.
+    merge_suffixes : list or None, optional
+        List of suffixes to append to the cell barcodes in each record object.
+        If None, a range of integers (1, 2, ..., len(record_objs)) is used.
+
+    Returns
+    -------
+    object
+        A single record object representing the concatenated result.
+
+    Raises
+    ------
+    ValueError
+        If the number of provided suffixes does not match the number of record objects, or
+        if the types of the record objects are not valid and the same
+    """
     if merge_suffixes is None:
-        merge_suffixes = range(len(record_objs))
+        merge_suffixes = range(1, len(record_objs) + 1)
     else:
         if len(record_objs) != len(merge_suffixes):
             raise ValueError('number of merge suffixes is incorrect')
     concat_records = None
     for robj, sfx in zip(record_objs, merge_suffixes):
-        robj = robj.add_cb_suffix(sfx)
+        if not isinstance(robj, BaseRecords):
+            raise ValueError('One or more objects in record_objs are not valid')
+        robj = robj.add_cb_suffix(sfx, inplace=False)
         if concat_records is None:
-            concat_records = robj.copy()
+            concat_records = robj
         else:
             concat_records.merge(robj, inplace=True)
     return concat_records

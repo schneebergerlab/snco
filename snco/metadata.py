@@ -1,4 +1,4 @@
-from copy import deepcopy
+from copy import copy, deepcopy
 import numpy as np
 
 
@@ -30,7 +30,9 @@ def validate_data(obj, expected_depth, expected_dtype):
     """
     def _validate_recursive(obj, depth):
         if isinstance(obj, dict):
-            for val in obj.values():
+            for key, val in obj.items():
+                if not isinstance(key, str):
+                    raise ValueError(f'Key {key} at depth {depth} is not str type')
                 _validate_recursive(val, depth + 1)
         else:
             if depth != expected_depth:
@@ -97,6 +99,7 @@ def deep_update(obj, other):
             obj[key] = deep_update(obj[key], val)
         else:
             obj[key] = val
+    return obj
 
 
 class MetadataDict:
@@ -163,6 +166,8 @@ class MetadataDict:
         for lvl in levels:
             if lvl not in self.allowed_levels:
                 raise ValueError(f'level "{lvl}" not recognised')
+        if len(set(levels)) != len(levels):
+            raise ValueError('One or more levels are duplicated')
         self.levels = levels
         self.nlevels = len(levels)
         if not isinstance(dtype, tuple):
@@ -180,20 +185,79 @@ class MetadataDict:
             validate_data(data, self.nlevels, self.dtype)
             self._data = data
 
-    def _getitem_tuple(self, index):
-        if len(index) > self.nlevels:
-            raise IndexError('Too many indices provided')
-        item = self._data
-        for key in index:
-            item = item[key]
-        return item
-
     def __getitem__(self, index):
-        if isinstance(index, str):
-            return self._data[index]
-        if isinstance(index, tuple):
-            return self._getitem_tuple(index)
-        raise IndexError('Incorrect index provided')
+        """
+        Advanced indexing into a metadict object
+
+        Parameters
+        ----------
+        index : str, Ellipsis, slice(None), or tuple of them
+            Indexing pattern, allowing partial selection across levels.
+
+        Returns
+        -------
+        MetadataDict
+            A new MetadataDict object with reduced levels if applicable.
+        """
+        if not isinstance(index, tuple):
+            index = (index,)
+
+        # Validate types
+        for idx in index:
+            if isinstance(idx, slice):
+                if idx != slice(None):
+                    raise KeyError('Only full slices (:) are allowed')
+            elif not isinstance(idx, (str, type(Ellipsis))):
+                raise TypeError(
+                    f'Invalid index type {type(idx).__name__}: only str, Ellipsis, or full slices (:) are allowed.'
+                )
+
+        # Expand ellipsis if present
+        if Ellipsis in index:
+            idx_ellipsis = index.index(Ellipsis)
+            n_missing = self.nlevels - (len(index) - 1)
+            index = index[:idx_ellipsis] + (slice(None),) * n_missing + index[idx_ellipsis + 1:]
+
+        # if all indices are str, we simply traverse the nested dicts
+        if all(isinstance(idx, str) for idx in index):
+            selected_data = self._data
+            for idx in index:
+                selected_data = selected_data[idx]
+            if isinstance(selected_data, self.dtype):
+                return selected_data
+            else:
+                return MetadataDict(levels=self.levels[len(index):], dtype=self.dtype, data=selected_data)
+
+        # otherwise, we select the relevant data from the nested structure and return as a new MetadataDict object
+        selected_data = {}
+
+        def _select(obj, depth, key_path):
+            if depth == len(index):
+                # End of path, set value
+                sd = selected_data
+                for key in key_path[:-1]:
+                    sd = sd.setdefault(key, {})
+                sd[key_path[-1]] = obj
+                return None
+
+            idx = index[depth]
+            if isinstance(idx, slice):
+                for key, val in obj.items():
+                    _select(val, depth + 1, key_path + (key,))
+            else:
+                # Allow index by key only
+                if idx not in obj:
+                    raise KeyError(f'Key {idx} not found at level {self.levels[depth]}')
+                _select(obj[idx], depth + 1, key_path)
+
+        _select(self._data, 0, ())
+
+        # right pad index with None to retain levels below those indexed
+        index = index + (slice(None),) * (self.nlevels - len(index))
+        # New levels: drop levels where index was a specific value (not a slice)
+        new_levels = [lvl for lvl, idx in zip(self.levels, index) if isinstance(idx, (slice, None))]
+
+        return MetadataDict(levels=new_levels, dtype=self.dtype, data=selected_data)
 
     def _setitem_tuple(self, index, value):
         n_idx = len(index)
@@ -220,9 +284,52 @@ class MetadataDict:
         elif isinstance(index, tuple):
             self._setitem_tuple(index, value)
 
+    def __contains__(self, key):
+        return key in self._data
+
+    def __iter__(self):
+        return iter(self._data)
+
     def __repr__(self):
+
+        def _gather_leaves(d, path=()):
+            if not isinstance(d, dict):
+                yield path, d
+            else:
+                for k, v in d.items():
+                    yield from _gather_leaves(v, path + (k,))
+
+        preview = {}
+        leaves = _gather_leaves(self._data)
+        for path, val in leaves:
+            key = ' -> '.join(repr(k) for k in path)
+            if isinstance(val, np.ndarray):
+                val_repr = f"numpy.ndarray({val.shape}, dtype={val.dtype})"
+            else:
+                val_repr = repr(val)
+            preview[key] = val_repr
+            if len(preview) == 3:
+                break
+        try:
+            next(leaves)
+            preview['...'] = '...'
+        except StopIteration:
+            pass
+
         dtype = tuple(d.__name__ for d in self.dtype)
-        return (f"{self.__class__.__name__}(levels: {self.levels}, dtype: {dtype})")
+        preview_str = ', '.join(f"{k}: {v}" for k, v in preview.items())
+
+        # Here's the changed part
+        preview_lines = [f"        {k}: {v}" for k, v in preview.items()]
+        preview_str = ',\n'.join(preview_lines)
+
+        return (f"{self.__class__.__name__}(\n"
+                f"    levels={self.levels},\n"
+                f"    dtype={dtype},\n"
+                f"    data_preview={{\n{preview_str}\n"
+                f"    }}\n"
+                f")")
+
 
     def update(self, other):
         """
@@ -260,7 +367,7 @@ class MetadataDict:
             else:
                 raise ValueError(f'level "{level_name}" not recognised')
         elif isinstance(level_name, int):
-            if level_idx >= self.nlevels:
+            if level_name >= self.nlevels:
                 raise ValueError('level index is too deep for metadata')
             level_idx = level_name
         else:
@@ -272,6 +379,10 @@ class MetadataDict:
 
     def values(self):
         return self._data.values()
+
+    def asdict(self):
+        """Return a copy of the raw underlying dictionary data"""
+        return copy(self._data)
 
     def get(self, *index, default=None):
         try:
@@ -349,14 +460,12 @@ class MetadataDict:
             if curr_lvl == level:
                 return {f'{key}_{suffix}': val for key, val in obj.items()}
             else:
-                for key, val in obj.items():
-                    obj[key] = _recursive_add_suffix(val, curr_lvl + 1)
+                for key in list(obj.keys()):
+                    obj[key] = _recursive_add_suffix(obj[key], curr_lvl + 1)
             return obj
         s._data = _recursive_add_suffix(s._data, 0)
         if not inplace:
             return s
-        
-        
 
     def filter(self, whitelist, level=0, inplace=True):
         """
@@ -393,6 +502,50 @@ class MetadataDict:
             obj = self.new_like(self)
             obj._data = _recursive_filter(deepcopy(self._data), 0)
             return obj
+
+    def transpose_levels(self, reordered_levels, inplace=False):
+        """
+        Transpose the metadata levels to a new order.
+
+        Parameters
+        ----------
+        reordered_levels : tuple of str or int
+            The new order of the levels, specified by names or indices.
+        inplace : bool, optional
+            Whether to modify the current object in-place or return a new object (default is False).
+
+        Returns
+        -------
+        MetadataDict
+            The transposed MetadataDict (or None if inplace=True).
+        """
+        reordered_level_indices = [self._get_level_idx(lvl) for lvl in reordered_levels]
+        reordered_levels = [self.levels[idx] for idx in reordered_level_indices]
+
+        if set(reordered_levels) != set(self.levels) or len(reordered_levels) != self.nlevels:
+            raise ValueError('reordered_levels must be a permutation of current levels')
+
+        def _gather_key_paths(obj, key_path=()):
+            if not isinstance(obj, dict):
+                yield key_path, obj
+            else:
+                for key, val in obj.items():
+                    yield from _gather_key_paths(val, key_path + (key,))
+
+        reordered_data = {}
+        for key_path, val in _gather_key_paths(self._data):
+            reordered_path = tuple(key_path[i] for i in reordered_level_indices)
+            sd = reordered_data
+            for key in reordered_path[:-1]:
+                sd = sd.setdefault(key, {})
+            sd[reordered_path[-1]] = val
+
+        if inplace:
+            self.levels = reordered_levels
+            self._data = reordered_data
+            return None
+        else:
+            return MetadataDict(levels=reordered_levels, dtype=self.dtype, data=reordered_data)
 
     @classmethod
     def _json_serialise(cls, obj, precision):
