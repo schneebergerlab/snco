@@ -443,6 +443,7 @@ def plot_recombination_landscape(co_preds, co_markers=None,
     if axes is None:
         fig, axes = chrom_subplots(co_preds.chrom_sizes, figsize=figsize)
     else:
+        fig = plt.gcf()
         assert len(axes) == len(co_preds.chrom_sizes)
 
     if cb_whitelist is not None:
@@ -527,6 +528,7 @@ def plot_allele_ratio(co_preds, cb_whitelist=None,
     if axes is None:
         fig, axes = chrom_subplots(co_preds.chrom_sizes, figsize=figsize)
     else:
+        fig = plt.gcf()
         assert len(axes) == len(co_preds.chrom_sizes)
 
     if cb_whitelist is not None:
@@ -684,6 +686,7 @@ def plot_segregation_distortion(co_preds, cb_whitelist=None,
         elif order == 2:
             fig, axes = chrom2dtriangle_subplots(co_preds.chrom_sizes, figsize=(figwidth, figwidth))
     else:
+        fig = plt.gcf()
         assert len(axes) == len(co_preds.chrom_sizes)
 
     if order == 1:
