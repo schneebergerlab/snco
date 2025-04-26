@@ -11,10 +11,11 @@ from pomegranate.hmm import DenseHMM
 from pomegranate.gmm import GeneralMixtureModel
 
 from .logger import progress_bar
-from .sim import simulate_doublets
 from .utils import load_json
 from .records import PredictionRecords
+from .metadata import MetadataDict
 from .clean import predict_foreground_convolution
+from .sim import simulate_doublets
 from . import stats
 from .opts import DEFAULT_RANDOM_SEED
 
@@ -284,12 +285,12 @@ class RigidHMM:
     @property
     def params(self):
         return {
-            'rfactor': self.rfactor,
-            'term_rfactor': self.term_rfactor,
-            'trans_prob': self.trans_prob,
-            'fg_lambda': self.fg_lambda,
-            'bg_lambda': self.bg_lambda,
-            'empty_fraction': self.empty_fraction,
+            'rfactor': int(self.rfactor),
+            'term_rfactor': int(self.term_rfactor),
+            'trans_prob': float(self.trans_prob),
+            'fg_lambda': float(self.fg_lambda),
+            'bg_lambda': float(self.bg_lambda),
+            'empty_fraction': float(self.empty_fraction),
         }
 
 
@@ -371,7 +372,9 @@ def detect_crossovers(co_markers, rhmm, batch_size=128, processes=1):
             X_pred = rhmm.predict(X, batch_size=batch_size)
             for cb, p in zip(seen_barcodes, X_pred):
                 co_preds[cb, chrom] = p
-    co_preds.metadata['rhmm_params'] = rhmm.params
+    co_preds.add_metadata(
+        rhmm_params=MetadataDict(levels=('other', ), dtype=(int, float), data=rhmm.params)
+    )
     return co_preds
 
 
@@ -510,7 +513,11 @@ def predict_doublet_barcodes(true_co_markers, true_co_preds,
         ).map({False: 'hq', True: 'doublet'})
         y_pred_series = pd.Series(y_train, name='Simulation').map({0: 'real', 1: 'sim'})
         log.debug(pd.crosstab(X_pred_series, y_pred_series))
-    true_co_preds.metadata['doublet_probability'] = dict(zip(cb_true, doublet_pred))
+    
+    doublet_probs = dict(zip(cb_true, doublet_pred))
+    true_co_preds.add_metadata(
+        doublet_probability=MetadataDict(levels=('cb', ), dtype=float, data=doublet_probs)
+    )
     return true_co_preds
 
 

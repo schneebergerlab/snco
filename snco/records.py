@@ -1,5 +1,6 @@
 import logging
 import sys
+import inspect
 from copy import copy, deepcopy
 from collections import defaultdict
 import json
@@ -9,6 +10,7 @@ from scipy import sparse
 import pandas as pd
 
 from .bam import IntervalMarkerCounts
+from .metadata import MetadataDict
 from .groupby import RecordsGroupyBy
 
 log = logging.getLogger('snco')
@@ -38,7 +40,7 @@ class BaseRecords(object):
             The size of each genomic bin.
         seq_type : str or None, optional
             A string describing the sequencing data type.
-        metadata : dict or None, optional
+        metadata : dict of snco.metadata.MetadataDict or None, optional
             Additional metadata for the record set.
         frozen : bool, default=False
             If True, prevents creation of new keys in the records.
@@ -46,7 +48,12 @@ class BaseRecords(object):
         self.chrom_sizes = chrom_sizes
         self.bin_size = bin_size
         self.seq_type = seq_type
-        self.metadata = metadata if metadata is not None else {}
+        self.metadata = {}
+        if metadata is not None:
+            if not isinstance(metadata, dict):
+                raise ValueError('metadata must be dict or None')
+            self.add_metadata(**metadata)
+                    
         self._cmd = []
         self._ndim = None
         self._dim2_shape = None
@@ -175,18 +182,6 @@ class BaseRecords(object):
     
         raise KeyError(f"Invalid index type: {index}")
 
-    def __getattr__(self, attribute):
-        try:
-            return self.metadata[attribute]
-        except KeyError:
-            raise AttributeError(f"'{type(self)}' object has no attribute '{attribute}'")
-
-    def __dir__(self):
-        return object.__dir__(self) + list(self.metadata.keys())
-
-    def _ipython_key_completions_(self):
-        return self._records.keys()
-
     def _set_cb_record(self, cb, val):
         self._check_subdict(val)
         self._records[cb] = val
@@ -209,11 +204,20 @@ class BaseRecords(object):
     def __setitem__(self, index, value):
         if isinstance(index, str):
             return self._set_cb_record(index, value)
-        
+
         if isinstance(index, tuple):
             return self._setitem_tuple(index, value)
     
         raise KeyError(f"Invalid index: {index}")
+
+    def add_metadata(self, **metadata):
+        for key, value in metadata.items():
+            if isinstance(value, MetadataDict):
+                self.metadata[key] = value
+            elif isinstance(value, dict):
+                self.metadata[key] = MetadataDict.from_json(value)
+            else:
+                raise ValueError('metadata values must be MetadataDict objects or correctly formatted dicts')
 
     def __contains__(self, cb):
         return cb in self._records
@@ -233,33 +237,6 @@ class BaseRecords(object):
         is_frozen = self.frozen
         return (f"{self.__class__.__qualname__}(cells: {n_cells}, "
                 f"chromosomes: {{{chroms}, }}, frozen: {is_frozen})")
-
-    def _repr_table_info(self):
-        raise NotImplementedError() 
-
-    def _repr_html_(self):
-        n_cb = len(self)
-        n_chroms = len(self.chrom_sizes)
-        cls_name = self.__class__.__qualname__
-
-        rows, stat_name = self._repr_table_info()
-        records_info = f"""
-        <div style="font-family: sans-serif">
-            <p>{cls_name} object with <strong>{n_cb}</strong> barcodes across <strong>{n_chroms}</strong> chromosomes.</p>
-            <table border="1" cellpadding="4" cellspacing="0">
-                <thead>
-                    <tr>
-                        <th>Cell barcode</th>
-                        <th>{stat_name}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows}
-                </tbody>
-            </table>
-        </div>
-        """
-        return records_info
 
     @property
     def barcodes(self):
@@ -336,6 +313,11 @@ class BaseRecords(object):
         new_instance._records = deepcopy(self._records)
         return new_instance
 
+    def _add_cb_suffix_metadata(self, suffix):
+        for key, val in self.metadata.items():
+            if 'cb' in val.levels:
+                self.metadata[key] = val.add_level_suffix(suffix, level='cb')
+
     def add_cb_suffix(self, suffix, inplace=False):
         '''append a suffix to the cell barcodes in a records object'''
         if inplace:
@@ -343,8 +325,17 @@ class BaseRecords(object):
         else:
             s = self.copy()
         s._records = {f'{cb}_{suffix}': sd for cb, sd in s.items()}
+        s._add_cb_suffix_metadata(suffix)
+
         if not inplace:
             return s
+
+    def _merge_metadata(self, other):
+        for key, val in other.metadata.items():
+            if key in self.metadata:
+                self.metadata[key].update(val)
+            else:
+                self.metadata[key] = val
 
     def merge(self, other, inplace=False):
         '''
@@ -392,8 +383,15 @@ class BaseRecords(object):
             else:
                 s_m += m
 
+        s._merge_metadata(other)
+
         if not inplace:
             return s
+
+    def _filter_metadata(self, cb_whitelist):
+        for mdata in self.metadata.values():
+            if 'cb' in mdata.levels:
+                mdata.filter(cb_whitelist, level='cb')
 
     def filter(self, cb_whitelist, inplace=True):
         """
@@ -417,30 +415,49 @@ class BaseRecords(object):
             for cb in self.barcodes:
                 if cb not in cb_whitelist:
                     self._records.pop(cb)
+            self._filter_metadata(cb_whitelist)
             return None
         else:
             obj = self.new_like(self)
             for cb in cb_whitelist:
                 obj._records[cb] = self._records[cb]
+            obj._filter_metadata(cb_whitelist)
             return obj
 
     def query(self, func):
         """
-        Query the records using a function applied to each cell barcode.
+        Query the records using a function applied to each cell barcode,
+        optionally supplying additional context based on the function signature.
+
+        The provided `func` must accept at least a cell barcode (str) as its first argument.
+        If `func` declares an additional named parameter called `records`, the full records object
+        will be passed in automatically.
+        If `func` declares additional named parameters matching keys in `self.metadata`
+        these will also be passed in automatically.
 
         Parameters
         ----------
         func : callable
-            A function that accepts a cell barcode (str) and returns True
-            if the barcode should be included.
+            A function that accepts a cell barcode (str) as its first argument.
+            It may also accept additional keyword arguments matching metadata keys
+            or 'records' to access the full records object.
 
         Returns
         -------
         BaseRecords
-            A new records object containing only barcodes for which `func` returns True.
+            A new records object containing only the barcodes for which `func` returns True.
         """
+        func_signature = inspect.signature(func)
+        additional_parameters = func_signature.parameters 
+        additional_param_names = list(additional_parameters)[1:] # first argument is always cell barcode
+        func_kwargs = {}
+        for param in additional_param_names:
+            if param == 'records':
+                func_kwargs[param] = self
+            elif param in self.metadata:
+                func_kwargs[param] = self.metadata[param]
         return self.filter(
-            (cb for cb in self.barcodes if func(cb)),
+            (cb for cb in self.barcodes if func(cb, **func_kwargs)),
             inplace=False
         )
 
@@ -454,6 +471,11 @@ class BaseRecords(object):
             Grouping strategy. Can be a string ('none', 'genotype'), a dictionary
             mapping cell barcodes to group labels, or a callable that takes a barcode
             and returns a group label.
+            When callable, `by` must accept at least a cell barcode (str) as its first argument.
+            If `by` declares an additional named parameter called `records`, the full records object
+            will be passed in automatically.
+            If `by` declares additional named parameters matching keys in `self.metadata`
+            these will also be passed in automatically.
 
         Returns
         -------
@@ -477,38 +499,13 @@ class BaseRecords(object):
             return self.merge(other, inplace=True)
         raise NotImplementedError()
 
-    @classmethod
-    def _records_to_json(cls, records, precision):
+    def _records_to_json(self, precision):
         json_serialisable = {}
-        for cb, sd in records.items():
+        for cb, sd in self._records.items():
             d = {}
             for chrom, arr in sd.items():
-                d[chrom] = records._arr_to_json(arr, precision)
+                d[chrom] = self._arr_to_json(arr, precision)
             json_serialisable[cb] = d
-        return json_serialisable
-
-    @classmethod
-    def _metadata_to_json(cls, obj, precision):
-        if isinstance(obj, dict):
-            json_serialisable = {}
-            for key, val in obj.items():
-                json_serialisable[key] = cls._metadata_to_json(val, precision)
-        elif isinstance(obj, BaseRecords):
-            json_serialisable = obj._records_to_json(obj, precision)
-        elif isinstance(obj, (list, tuple, set, frozenset, np.ndarray)):
-            json_serialisable = []
-            for val in obj:
-                json_serialisable.append(cls._metadata_to_json(val, precision))
-        elif isinstance(obj, (float, np.floating)):
-            json_serialisable = round(float(obj), precision)
-        elif isinstance(obj, np.integer):
-            json_serialisable = int(obj)
-        elif isinstance(obj, (str, int, bool)) or obj is None:
-            json_serialisable = obj
-        elif isinstance(obj, np.bool_):
-            json_serialisable = bool(obj)
-        else:
-            raise NotImplementedError(f'json serialisation not implemented for type: {type(obj)}')
         return json_serialisable
 
     def _arr_to_json(self, arr, precision=0):
@@ -517,7 +514,12 @@ class BaseRecords(object):
     def _json_to_arr(self, obj, chrom):
         raise NotImplementedError()
 
-    def to_json(self, precision: int = 2):
+    def _metadata_to_json(self, precision):
+        return {
+            name: metadata.to_json(precision) for name, metadata in self.metadata.items()
+        }
+
+    def to_json(self, precision: int = 5):
         """
         Convert the records object to a JSON string.
 
@@ -538,8 +540,8 @@ class BaseRecords(object):
             'sequencing_data_type': self.seq_type,
             'chrom_sizes': self.chrom_sizes,
             'shape': self.nbins,
-            'data': self._records_to_json(self, precision),
-            'metadata': self._metadata_to_json(self.metadata, precision)
+            'data': self._records_to_json(precision),
+            'metadata': self._metadata_to_json(precision)
         })
 
     def write_json(self, fp: str, precision: int = 2):
@@ -740,14 +742,6 @@ class MarkerRecords(BaseRecords):
             return self.update(other)
         raise NotImplementedError()
 
-    def _repr_table_info(self):
-        rows = []
-        for cb in self.barcodes[:10]:
-            # table shows counts per chromosome
-            cb_info = ', '.join(f'{chrom}: {int(self[cb, chrom].sum())}' for chrom in self.chrom_sizes)
-            rows.append(f"<tr><td>{cb}</td><td>{cb_info}</td></tr>")
-        return ''.join(rows), 'Marker counts'
-
     def total_marker_count(self, cb):
         """
         Compute the total marker count across all chromosomes for a given cell barcode.
@@ -886,21 +880,6 @@ class PredictionRecords(BaseRecords):
 
     def _json_to_arr(self, obj, chrom):
         return np.array(obj)
-
-    def _repr_table_info(self):
-        rows = []
-        for cb in self.barcodes[:10]:
-            # table shows estimated crossovers per chromosome
-            cb_info = []
-            for chrom in self.chrom_sizes:
-                hp = self[cb, chrom]
-                p_co = np.abs(np.diff(hp))
-                p_co = np.where(p_co < 5e3, p_co, 0)
-                n_co = p_co.sum()
-                cb_info.append(f'{chrom}: {n_co:.2f}')
-            cb_info = ', '.join(cb_info)
-            rows.append(f"<tr><td>{cb}</td><td>{cb_info}</td></tr>")
-        return ''.join(rows), 'Estimated crossovers'
 
     def to_frame(self, cb_whitelist=None):
         """

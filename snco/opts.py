@@ -918,7 +918,7 @@ snco_opts.option(
     subcommands=['predict', 'bc1predict', 'doublet', 'bam2pred', 'csl2pred', 'stats', 'segdist'],
     required=False,
     type=click.IntRange(1, 10),
-    default=3,
+    default=5,
     help='floating point precision in output files'
 )
 

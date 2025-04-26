@@ -1,8 +1,60 @@
+import numpy as np
+
 from .records import MarkerRecords, PredictionRecords
 from .plot import single_cell_markerplot, plot_recombination_landscape, plot_allele_ratio
 
 
-class MarkerRecordsWrapper(MarkerRecords):
+class RecordsAPIMixin:
+
+    '''
+    Mixin adding useful API functions to Records objects, mostly for use in IPython
+    '''
+
+    def __getattr__(self, attribute):
+        '''makes metadata keys available as attributes'''
+        try:
+            return self.metadata[attribute]
+        except KeyError:
+            raise AttributeError(f"'{type(self)}' object has no attribute '{attribute}'")
+
+    def __dir__(self):
+        '''makes metadata keys available in __dir__ so that IPython attribute tab completion includes them'''
+        return object.__dir__(self) + list(self.metadata.keys())
+
+    def _ipython_key_completions_(self):
+        '''makes top level keys available in IPython'''
+        return self._records.keys()
+
+    def _repr_table_info(self):
+        raise NotImplementedError() 
+
+    def _repr_html_(self):
+        '''produces a prettier html table representation of Records objects'''
+        n_cb = len(self)
+        n_chroms = len(self.chrom_sizes)
+        cls_name = self.__class__.__qualname__
+
+        rows, stat_name = self._repr_table_info()
+        records_info = f"""
+        <div style="font-family: sans-serif">
+            <p>{cls_name} object with <strong>{n_cb}</strong> barcodes across <strong>{n_chroms}</strong> chromosomes.</p>
+            <table border="1" cellpadding="4" cellspacing="0">
+                <thead>
+                    <tr>
+                        <th>Cell barcode</th>
+                        <th>{stat_name}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows}
+                </tbody>
+            </table>
+        </div>
+        """
+        return records_info
+
+
+class MarkerRecordsWrapper(MarkerRecords, RecordsAPIMixin):
 
     __qualname__ = 'MarkerRecords'
 
@@ -50,8 +102,16 @@ class MarkerRecordsWrapper(MarkerRecords):
         """
         return single_cell_markerplot(cb, self, **kwargs)
 
+    def _repr_table_info(self):
+        rows = []
+        for cb in self.barcodes[:10]:
+            # table shows counts per chromosome
+            cb_info = ', '.join(f'{chrom}: {int(self[cb, chrom].sum())}' for chrom in self.chrom_sizes)
+            rows.append(f"<tr><td>{cb}</td><td>{cb_info}</td></tr>")
+        return ''.join(rows), 'Marker counts'
 
-class PredictionRecordsWrapper(PredictionRecords):
+
+class PredictionRecordsWrapper(PredictionRecords, RecordsAPIMixin):
 
     __qualname__ = 'PredictionRecords'
 
@@ -137,3 +197,18 @@ class PredictionRecordsWrapper(PredictionRecords):
             full customization options.
         """
         return plot_allele_ratio(self, **kwargs)
+    
+    def _repr_table_info(self):
+        rows = []
+        for cb in self.barcodes[:10]:
+            # table shows estimated crossovers per chromosome
+            cb_info = []
+            for chrom in self.chrom_sizes:
+                hp = self[cb, chrom]
+                p_co = np.abs(np.diff(hp))
+                p_co = np.where(p_co < 5e3, p_co, 0)
+                n_co = p_co.sum()
+                cb_info.append(f'{chrom}: {n_co:.2f}')
+            cb_info = ', '.join(cb_info)
+            rows.append(f"<tr><td>{cb}</td><td>{cb_info}</td></tr>")
+        return ''.join(rows), 'Estimated crossovers'

@@ -6,6 +6,7 @@ from scipy.ndimage import convolve1d
 
 from .utils import load_json
 from .records import MarkerRecords
+from .metadata import MetadataDict
 from .groupby import genotype_grouper, dummy_grouper
 from .opts import DEFAULT_RANDOM_SEED
 
@@ -31,12 +32,12 @@ def filter_low_coverage_barcodes(co_markers, min_cov=0, min_cov_per_chrom=0):
     MarkerRecords
         Filtered marker records.
     """
-    co_markers_f = co_markers.copy()
-    for cb in co_markers_f.barcodes:
-        m_counts = [m.sum(axis=None) for m in co_markers_f[cb].values()]
-        if (sum(m_counts) < min_cov) | (min(m_counts) < min_cov_per_chrom):
-            co_markers_f.pop(cb)
-    return co_markers_f
+
+    def _low_cov_query(cb):
+        m_counts = [m.sum(axis=None) for m in co_markers[cb].values()]
+        return (sum(m_counts) >= min_cov) & (min(m_counts) >= min_cov_per_chrom)
+
+    return co_markers.query(_low_cov_query)
 
 
 def filter_genotyping_score(co_markers, min_geno_prob=0.9):
@@ -56,14 +57,14 @@ def filter_genotyping_score(co_markers, min_geno_prob=0.9):
         Filtered marker records.
     """
     try:
-        genotypes = co_markers.metadata['genotypes']
+        geno_probs = co_markers.metadata['genotype_probability']
     except KeyError:
         return co_markers
-    co_markers_f = co_markers.copy()
-    for cb in co_markers_f.barcodes:
-        if genotypes[cb]['genotype_probability'] < min_geno_prob:
-            co_markers_f.pop(cb)
-    return co_markers_f
+
+    def _geno_query(cb):
+        return geno_probs[cb] >= min_geno_prob
+
+    return co_markers.query(_geno_query)
 
 
 def predict_foreground_convolution(m, ws=100):
@@ -131,8 +132,8 @@ def estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg
         Filtered marker records with updated metadata.
     """
     conv_bins = conv_window_size // co_markers.bin_size
-    co_markers.metadata['background_signal'] = {}
-    co_markers.metadata['estimated_background_fraction'] = {}
+    background_signal = MetadataDict(levels=('group', 'chrom'), dtype=np.ndarray)
+    estimated_background_fraction = MetadataDict(levels=('cb',), dtype=float)
     for geno, geno_co_markers in co_markers.groupby(by='genotype' if apply_per_geno else 'none'):
         bg_signal = {}
         frac_bg = {}
@@ -156,8 +157,13 @@ def estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg
             chrom: sig / sig.sum(axis=None)
             for chrom, sig in bg_signal.items()
         }
-        co_markers.metadata['background_signal'][geno] = bg_signal
-        co_markers.metadata['estimated_background_fraction'].update(frac_bg)
+        background_signal[geno] = bg_signal
+        estimated_background_fraction.update(frac_bg)
+
+    co_markers.add_metadata(
+        background_signal=background_signal,
+        estimated_background_fraction=estimated_background_fraction
+    )
     return co_markers
 
 
@@ -287,7 +293,7 @@ def create_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.75, min_cb=
     int
         Total number of bins masked.
     """
-    imbalance_mask = {}
+    imbalance_mask = MetadataDict(levels=('group', 'chrom'), dtype=np.ndarray)
     for geno, geno_co_markers in co_markers.groupby(by='genotype' if apply_per_geno else 'none'):
         tot_signal = {}
         tot_obs = {}
@@ -309,8 +315,8 @@ def create_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.75, min_cb=
             count_mask = tot_obs[chrom] >= min_cb
             mask = np.logical_and(ratio_mask, count_mask)
             n_masked += mask.sum(axis=None)
-            imbalance_mask[geno][chrom] = np.stack([mask, mask], axis=1)
-    co_markers.metadata['haplotype_imbalance_mask'] = imbalance_mask
+            imbalance_mask[geno, chrom] = np.stack([mask, mask], axis=1)
+    co_markers.add_metadata(haplotype_imbalance_mask=imbalance_mask)
     return imbalance_mask, n_masked
 
 

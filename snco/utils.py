@@ -137,7 +137,7 @@ def genotyping_results_formatter(genotypes):
     Format the genotyping results into a human-readable string.
     """
     geno_counts = Counter(
-        [':'.join(sorted(cb_g['genotype'])) for cb_g in genotypes.values()]
+        [':'.join(sorted(cb_g)) for cb_g in genotypes.values()]
     )
     fmt = 'Genotyping results:\n'
     ljust_size = max([len(g) for g in geno_counts.keys()]) + 5

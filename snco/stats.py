@@ -182,9 +182,13 @@ def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=2.5e-3, max_phr
     """
     qual_metrics = []
     genotypes = co_markers.metadata.get(
-        'genotypes', defaultdict(
-            lambda: {'genotype': None, 'genotype_probability': np.nan, 'genotyping_nmarkers': np.nan}
-        )
+        'genotypes', defaultdict(lambda: None)
+    )
+    genotype_probs = co_markers.metadata.get(
+        'genotype_probability', defaultdict(lambda: np.nan)
+    )
+    genotype_nmarkers = co_markers.metadata.get(
+        'genotyping_nmarkers', defaultdict(lambda: np.nan)
     )
     bg_frac = co_markers.metadata.get(
         'estimated_background_fraction', defaultdict(lambda: np.nan)
@@ -196,15 +200,15 @@ def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=2.5e-3, max_phr
         cb_co_preds = co_preds[cb]
         qual_metrics.append([
             cb,
-            geno_to_string(genotypes[cb].get('genotype')),
-            genotypes[cb].get('genotype_probability'),
-            np.log10(genotypes[cb].get('genotyping_nmarkers')),
+            geno_to_string(genotypes.get(cb, default=None)),
+            genotype_probs.get(cb, default=np.nan),
+            np.log10(genotype_nmarkers.get(cb, default=np.nan)),
             total_markers(cb_co_markers),
-            bg_frac.get(cb, np.nan),
+            bg_frac.get(cb, default=np.nan),
             n_crossovers(cb_co_preds, min_co_prob=nco_min_prob),
             accuracy_score(cb_co_markers, cb_co_preds, max_score=max_phred_score),
             uncertainty_score(cb_co_preds),
-            doublet_rate.get(cb, np.nan),
+            doublet_rate.get(cb, default=np.nan),
             coverage_score(cb_co_markers),
             mean_haplotype(cb_co_preds)
         ])

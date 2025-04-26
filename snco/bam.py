@@ -111,11 +111,13 @@ class IntervalUMICounts:
         Deduplicates UMIs and returns an IntervalMarkerCounts object with collapsed counts.
     """
 
-    def __init__(self, chrom, bin_idx, umi_collapse_method, hap_tag_type):
+    def __init__(self, chrom, bin_idx, umi_collapse_method,
+                 hap_tag_type, haplotype_validator):
         self.chrom = chrom
         self.bin_idx = bin_idx
         self.umi_collapse_method = umi_collapse_method
         self.hap_tag_type = hap_tag_type
+        self.haplotype_validator = haplotype_validator
         self.has_umi = umi_collapse_method is not None
         self._counts = {}
 
@@ -185,7 +187,7 @@ class IntervalUMICounts:
         if not len(hap):
             return None
         else:
-            return hap
+            return self.haplotype_validator[hap]
 
     def collapse(self):
         """
@@ -263,6 +265,109 @@ def get_ha_samples(bam_fn):
                 except KeyError:
                     raise ValueError('Could not find ha_flag accession information in header')
     return sorted(samples)
+
+
+class MultiHaplotypeValidator:
+    """
+    A class to validate and manage haplotypes, ensuring they belong to a predefined set of allowed haplotypes.
+    It caches identical frozensets and returns references to the same object, to reduce memory usage
+
+    Attributes:
+    ----------
+    allowed_haplotypes : frozenset
+        A frozen set of allowed haplotypes.
+    """
+
+    def __init__(self, allowed_haplotypes=None):
+        """
+        Initializes the HaplotypeValidator with a set of allowed haplotypes.
+
+        Parameters:
+        -----------
+        allowed_haplotypes : iterable or None
+            A collection of allowed haplotypes (e.g., list, set) to be converted into a frozenset.
+        """
+        if allowed_haplotypes is not None:
+            allowed_haplotypes = frozenset(allowed_haplotypes)
+        self.allowed_haplotypes = allowed_haplotypes
+        self._cached = {}
+
+    def __getitem__(self, haps):
+        """
+        Retrieves a frozenset of haplotypes, ensuring they are a subset of allowed haplotypes.
+        Caches identical frozensets and returns references to the same object, to reduce memory usage
+
+        Parameters:
+        -----------
+        haps : iterable
+            A collection of haplotypes (e.g., list, set) to be retrieved.
+
+        Returns:
+        --------
+        frozenset
+            A frozenset representing the validated haplotype set.
+        """
+        haps = frozenset(haps)
+        if self.allowed_haplotypes is not None:
+            haps = haps.intersection(self.allowed_haplotypes)
+        if haps not in self._cached:
+            self._cached[haps] = haps
+        return self._cached[haps]
+
+    def __eq__(self, other):
+        return self.allowed_haplotypes == other
+
+    def intersection(self, hap_a, hap_b):
+        """
+        Computes the intersection of two haplotype sets and validates the result.
+
+        The intersection is first computed and then validated using the `__getitem__` method.
+
+        Parameters:
+        -----------
+        hap_a : iterable
+            A collection of haplotypes (e.g., list, set) for the first haplotype set.
+        hap_b : iterable
+            A collection of haplotypes (e.g., list, set) for the second haplotype set.
+
+        Returns:
+        --------
+        frozenset
+            A frozenset representing the validated intersection of `hap_a` and `hap_b`.
+
+        Raises:
+        -------
+        KeyError
+            If the intersection contains haplotypes not recognized as allowed.
+        """
+        hap_a, hap_b = frozenset(hap_a), frozenset(hap_b)
+        return self[hap_a.intersection(hap_b)]
+
+    def union(self, hap_a, hap_b):
+        """
+        Computes the union of two haplotype sets and validates the result.
+
+        The union is first computed and then validated using the `__getitem__` method.
+
+        Parameters:
+        -----------
+        hap_a : iterable
+            A collection of haplotypes (e.g., list, set) for the first haplotype set.
+        hap_b : iterable
+            A collection of haplotypes (e.g., list, set) for the second haplotype set.
+
+        Returns:
+        --------
+        frozenset
+            A frozenset representing the validated union of `hap_a` and `hap_b`.
+
+        Raises:
+        -------
+        KeyError
+            If the union contains haplotypes not recognized as allowed.
+        """
+        hap_a, hap_b = frozenset(hap_a), frozenset(hap_b)
+        return self[hap_a.union(hap_b)]
 
 
 class BAMHaplotypeIntervalReader:
@@ -348,9 +453,7 @@ class BAMHaplotypeIntervalReader:
         self.umi_tag = umi_tag
         self.hap_tag = hap_tag
         self.hap_tag_type = hap_tag_type
-        if allowed_haplotypes is not None:
-            allowed_haplotypes = frozenset(allowed_haplotypes)
-        self.haplotypes = allowed_haplotypes
+        self.haplotypes = MultiHaplotypeValidator(allowed_haplotypes)
         self.cb_whitelist = cb_whitelist
         self.umi_collapse_method = umi_collapse_method
         if exclude_contigs is None:
@@ -368,8 +471,8 @@ class BAMHaplotypeIntervalReader:
         self.nbins = {}
         for chrom, cs in self.chrom_sizes.items():
             self.nbins[chrom] = int(np.ceil(cs / self.bin_size))
-        if self.hap_tag_type == 'multi_haplotype' and self.haplotypes is None:
-            self.haplotypes = get_ha_samples(self._bam_fn)
+        if self.hap_tag_type == 'multi_haplotype' and self.haplotypes == None:
+            self.haplotypes = MultiHaplotypeValidator(get_ha_samples(self._bam_fn))
 
     def fetch_interval_counts(self, chrom, bin_idx):
         """
@@ -402,7 +505,8 @@ class BAMHaplotypeIntervalReader:
         bin_start = self.bin_size * bin_idx
         bin_end = bin_start + self.bin_size - 1
 
-        interval_counts = IntervalUMICounts(chrom, bin_idx, self.umi_collapse_method, self.hap_tag_type)
+        interval_counts = IntervalUMICounts(chrom, bin_idx, self.umi_collapse_method,
+                                            self.hap_tag_type, self.haplotypes)
 
         for aln in self.bam.fetch(chrom, bin_start, bin_end):
 
@@ -427,20 +531,18 @@ class BAMHaplotypeIntervalReader:
                 if hap < 0:
                     continue
             elif self.hap_tag_type == 'multi_haplotype':
-                hap = frozenset(str(hap).split(','))
-                if self.haplotypes is not None:
-                    hap = hap.intersection(self.haplotypes)
-                if hap == self.haplotypes:
+                hap = self.haplotypes[str(hap).split(',')]
+                if self.haplotypes == hap:
                     # read does not align better to one haplotype than others,
                     # so is not useful for haplotyping analysis
                     continue
                 if not hap:
-                    raise ValueError(
-                        f'aln {aln.query_name} has no haplotypes that intersect with {self.haplotypes}'
-                    )
+                    # read aligns to haplotypes that are not allowed by validator
+                    log.warn('saw alignment with no allowed haplotypes, this may or may not be expected')
+                    continue
             else:
                 raise ValueError(f'hap_tag_type "{self.hap_tag_type}" not recognised')
-            
+
             # only consider reads where the left mapping position is within the bin,
             # to prevent duplicates in adjacent bins
             if aln.reference_start < bin_start:

@@ -5,6 +5,7 @@ import numpy as np
 from joblib import Parallel, delayed
 
 from .utils import spawn_child_rngs
+from .metadata import MetadataDict
 from .bam import IntervalMarkerCounts
 from .opts import DEFAULT_RANDOM_SEED
 
@@ -102,16 +103,12 @@ def assign_genotype_with_em(cb, cb_geno_markers, *, crossing_combinations,
     -------
     cb : str
         The cell barcode.
-    geno_metadata : dict
-        A dictionary containing the assigned genotype and related metadata:
-        - 'genotype' : frozenset
-            The assigned genotype.
-        - 'genotype_probability' : float
-            The probability of the assigned genotype.
-        - 'all_probabilities' : list of tuple
-            A list of all possible genotypes with their estimated probabilities.
-        - 'genotyping_nmarkers' : int
-            The number of markers used for genotyping.
+    genotype : frozenset
+        The assigned genotype.
+    genotype_probability : float
+        The probability of the assigned genotype.
+    genotyping_nmarkers : int
+        The number of markers used for genotyping.
     """
     n_genos = len(crossing_combinations)
     init_probs = {geno: 1 / n_genos for geno in crossing_combinations}
@@ -132,13 +129,7 @@ def assign_genotype_with_em(cb, cb_geno_markers, *, crossing_combinations,
     genos_with_max_prob = [geno for geno, p in probs.items() if np.isclose(p, max_prob, atol=min_delta)]
     genos_with_max_prob.sort(key=lambda fznset: sorted(fznset))
     geno = rng.choice(genos_with_max_prob)
-    geno_metadata = {
-        'genotype': geno,
-        'genotype_probability': max_prob,
-        'all_probabilities': [(*sorted(g), p) for g, p in probs.items()],
-        'genotyping_nmarkers': sum(cb_geno_markers.values())
-    }
-    return cb, geno_metadata
+    return cb, geno, max_prob, sum(cb_geno_markers.values())
 
 
 def parallel_assign_genotypes(genotype_markers, *, processes=1, rng=DEFAULT_RNG, **kwargs):
@@ -159,8 +150,12 @@ def parallel_assign_genotypes(genotype_markers, *, processes=1, rng=DEFAULT_RNG,
 
     Returns
     -------
-    dict
-        A dictionary where keys are cell barcodes and values are their genotype metadata.
+    geno_assignments : snco.metadata.MetadataDict
+        The assigned genotype for each cell barcode
+    geno_probabilities : snco.metadata.MetadataDict
+        The probability that the assignment is correct, calculated using EM
+    geno_nmarkers : snco.metadata.MetadataDict
+        The number of markers that were used in genotype assignment
     """
     n_cb = len(genotype_markers)
     # use sorted cb list to ensure deterministic results across runs
@@ -169,7 +164,16 @@ def parallel_assign_genotypes(genotype_markers, *, processes=1, rng=DEFAULT_RNG,
         delayed(assign_genotype_with_em)(cb, genotype_markers[cb], rng=sp_rng, **kwargs)
         for cb, sp_rng in zip(barcodes, spawn_child_rngs(rng))
     )
-    return dict(res)
+    geno_assignments = MetadataDict(levels=('cb',), dtype=frozenset)
+    geno_probabilities = MetadataDict(levels=('cb',), dtype=float)
+    geno_nmarkers = MetadataDict(levels=('cb',), dtype=int)
+
+    for cb, geno, geno_prob, nmarkers in res:
+        geno_assignments[cb] = geno
+        geno_probabilities[cb] = geno_prob
+        geno_nmarkers[cb] = nmarkers
+
+    return geno_assignments, geno_probabilities, geno_nmarkers
 
 
 def resolve_genotype_counts_to_co_markers(inv_counts, genotypes):
@@ -195,7 +199,7 @@ def resolve_genotype_counts_to_co_markers(inv_counts, genotypes):
         resolved_ic = IntervalMarkerCounts.new_like(ic)
         for cb, cb_haplo_ic in ic.counts.items():
             try:
-                geno = genotypes[cb]['genotype']
+                geno = genotypes[cb]
             except KeyError:
                 # cb was removed due to low markers
                 continue
@@ -240,6 +244,6 @@ def genotype_from_inv_counts(inv_counts, min_markers_per_cb=100, **kwargs):
     if min_markers_per_cb > 0:
         genotype_markers = {cb: g for cb, g in genotype_markers.items()
                             if sum(g.values()) >= min_markers_per_cb}
-    genotypes = parallel_assign_genotypes(genotype_markers, **kwargs)
+    genotypes, genotype_probs, genotype_nmarkers = parallel_assign_genotypes(genotype_markers, **kwargs)
     inv_counts = resolve_genotype_counts_to_co_markers(inv_counts, genotypes)
-    return genotypes, inv_counts
+    return genotypes, genotype_probs, genotype_nmarkers, inv_counts

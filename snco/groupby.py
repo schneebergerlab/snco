@@ -1,4 +1,6 @@
+import inspect
 from collections import defaultdict
+from functools import partial
 
 
 def dummy_grouper(records, dummy_name='ungrouped'):
@@ -48,7 +50,7 @@ def genotype_grouper(records):
         raise ValueError('Genotype metadata not present, cannot group by genotype')
     def _geno_grouper(cb):
         try:
-            geno = ':'.join(sorted(genotypes[cb]['genotype']))
+            geno = ':'.join(sorted(genotypes[cb]))
         except KeyError:
             raise KeyError(f'Cell barcode {cb} not present in genotypes metadata')
         return geno
@@ -77,6 +79,17 @@ class RecordsGroupyBy:
                     raise ValueError(f'grouper "{grouper}" not recognised')
             else:
                 raise ValueError('grouper should be dict or callable')
+        else:
+            func_signature = inspect.signature(grouper)
+            additional_parameters = func_signature.parameters 
+            additional_param_names = list(additional_parameters)[1:] # first argument is always cell barcode
+            func_kwargs = {}
+            for param in additional_param_names:
+                if param == 'records':
+                    func_kwargs[param] = records
+                elif param in records.metadata:
+                    func_kwargs[param] = records.metadata[param]
+            grouper = partial(grouper, **func_kwargs)
         self.group_mapping = defaultdict(list)
         for cb in records.barcodes:
             g = grouper(cb)

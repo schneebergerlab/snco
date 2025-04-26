@@ -388,10 +388,14 @@ def cellsnp_lite_to_co_markers(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist,
             haplotypes = get_vcf_samples(genotype_vcf_fn, reference_name)
             genotype_kwargs['crossing_combinations'] = [frozenset(g) for g in it.combinations(haplotypes, r=2)]
         log.info(f'Genotyping barcodes with {len(genotype_kwargs["crossing_combinations"])} possible genotypes')
-        genotypes, inv_counts = genotype_from_inv_counts(inv_counts, **genotype_kwargs)
+        genotypes, genotype_probs, genotype_nmarkers, inv_counts = genotype_from_inv_counts(inv_counts, **genotype_kwargs)
         if log.getEffectiveLevel() <= logging.DEBUG:
             log.debug(genotyping_results_formatter(genotypes))
-        co_markers.metadata['genotypes'] = genotypes
+        co_markers.add_metadata(
+            genotypes=genotypes,
+            genotype_probability=genotype_probs,
+            genotyping_nmarkers=genotype_nmarkers
+        )
 
     for ic in inv_counts:
         co_markers.update(ic)

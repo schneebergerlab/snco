@@ -118,6 +118,8 @@ class BarcodeCorrector:
         str or None
             Corrected barcode or None if uncorrectable.
         """
+        if cb is None:
+            return None
         if cb in self.whitelist:
             return cb
         if cb in self._blacklist:
@@ -263,7 +265,7 @@ class CellBarcodeWhitelist:
             return cb
         if not self.check_proper_barcode(cb):
             return None
-        return self.corrector.correct(cb) if self.corrector else cb
+        return self.corrector.correct(cb) if self.corrector else None
 
     def __contains__(self, cb):
         if cb is None:
