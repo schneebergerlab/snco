@@ -15,6 +15,18 @@ from .groupby import RecordsGroupyBy
 
 log = logging.getLogger('snco')
 
+SAFE_BUILTINS = {
+    'abs': abs,
+    'len': len,
+    'min': min,
+    'max': max,
+    'sum': sum,
+    'str': str,
+    'int': int,
+    'float': float,
+    'bool': bool,
+    'round': round
+}
 
 class BaseRecords(object):
 
@@ -424,38 +436,93 @@ class BaseRecords(object):
             obj._filter_metadata(cb_whitelist)
             return obj
 
-    def query(self, func):
+    def query(self, func_or_expr):
         """
-        Query the records using a function applied to each cell barcode,
+        Query the records using a string expression or a function applied to each cell barcode,
         optionally supplying additional context based on the function signature.
 
-        The provided `func` must accept at least a cell barcode (str) as its first argument.
-        If `func` declares an additional named parameter called `records`, the full records object
+        If a function is provided, is must accept at least a cell barcode (str) as its first argument.
+        If the function declares an additional named parameter called `records`, the full records object
         will be passed in automatically.
-        If `func` declares additional named parameters matching keys in `self.metadata`
+        If the function declares additional named parameters matching keys in `self.metadata`
         these will also be passed in automatically.
+
+        If a string is provided, it is evaluated with access to a limited environment including
+        the records subdict specific to the cell barcode (named `records`), the cell barcode itself
+        (named `cb`) and any metadata value for that cell barcode for metadata objects that contain
+        'cb' as the top level. A small number of builtin functions like min, max, str are also available
 
         Parameters
         ----------
-        func : callable
-            A function that accepts a cell barcode (str) as its first argument.
-            It may also accept additional keyword arguments matching metadata keys
-            or 'records' to access the full records object.
+        func_or_expr : callable or str
+            A function that accepts a cell barcode (str) as its first argument, or a string expression
+            to evaluate for each barcode.
 
         Returns
         -------
         BaseRecords
             A new records object containing only the barcodes for which `func` returns True.
+
+        Examples
+        --------
+        # Example 1.1: Using a function to filter barcodes
+        # Here, the function filters the barcodes to include only those that
+        # have a barcode starting with "A"
+        records.query(lambda cb: cb.startswith("A"))
+
+        # Example 1.2: Using an expression to filter barcodes
+        # The same result as for example 1.1 can be achieved using an expression
+        records.query('str(cb).startswith("A")')
+
+        # Example 2.1: Filtering based on records value with a function
+        # Here, for a PredictionRecords object, we can filter on the haplotype at a particular location
+        preds.query(lambda cb, records: records[cb, "Chr1", 100] > 0.5)
+
+        # Example 2.2: Filtering based on records value with an expression
+        # The same result as for example 2.1 can be achieved using an expression
+        # The only difference is that the value specific to the cell barcode is automatically
+        # accessed as a nested dict:
+        preds.query('records["Chr1"][100] > 0.5')
+
+        # Example 3.1: Using a metadata value to filter barcodes with a function
+        # When using a function, any metadata key that has "cb" as its top level can be accessed
+        # The function will be inspected and the appropriate MetadataDict will be passed as a kwarg
+        preds.query(lambda cb, doublet_probability: doublet_probability[cb] < 0.5)
+
+        # Example 3.2: Using a metadata value to filter barcodes with an expression
+        # The same result as for example 3.1 can be achieved using expressions
+        # The only difference here is that the value specific to the cell barcode is automatically accessed:
+        preds.query('doublet_probability < 0.5')
         """
-        func_signature = inspect.signature(func)
-        additional_parameters = func_signature.parameters 
-        additional_param_names = list(additional_parameters)[1:] # first argument is always cell barcode
         func_kwargs = {}
-        for param in additional_param_names:
-            if param == 'records':
-                func_kwargs[param] = self
-            elif param in self.metadata:
-                func_kwargs[param] = self.metadata[param]
+        if isinstance(func_or_expr, str):
+            expr = func_or_expr
+            environment = {
+                key: val for key, val in self.metadata.items()
+                if isinstance(val, MetadataDict) and val.levels[0] == 'cb'
+            }
+            environment['records'] = self
+
+            def func(cb):
+                local_vars = {key: val[cb] for key, val in environment.items()}
+                local_vars['cb'] = cb
+                return eval(expr, {"__builtins__": SAFE_BUILTINS}, local_vars)
+
+        elif callable(func_or_expr):
+            func = func_or_expr
+            func_signature = inspect.signature(func)
+            additional_parameters = func_signature.parameters
+            additional_param_names = list(additional_parameters)
+            if not additional_param_names or additional_param_names[0] != 'cb':
+                raise ValueError('When a callable is provided, the first argument must be "cb"')
+            for param in additional_param_names[1:]:
+                if param == 'records':
+                    func_kwargs[param] = self
+                elif param in self.metadata:
+                    func_kwargs[param] = self.metadata[param]
+        else:
+            raise ValueError('func_or_expr must be either a callable or a str')
+
         return self.filter(
             (cb for cb in self.barcodes if func(cb, **func_kwargs)),
             inplace=False
