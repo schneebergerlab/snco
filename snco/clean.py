@@ -5,9 +5,7 @@ import pandas as pd
 from scipy.ndimage import convolve1d
 
 from .utils import load_json
-from .records import MarkerRecords
-from .metadata import MetadataDict
-from .groupby import genotype_grouper, dummy_grouper
+from .records import MarkerRecords, NestedData, NestedDataArray
 from .opts import DEFAULT_RANDOM_SEED
 
 log = logging.getLogger('snco')
@@ -132,8 +130,8 @@ def estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg
         Filtered marker records with updated metadata.
     """
     conv_bins = conv_window_size // co_markers.bin_size
-    background_signal = MetadataDict(levels=('group', 'chrom'), dtype=np.ndarray)
-    estimated_background_fraction = MetadataDict(levels=('cb',), dtype=float)
+    background_signal = NestedDataArray(levels=('genotype', 'chrom'))
+    estimated_background_fraction = NestedData(levels=('cb',), dtype=float)
     for geno, geno_co_markers in co_markers.groupby(by='genotype' if apply_per_geno else 'none'):
         bg_signal = {}
         frac_bg = {}
@@ -150,7 +148,7 @@ def estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg
 
                 bg_count += bg.sum(axis=None)
                 tot_count += m.sum(axis=None)
-            frac_bg[cb] = bg_count / tot_count
+            frac_bg[cb] = float(bg_count / tot_count)
             if frac_bg[cb] > max_frac_bg:
                 co_markers.pop(cb)
         bg_signal = {
@@ -258,14 +256,12 @@ def clean_marker_background(co_markers, apply_per_geno=True, rng=DEFAULT_RNG):
     bg_signal = co_markers.metadata['background_signal']
     frac_bg = co_markers.metadata['estimated_background_fraction']
     if apply_per_geno:
-        geno_grouper = genotype_grouper(co_markers)
-    else:
-        geno_grouper = dummy_grouper(co_markers)
+        genotypes = co_markers.metadata['genotypes']
     co_markers_c = MarkerRecords.new_like(co_markers)
     for cb, chrom, m in co_markers.deep_items():
-        geno = geno_grouper(cb)
+        geno = genotypes[cb] if apply_per_geno else 'ungrouped'
         co_markers_c[cb, chrom] = subtract_background(
-            m, bg_signal[geno][chrom], frac_bg[cb], rng=rng
+            m, bg_signal[geno, chrom], frac_bg[cb], rng=rng
         )
     return co_markers_c
 
@@ -288,12 +284,12 @@ def create_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.75, min_cb=
 
     Returns
     -------
-    dict
-        Dictionary of masks by genotype and chromosome.
+    NestedDataArray
+        metadata array of masks by genotype and chromosome.
     int
         Total number of bins masked.
     """
-    imbalance_mask = MetadataDict(levels=('group', 'chrom'), dtype=np.ndarray)
+    imbalance_mask = NestedDataArray(levels=('genotype', 'chrom'))
     for geno, geno_co_markers in co_markers.groupby(by='genotype' if apply_per_geno else 'none'):
         tot_signal = {}
         tot_obs = {}
@@ -343,13 +339,11 @@ def apply_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.9, apply_per
     mask, n_masked = create_haplotype_imbalance_mask(
         co_markers, max_imbalance_mask, apply_per_geno=apply_per_geno
     )
-    if apply_per_geno:
-        geno_grouper = genotype_grouper(co_markers)
-    else:
-        geno_grouper = dummy_grouper(co_markers)
     co_markers_m = MarkerRecords.new_like(co_markers)
+    if apply_per_geno:
+        genotypes = co_markers.metadata['genotypes']
     for cb, chrom, m in co_markers.deep_items():
-        geno = geno_grouper(cb)
+        geno = genotypes[cb] if apply_per_geno else 'ungrouped'
         co_markers_m[cb, chrom] = np.where(mask[geno][chrom], 0, m)
     return co_markers_m, n_masked
 

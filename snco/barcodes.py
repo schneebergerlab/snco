@@ -222,7 +222,7 @@ class CellBarcodeWhitelist:
         if correction_method not in ("exact", "1mm"):
             raise ValueError(f"Unsupported correction method: {correction_method}")
 
-        if whitelist:
+        if whitelist and validate_barcodes:
             self.validator.check_uniform_length(self.whitelist)
 
         self.corrector = (

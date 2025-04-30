@@ -90,11 +90,13 @@ class RecordsGroupyBy:
                 elif param in records.metadata:
                     func_kwargs[param] = records.metadata[param]
             grouper = partial(grouper, **func_kwargs)
-        self.group_mapping = defaultdict(list)
+        group_mapping = defaultdict(list)
         for cb in records.barcodes:
             g = grouper(cb)
             if g is not None:
-                self.group_mapping[g].append(cb)
+                group_mapping[g].append(cb)
+        # convert to dict for __getitem__ to work
+        self.group_mapping = dict(group_mapping)
         self._items = iter(self.group_mapping.items())
 
     def __iter__(self):
@@ -105,6 +107,13 @@ class RecordsGroupyBy:
         g, g_cb = next(self._items)
         g_obj = self._records.filter(g_cb, inplace=False)
         return g, g_obj
+
+    def __getitem__(self, key):
+        g_cb = self.group_mapping[key]
+        return self._records.filter(g_cb, inplace=False)
+
+    def __len__(self):
+        return len(self.group_mapping)
 
     def apply(self, func, **kwargs):
         """

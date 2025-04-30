@@ -223,7 +223,9 @@ class IntervalUMICounts:
                 deduped = umi_dedup_directional(self[cb])
             else:
                 deduped = self[cb]
-            collapsed[cb] = umi_eval(deduped)
+            final_count = umi_eval(deduped)
+            if final_count:
+                collapsed[cb] = final_count
         return collapsed
 
 

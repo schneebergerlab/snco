@@ -181,34 +181,26 @@ def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=2.5e-3, max_phr
         A DataFrame containing the calculated quality metrics for each cell barcode.
     """
     qual_metrics = []
-    genotypes = co_markers.metadata.get(
-        'genotypes', defaultdict(lambda: None)
-    )
-    genotype_probs = co_markers.metadata.get(
-        'genotype_probability', defaultdict(lambda: np.nan)
-    )
-    genotype_nmarkers = co_markers.metadata.get(
-        'genotyping_nmarkers', defaultdict(lambda: np.nan)
-    )
-    bg_frac = co_markers.metadata.get(
-        'estimated_background_fraction', defaultdict(lambda: np.nan)
-    )
-    doublet_rate = co_preds.metadata.get(
-        'doublet_probability', defaultdict(lambda: np.nan)
-    )
+
+    genotypes = co_markers.metadata.get('genotypes', {})
+    genotype_probs = co_markers.metadata.get('genotype_probability', {})
+    genotype_nmarkers = co_markers.metadata.get('genotyping_nmarkers', {})
+    bg_frac = co_markers.metadata.get('estimated_background_fraction', {})
+    doublet_rate = co_preds.metadata.get('doublet_probability', {})
+
     for cb, cb_co_markers in co_markers.items():
         cb_co_preds = co_preds[cb]
         qual_metrics.append([
             cb,
-            geno_to_string(genotypes.get(cb, default=None)),
-            genotype_probs.get(cb, default=np.nan),
-            np.log10(genotype_nmarkers.get(cb, default=np.nan)),
+            geno_to_string(genotypes.get(cb, None)),
+            genotype_probs.get(cb, np.nan),
+            np.log10(genotype_nmarkers.get(cb, np.nan)),
             total_markers(cb_co_markers),
-            bg_frac.get(cb, default=np.nan),
+            bg_frac.get(cb, np.nan),
             n_crossovers(cb_co_preds, min_co_prob=nco_min_prob),
             accuracy_score(cb_co_markers, cb_co_preds, max_score=max_phred_score),
             uncertainty_score(cb_co_preds),
-            doublet_rate.get(cb, default=np.nan),
+            doublet_rate.get(cb, np.nan),
             coverage_score(cb_co_markers),
             mean_haplotype(cb_co_preds)
         ])

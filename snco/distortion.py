@@ -105,7 +105,9 @@ def segregation_distortion(co_preds,
         - adjusted p-values after FDR correction
     """
     co_preds_low_res = {
-        c: downsample_chrom(co_preds[..., c], co_preds.bin_size, resolution)
+        c: downsample_chrom(co_preds[:, c].stack_values(),
+                            co_preds.bin_size,
+                            resolution)
         for c in co_preds.chrom_sizes
     }
     with Parallel(n_jobs=processes) as pool:

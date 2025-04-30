@@ -5,7 +5,7 @@ import numpy as np
 from joblib import Parallel, delayed
 
 from .utils import spawn_child_rngs
-from .metadata import MetadataDict
+from .records import NestedData
 from .bam import IntervalMarkerCounts
 from .opts import DEFAULT_RANDOM_SEED
 
@@ -150,11 +150,11 @@ def parallel_assign_genotypes(genotype_markers, *, processes=1, rng=DEFAULT_RNG,
 
     Returns
     -------
-    geno_assignments : snco.metadata.MetadataDict
+    geno_assignments : snco.records.NestedData
         The assigned genotype for each cell barcode
-    geno_probabilities : snco.metadata.MetadataDict
+    geno_probabilities : snco.records.NestedData
         The probability that the assignment is correct, calculated using EM
-    geno_nmarkers : snco.metadata.MetadataDict
+    geno_nmarkers : snco.records.NestedData
         The number of markers that were used in genotype assignment
     """
     n_cb = len(genotype_markers)
@@ -164,9 +164,9 @@ def parallel_assign_genotypes(genotype_markers, *, processes=1, rng=DEFAULT_RNG,
         delayed(assign_genotype_with_em)(cb, genotype_markers[cb], rng=sp_rng, **kwargs)
         for cb, sp_rng in zip(barcodes, spawn_child_rngs(rng))
     )
-    geno_assignments = MetadataDict(levels=('cb',), dtype=frozenset)
-    geno_probabilities = MetadataDict(levels=('cb',), dtype=float)
-    geno_nmarkers = MetadataDict(levels=('cb',), dtype=int)
+    geno_assignments = NestedData(levels=('cb',), dtype=frozenset)
+    geno_probabilities = NestedData(levels=('cb',), dtype=float)
+    geno_nmarkers = NestedData(levels=('cb',), dtype=int)
 
     for cb, geno, geno_prob, nmarkers in res:
         geno_assignments[cb] = geno

@@ -27,7 +27,7 @@ def median_absolute_deviation(arr):
 def create_allele_ratio_mask(co_markers, expected_ratio='auto', nmad_mask=5, correction=1e-2):
     allele_ratio_mask = {}
     for chrom in co_markers.chrom_sizes:
-        m = co_markers[..., chrom]
+        m = co_markers[:, chrom].stack_values()
         m_norm = (m / m.sum(axis=(1, 2))[:, np.newaxis, np.newaxis]).sum(axis=0)
         tot = m_norm.sum(axis=1)
         marker_mask = tot > 0

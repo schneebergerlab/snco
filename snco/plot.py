@@ -392,14 +392,13 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4), ch
 
 
 def plot_recombination_landscape(co_preds, co_markers=None,
-                                 cb_whitelist=None,
+                                 apply_per_geno=False,
                                  rolling_mean_window_size=1_000_000,
                                  nboots=100, ci=95,
                                  min_prob=5e-3,
                                  axes=None,
                                  figsize=(12, 4),
-                                 colour=None,
-                                 label=None,
+                                 use_cached=False,
                                  rng=DEFAULT_RNG):
     """
     Plot the recombination landscape across chromosomes for multiple cell barcodes.
@@ -411,8 +410,8 @@ def plot_recombination_landscape(co_preds, co_markers=None,
     co_markers : MarkerRecords, optional
         MarkerRecords object containing the marker data for the dataset. When provided, used for calculating edge
         effects only at chromosome ends only. Default is None.
-    cb_whitelist : list of str, optional
-        A list of cell barcodes to include in the analysis. If None, all barcodes are included. Default is None.
+    apply_per_geno : bool, optional
+        Whether to group barcodes by genotype for recombination landscape calculation/plotting. Default is True.
     rolling_mean_window_size : int, optional
         The size of the window for computing the rolling mean (in base pairs). Default is 1,000,000.
     nboots : int, optional
@@ -425,11 +424,8 @@ def plot_recombination_landscape(co_preds, co_markers=None,
         The axes to plot on. If None, new axes are created. Default is None.
     figsize : tuple, optional
         The size of the figure (width, height) in inches. Default is (12, 4).
-    colour : str, optional
-        The colour to use for the plot lines and fills. If None, a colour is selected from the default palette.
-        Default is None.
-    label : str, optional
-        The label for the plot legend. If None, no legend is added. Default is None.
+    use_cached : bool, optional
+        Whether to use the metadata slot "recombination_landscape" of co_preds, if it exists
     rng : numpy.random.Generator, optional
         The random number generator to use for bootstrapping. Default is `DEFAULT_RNG`.
 
@@ -446,47 +442,51 @@ def plot_recombination_landscape(co_preds, co_markers=None,
         fig = plt.gcf()
         assert len(axes) == len(co_preds.chrom_sizes)
 
-    if cb_whitelist is not None:
-        co_preds = co_preds.copy()
-        co_preds.filter(cb_whitelist)
-        if co_markers is not None:
-            co_markers = co_markers.copy()
-            co_markers.filter(cb_whitelist)
+    if not 'genotypes' in co_preds.metadata:
+        apply_per_geno = False
 
-    cm_per_mb = recombination_landscape(
-        co_preds,
-        co_markers=co_markers,
-        rolling_mean_window_size=rolling_mean_window_size,
-        nboots=nboots,
-        min_prob=min_prob,
-        rng=rng
-    )
+    if use_cached and 'recombination_landscape' in co_preds.metadata:
+        cm_per_mb = co_preds.metadata['recombination_landscape']
+    else:
+        cm_per_mb = recombination_landscape(
+            co_preds,
+            co_markers=co_markers,
+            apply_per_geno=apply_per_geno,
+            rolling_mean_window_size=rolling_mean_window_size,
+            nboots=nboots,
+            min_prob=min_prob,
+            rng=rng
+        )
 
     lower = (100 - ci) / 2
     upper = 100 - lower
 
-    for chrom, ax in zip(cm_per_mb, axes):
-        x = np.arange(0, co_preds.nbins[chrom]) * co_preds.bin_size
-        c = cm_per_mb[chrom]
-        line, = ax.step(x, np.nanmean(c, axis=0), color=colour)
-        # when colour is None this guarantees shading and label colours are correct
-        colour = line.get_color()
-        ax.fill_between(
-            x=x,
-            y1=np.nanpercentile(c, lower, axis=0),
-            y2=np.nanpercentile(c, upper, axis=0),
-            alpha=0.25,
-            color=colour
-        )
+    for geno, geno_cm_per_mb in cm_per_mb.items():
+        colour = None
+        for chrom, ax in zip(geno_cm_per_mb, axes):
+            x = np.arange(0, co_preds.nbins[chrom]) * co_preds.bin_size
+            c = geno_cm_per_mb[chrom]
+            line, = ax.step(x, np.nanmean(c, axis=0), color=colour)
+            # when colour is None this guarantees shading and label colours are correct
+            colour = line.get_color()
+            ax.fill_between(
+                x=x,
+                y1=np.nanpercentile(c, lower, axis=0),
+                y2=np.nanpercentile(c, upper, axis=0),
+                alpha=0.25,
+                color=colour
+            )
+        if apply_per_geno:
+            axes[-1].plot([], [], color=colour, label=geno)
+            axes[-1].legend()
+
     axes[0].set_ylabel('cM / Mb')
-    if label is not None:
-        axes[-1].plot([], [], color=colour, label=label)
-        axes[-1].legend()
     plt.tight_layout()
     return fig, axes
 
 
-def plot_allele_ratio(co_preds, cb_whitelist=None,
+def plot_allele_ratio(co_preds,
+                      apply_per_geno=False,
                       nboots=100, ci=95,
                       axes=None,
                       figsize=(12, 4),
@@ -500,8 +500,8 @@ def plot_allele_ratio(co_preds, cb_whitelist=None,
     ----------
     co_preds : PredictionRecords
         PredictionRecords object containing the haplotype predictions.
-    cb_whitelist : list of str, optional
-        A list of cell barcodes to include in the analysis. If None, all barcodes are included. Default is None.
+    apply_per_geno : bool, optional
+        Whether to group barcodes by genotype for allele frequency calculation/plotting. Default is True.
     nboots : int, optional
         The number of bootstrap iterations for calculating confidence intervals. Default is 100.
     ci : int, optional
@@ -531,35 +531,37 @@ def plot_allele_ratio(co_preds, cb_whitelist=None,
         fig = plt.gcf()
         assert len(axes) == len(co_preds.chrom_sizes)
 
-    if cb_whitelist is not None:
-        co_preds = co_preds.copy()
-        co_preds.filter(cb_whitelist)
+    if not 'genotypes' in co_preds.metadata:
+        apply_per_geno = False
 
     lower = (100 - ci) / 2
     upper = 100 - lower
-    N = len(co_preds)
 
-    for chrom, ax in zip(co_preds.chrom_sizes, axes):
-        x = np.arange(0, co_preds.nbins[chrom]) * co_preds.bin_size
-        haps = co_preds[..., chrom]
-        c = []
-        for _ in range(nboots):
-            idx = rng.integers(0, N, size=N)
-            c.append(haps[idx].mean(axis=0))
-        line, = ax.step(x, np.nanmean(c, axis=0), color=colour)
-        colour = line.get_color()
-        ax.fill_between(
-            x=x,
-            y1=np.nanpercentile(c, lower, axis=0),
-            y2=np.nanpercentile(c, upper, axis=0),
-            alpha=0.25,
-            color=colour
-        )
+    for geno, geno_co_preds in co_preds.groupby('genotype' if apply_per_geno else 'none'):
+        N = len(geno_co_preds)
+        colour = None
+        for chrom, ax in zip(geno_co_preds.chrom_sizes, axes):
+            x = np.arange(0, geno_co_preds.nbins[chrom]) * geno_co_preds.bin_size
+            haps = geno_co_preds[:, chrom].stack_values()
+            c = []
+            for _ in range(nboots):
+                idx = rng.integers(0, N, size=N)
+                c.append(haps[idx].mean(axis=0))
+            line, = ax.step(x, np.nanmean(c, axis=0), color=colour)
+            colour = line.get_color()
+            ax.fill_between(
+                x=x,
+                y1=np.nanpercentile(c, lower, axis=0),
+                y2=np.nanpercentile(c, upper, axis=0),
+                alpha=0.25,
+                color=colour
+            )
+        if apply_per_geno:
+            axes[-1].plot([], [], color=colour, label=geno)
+            axes[-1].legend()
     axes[0].set_ylabel('Allele ratio')
     axes[0].set_ylim(0, 1)
-    if label is not None:
-        axes[-1].plot([], [], color=colour, label=label)
-        axes[-1].legend()
+
     plt.tight_layout()
     return fig, axes
 

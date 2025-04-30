@@ -12,8 +12,7 @@ from pomegranate.gmm import GeneralMixtureModel
 
 from .logger import progress_bar
 from .utils import load_json
-from .records import PredictionRecords
-from .metadata import MetadataDict
+from .records import PredictionRecords, NestedData
 from .clean import predict_foreground_convolution
 from .sim import simulate_doublets
 from . import stats
@@ -373,7 +372,7 @@ def detect_crossovers(co_markers, rhmm, batch_size=128, processes=1):
             for cb, p in zip(seen_barcodes, X_pred):
                 co_preds[cb, chrom] = p
     co_preds.add_metadata(
-        rhmm_params=MetadataDict(levels=('other', ), dtype=(int, float), data=rhmm.params)
+        rhmm_params=NestedData(levels=('other', ), dtype=(int, float), data=rhmm.params)
     )
     return co_preds
 
@@ -516,7 +515,7 @@ def predict_doublet_barcodes(true_co_markers, true_co_preds,
     
     doublet_probs = dict(zip(cb_true, doublet_pred))
     true_co_preds.add_metadata(
-        doublet_probability=MetadataDict(levels=('cb', ), dtype=float, data=doublet_probs)
+        doublet_probability=NestedData(levels=('cb', ), dtype=float, data=doublet_probs)
     )
     return true_co_preds
 

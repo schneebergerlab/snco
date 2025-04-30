@@ -1,3 +1,4 @@
+import os
 import logging
 import sys
 import inspect
@@ -6,12 +7,11 @@ from collections import defaultdict
 import json
 
 import numpy as np
-from scipy import sparse
 import pandas as pd
 
-from .bam import IntervalMarkerCounts
-from .metadata import MetadataDict
+from .base import NestedData, NestedDataArray
 from .groupby import RecordsGroupyBy
+from ..bam import IntervalMarkerCounts
 
 log = logging.getLogger('snco')
 
@@ -74,7 +74,7 @@ class BaseRecords(object):
         self.nbins = {
             chrom: int(np.ceil(cs / bin_size)) for chrom, cs in chrom_sizes.items()
         }
-        self._records = {}
+        self._records = NestedDataArray(levels=('cb', 'chrom'))
 
     def _get_arr_shape(self, chrom: str):
         if chrom not in self.chrom_sizes:
@@ -102,51 +102,6 @@ class BaseRecords(object):
             raise ValueError('Chrom names do not match')
         for chrom, arr in sd.items():
             self._check_arr(arr, chrom)
-
-    def get_chrom(self, chrom, cb_whitelist=None):
-        """
-        Return a 2D array of all records for a given chromosome.
-
-        Parameters
-        ----------
-        chrom : str
-            Chromosome name.
-
-        Returns
-        -------
-        np.ndarray
-            Array of shape (n_cell_barcodes, nbins) or (n_cell_barcodes, nbins, dim2_shape).
-        """
-        arrs = []
-        if cb_whitelist is None:
-            cb_whitelist = self.barcodes
-        for cb in cb_whitelist:
-            try:
-                m = self._records[cb][chrom]
-            except KeyError:
-                m = self[cb, chrom]
-            arrs.append(m)
-        return np.asarray(arrs)
-
-    def iter_chrom(self, chrom):
-        """
-        Iterate over all cell barcodes for a given chromosome.
-
-        Parameters
-        ----------
-        chrom : str
-            Chromosome name.
-
-        Yields
-        ------
-        tuple
-            (cell barcode, numpy array) for each record.
-        """
-        for cb in self.keys():
-            try:
-                yield cb, self._records[cb][chrom]
-            except KeyError:
-                yield cb, self[cb, chrom]
     
     def _get_cb_record(self, cb):
         if cb not in self._records:
@@ -163,35 +118,15 @@ class BaseRecords(object):
             cb_record[chrom] = self._new_arr(chrom)
         return cb_record[chrom]
 
-    def _getitem_tuple(self, index):
-        if len(index) == 2:
-            cb, chrom = index
-            if not isinstance(cb, str):
-                if cb is Ellipsis:
-                    return self.get_chrom(chrom)
-                elif isinstance(cb, (list, tuple, set, frozenset, np.ndarray)):
-                    return self.get_chrom(chrom, cb_whitelist=list(cb))
-                raise KeyError(f'Invalid index type: {cb}')
-            return self._get_or_create_array(cb, chrom)
-    
-        elif len(index) > 2:
-            cb, chrom, *arr_idx = index
-            if len(arr_idx) > self._ndim:
-                raise IndexError(
-                    f"Too many indices ({len(arr_idx)}) for array with ndim={self._ndim}"
-                )
-            arr = self._get_or_create_array(cb, chrom)
-            return arr[tuple(arr_idx)]  # handles 1D/2D cleanly
-
-        raise IndexError(f"Too many indices: {index}")
-
     def __getitem__(self, index):
         if isinstance(index, str):
             return self._get_cb_record(index)
-        
         if isinstance(index, tuple):
-            return self._getitem_tuple(index)
-    
+            cb, chrom, *arr_idx = index
+            if isinstance(cb, str) and isinstance(chrom, str):
+                return self._get_or_create_array(cb, chrom)[tuple(arr_idx)]
+            else:
+                return self._records[index]
         raise KeyError(f"Invalid index type: {index}")
 
     def _set_cb_record(self, cb, val):
@@ -206,10 +141,11 @@ class BaseRecords(object):
     
         elif len(index) > 2:
             cb, chrom, *arr_idx = index
-            if len(arr_idx) > self._ndim:
-                raise IndexError(f"Too many indices ({len(arr_idx)}) for array with ndim={self._ndim}")
-            arr = self._get_or_create_array(cb, chrom)
-            arr[tuple(arr_idx)] = value
+            if isinstance(cb, str) and isinstance(chrom, str):
+                arr = self._get_or_create_array(cb, chrom)
+                arr[tuple(arr_idx)] = value
+            else:
+                self[index] = value
         else:
             raise KeyError(f"Invalid tuple index: {index}")
 
@@ -224,12 +160,17 @@ class BaseRecords(object):
 
     def add_metadata(self, **metadata):
         for key, value in metadata.items():
-            if isinstance(value, MetadataDict):
+            if isinstance(value, (NestedData, NestedDataArray)):
                 self.metadata[key] = value
             elif isinstance(value, dict):
-                self.metadata[key] = MetadataDict.from_json(value)
+                if value['cls'] == 'NestedData':
+                    self.metadata[key] = NestedData.from_json(value)
+                elif value['cls'] == 'NestedDataArray':
+                    self.metadata[key] = NestedDataArray.from_json(value)
+                else:
+                    raise ValueError('metadata dicts must be correctly formatted')
             else:
-                raise ValueError('metadata values must be MetadataDict objects or correctly formatted dicts')
+                raise ValueError('metadata values must be NestedData objects or correctly formatted dicts')
 
     def __contains__(self, cb):
         return cb in self._records
@@ -336,8 +277,7 @@ class BaseRecords(object):
             s = self
         else:
             s = self.copy()
-        s._records = {f'{cb}_{suffix}': sd for cb, sd in s.items()}
-        s._add_cb_suffix_metadata(suffix)
+        s._records.add_level_suffix(suffix, level='cb', inplace=True)
 
         if not inplace:
             return s
@@ -345,11 +285,11 @@ class BaseRecords(object):
     def _merge_metadata(self, other):
         for key, val in other.metadata.items():
             if key in self.metadata:
-                self.metadata[key].update(val)
+                self.metadata[key].update(val, update_method='overwrite')
             else:
                 self.metadata[key] = val
 
-    def merge(self, other, inplace=False):
+    def merge(self, other, merge_method="overwrite", inplace=False):
         '''
         merge records from other into self.
         Cell barcodes in other that are not present in self will be created.
@@ -387,14 +327,7 @@ class BaseRecords(object):
         else:
             s = self.copy()
 
-        for cb, chrom, m in other.deep_items():
-            s_m = s[cb, chrom]
-            if np.isnan(self._init_val):
-                mask = np.isnan(s_m) & np.isfinite(m)
-                s_m[mask] = m[mask]
-            else:
-                s_m += m
-
+        s._records.update(other._records, update_method=merge_method)
         s._merge_metadata(other)
 
         if not inplace:
@@ -403,7 +336,7 @@ class BaseRecords(object):
     def _filter_metadata(self, cb_whitelist):
         for mdata in self.metadata.values():
             if 'cb' in mdata.levels:
-                mdata.filter(cb_whitelist, level='cb')
+                mdata.filter(cb_whitelist, level='cb', inplace=True)
 
     def filter(self, cb_whitelist, inplace=True):
         """
@@ -423,18 +356,11 @@ class BaseRecords(object):
             The filtered records object if `inplace=False`, otherwise None.
         """
         cb_whitelist = set(cb_whitelist)
-        if inplace:
-            for cb in self.barcodes:
-                if cb not in cb_whitelist:
-                    self._records.pop(cb)
-            self._filter_metadata(cb_whitelist)
-            return None
-        else:
-            obj = self.new_like(self)
-            for cb in cb_whitelist:
-                obj._records[cb] = self._records[cb]
-            obj._filter_metadata(cb_whitelist)
-            return obj
+        s = self if inplace else self.copy()
+        s._records.filter(cb_whitelist, level=0, inplace=True)
+        s._filter_metadata(cb_whitelist)
+        if not inplace:
+            return s
 
     def query(self, func_or_expr):
         """
@@ -563,22 +489,8 @@ class BaseRecords(object):
 
     def __iadd__(self, other):
         if isinstance(other, BaseRecords):
-            return self.merge(other, inplace=True)
-        raise NotImplementedError()
-
-    def _records_to_json(self, precision):
-        json_serialisable = {}
-        for cb, sd in self._records.items():
-            d = {}
-            for chrom, arr in sd.items():
-                d[chrom] = self._arr_to_json(arr, precision)
-            json_serialisable[cb] = d
-        return json_serialisable
-
-    def _arr_to_json(self, arr, precision=0):
-        raise NotImplementedError()
-
-    def _json_to_arr(self, obj, chrom):
+            self.merge(other, inplace=True)
+            return self
         raise NotImplementedError()
 
     def _metadata_to_json(self, precision):
@@ -586,7 +498,7 @@ class BaseRecords(object):
             name: metadata.to_json(precision) for name, metadata in self.metadata.items()
         }
 
-    def to_json(self, precision: int = 5):
+    def to_json(self, precision: int = 5, encode_method="full"):
         """
         Convert the records object to a JSON string.
 
@@ -607,7 +519,7 @@ class BaseRecords(object):
             'sequencing_data_type': self.seq_type,
             'chrom_sizes': self.chrom_sizes,
             'shape': self.nbins,
-            'data': self._records_to_json(precision),
+            'records': self._records.to_json(precision, encode_method),
             'metadata': self._metadata_to_json(precision)
         })
 
@@ -626,7 +538,9 @@ class BaseRecords(object):
             f.write(self.to_json(precision=precision))
 
     @classmethod
-    def read_json(cls, fp: str, subset: list | set | None = None, frozen=False):
+    def read_json(cls, fp_or_obj: str,
+                  subset: list | set = None,
+                  frozen: bool = False):
         """
         Read a `BaseRecords` object from a JSON file.
 
@@ -649,8 +563,11 @@ class BaseRecords(object):
         ValueError
             If the file contents do not match the expected class.
         """
-        with open(fp) as f:
-            obj = json.load(f)
+        if os.path.exists(fp_or_obj):
+            with open(fp_or_obj) as f:
+                obj = json.load(f)
+        else:
+            obj = json.loads(fp_or_obj)
         if obj['dtype'] != cls.__qualname__:
             raise ValueError(f'json file does not match signature for {cls.__qualname__}')
         new_instance = cls(obj['chrom_sizes'],
@@ -658,18 +575,8 @@ class BaseRecords(object):
                            seq_type=obj['sequencing_data_type'],
                            metadata=obj['metadata'],
                            frozen=frozen)
-        new_instance._cmd = obj['cmd']
-        if subset is None:
-            subset = obj['data'].keys()
-        for cb in subset:
-            try:
-                sd = obj['data'][cb]
-            except KeyError as exc:
-                raise KeyError(f'Cell barcode {cb} not in {fp}') from exc
-            # directly access self._records for speed
-            new_instance._records[cb] = {}
-            for chrom, d in sd.items():
-                new_instance._records[cb][chrom] = new_instance._json_to_arr(d, chrom)
+        new_instance._cmd = obj['cmd'] 
+        new_instance._records = NestedDataArray.from_json(obj['records'], subset=subset)
         return new_instance
 
 
@@ -799,14 +706,20 @@ class MarkerRecords(BaseRecords):
             )
         chrom, bin_idx = interval_counts.chrom, interval_counts.bin_idx
         for cb, hap, val in interval_counts.deep_items():
-            self[cb, chrom, bin_idx, hap] += val
+            arr = self._get_or_create_array(cb, chrom)
+            arr[bin_idx, hap] += val
         return self
+
+    def merge(self, other, inplace=False):
+        return super().merge(other, merge_method='add', inplace=inplace)
 
     def __iadd__(self, other):
         if isinstance(other, BaseRecords):
-            return self.merge(other, inplace=True)
+            self.merge(other, inplace=True)
+            return self
         if isinstance(other, IntervalMarkerCounts):
-            return self.update(other)
+            self.update(other)
+            return self
         raise NotImplementedError()
 
     def total_marker_count(self, cb):
@@ -828,17 +741,8 @@ class MarkerRecords(BaseRecords):
             tot += m.sum(axis=None)
         return tot
 
-    def _arr_to_json(self, arr, precision=0):
-        idx = np.nonzero(arr.ravel())[0]
-        val = arr.ravel()[idx]
-        val = [round(float(v), precision) for v in val]
-        return (idx.tolist(), val)
-
-    def _json_to_arr(self, obj, chrom):
-        idx, val = obj
-        arr = np.zeros(shape=self.nbins[chrom] * 2, dtype=np.float32)
-        arr[idx] = val
-        return arr.reshape(self.nbins[chrom], 2)
+    def to_json(self, precision: int = 5):
+        return super().to_json(precision, encode_method='sparse')
 
 
 class PredictionRecords(BaseRecords):
@@ -942,11 +846,12 @@ class PredictionRecords(BaseRecords):
         self._dim2_shape = np.nan
         self._init_val = np.nan
 
-    def _arr_to_json(self, arr, precision=2):
-        return [round(float(v), precision) for v in arr]
-
-    def _json_to_arr(self, obj, chrom):
-        return np.array(obj)
+    def merge(self, other, inplace=False):
+        return super().merge(
+            other,
+            merge_method='overwrite_ignore_nan',
+            inplace=inplace
+        )
 
     def to_frame(self, cb_whitelist=None):
         """
@@ -972,7 +877,7 @@ class PredictionRecords(BaseRecords):
         if cb_whitelist is None:
             cb_whitelist = self.barcodes
         for cb in cb_whitelist:
-            frame.append(np.concatenate([self[cb, chrom] for chrom in self.chrom_sizes]))
+            frame.append(np.concatenate([self._records[cb, chrom] for chrom in self.chrom_sizes]))
         return pd.DataFrame(frame, index=cb_whitelist, columns=columns)
 
     def get_haplotype(self, chrom, pos, cb_whitelist=None):
