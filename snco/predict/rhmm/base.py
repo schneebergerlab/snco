@@ -98,12 +98,6 @@ class RigidHMM:
                     end=end_prob
                 )
 
-    @property
-    def _empty_poisson(self):
-        if self.bg_lambda is None:
-            raise ValueError('Cannot get bg_dist before model is fit or initialised')
-        return pmd.Poisson([self.bg_lambda, self.bg_lambda])
-
     def _nonempty_poisson(self, hap):
         if hap == 0:
             return pmd.Poisson([self.fg_lambda, self.bg_lambda])
@@ -113,7 +107,7 @@ class RigidHMM:
             raise ValueError('hap can only be 0 or 1')
 
     def _create_distribution(self, state):
-        dists = [self._empty_poisson,]
+        dists = [pmd.DiracDelta([1.0, 1.0]),] # zero inflation
         priors = [self.empty_fraction,]
         per_state_prior = (1 - self.empty_fraction) / len(state)
         for hap in state:

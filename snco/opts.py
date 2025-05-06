@@ -65,7 +65,7 @@ class OptionRegistry:
 
 snco_opts = OptionRegistry(
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                 'sim', 'concat', 'clean', 'predict', 'bc1predict',
+                 'sim', 'concat', 'clean', 'predict',
                  'doublet', 'stats', 'plot', 'segdist']
 )
 
@@ -130,7 +130,7 @@ def validate_loadcsl_input(func):
 
 
 
-@snco_opts.callback(['predict', 'bc1predict', 'bam2pred', 'csl2pred'])
+@snco_opts.callback(['predict', 'bam2pred', 'csl2pred'])
 def validate_pred_input(func):
     '''decorator to validate the input of the predict command'''
     def _validate(**kwargs):
@@ -154,7 +154,7 @@ def log_parameters(func):
     return _log
 
 snco_opts.callback(['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                     'sim', 'concat', 'clean', 'predict', 'bc1predict',
+                     'sim', 'concat', 'clean', 'predict',
                      'doublet', 'stats', 'plot', 'segdist'])(log_parameters)
 
 
@@ -183,7 +183,7 @@ snco_opts.argument(
 
 snco_opts.argument(
     'marker-json-fn',
-    subcommands=['sim', 'clean', 'predict', 'bc1predict', 'doublet', 'stats', 'plot'],
+    subcommands=['sim', 'clean', 'predict', 'doublet', 'stats', 'plot'],
     required=True,
     nargs=1,
     type=_input_file_type,
@@ -237,7 +237,7 @@ snco_opts.option(
 
 snco_opts.option(
     '-o', '--output-json-fn',
-    subcommands=['loadbam', 'loadcsl', 'sim', 'concat', 'clean', 'predict', 'bc1predict', 'doublet'],
+    subcommands=['loadbam', 'loadcsl', 'sim', 'concat', 'clean', 'predict', 'doublet'],
     required=True,
     type=_output_file_type,
     help='Output JSON file name.'
@@ -266,7 +266,7 @@ snco_opts.option(
 snco_opts.option(
     '-c', '--cb-whitelist-fn',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                 'sim', 'clean', 'predict', 'bc1predict', 'doublet', 'stats',
+                 'sim', 'clean', 'predict', 'doublet', 'stats',
                  'plot', 'segdist'],
     required=False,
     type=_input_file_type,
@@ -294,7 +294,7 @@ snco_opts.option(
 
 snco_opts.option(
     '-m', '--mask-bed-fn',
-    subcommands=['clean', 'bam2pred', 'csl2pred', 'bc1predict'],
+    subcommands=['clean', 'bam2pred', 'csl2pred',],
     required=False,
     type=_input_file_type,
     default=None,
@@ -313,7 +313,7 @@ snco_opts.option(
 snco_opts.option(
     '-N', '--bin-size',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                 'sim', 'clean', 'predict', 'bc1predict',
+                 'sim', 'clean', 'predict',
                  'doublet', 'stats', 'segdist'],
     required=False,
     type=click.IntRange(1000, 100_000),
@@ -339,6 +339,19 @@ snco_opts.option(
     default='other',
     callback=_replace_other_with_nonetype,
     help='presets for different sequencing data, see manual' # todo !!
+)
+
+
+snco_opts.option(
+    '-y', '--data-ploidy-type', 'model_type',
+    required=False,
+    subcommands=['predict', 'bam2pred'],
+    type=click.Choice(
+        ['haploid', 'diploid_bc1', 'diploid_f2'],
+        case_sensitive=False
+    ),
+    default='haploid',
+    help='presets for different data ploidy data, instructs what type of model to use' # todo !!
 )
 
 
@@ -605,7 +618,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--min-markers-per-cb',
-    subcommands=['loadbam', 'loadcsl', 'clean', 'bc1predict', 'bam2pred', 'csl2pred'],
+    subcommands=['loadbam', 'loadcsl', 'clean', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.IntRange(0, 100000),
     default=100,
@@ -615,7 +628,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--min-markers-per-chrom',
-    subcommands=['loadbam', 'loadcsl', 'clean', 'bc1predict', 'bam2pred', 'csl2pred'],
+    subcommands=['loadbam', 'loadcsl', 'clean', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.IntRange(1, 100000),
     default=20,
@@ -663,7 +676,7 @@ snco_opts.option(
 
 snco_opts.option(
     '-R', '--segment-size',
-    subcommands=['predict', 'bc1predict', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.IntRange(100_000, 10_000_000),
     default=1_000_000,
@@ -673,7 +686,7 @@ snco_opts.option(
 
 snco_opts.option(
     '-t', '--terminal-segment-size',
-    subcommands=['predict', 'bc1predict', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.IntRange(10_000, 1_000_000),
     default=50_000,
@@ -684,7 +697,7 @@ snco_opts.option(
 
 snco_opts.option(
     '-C', '--cm-per-mb',
-    subcommands=['predict', 'bc1predict', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.FloatRange(1.0, 20.0),
     default=4.5,
@@ -695,7 +708,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--model-lambdas',
-    subcommands=['predict', 'bc1predict', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'bam2pred', 'csl2pred'],
     required=False,
     type=(click.FloatRange(1e-5, 10.0), click.FloatRange(1e-5, 10.0)),
     default=None,
@@ -706,7 +719,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--empty-fraction',
-    subcommands=['bc1predict'],
+    subcommands=['predict', 'bam2pred'],
     required=False,
     type=click.FloatRange(0, 1),
     default=None,
@@ -749,7 +762,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--generate-stats/--no-stats',
-    subcommands=['predict', 'bc1predict', 'doublet', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
     default=True,
     help='whether to use synthetic doublet scoring to predict likely doublets in the data'
@@ -905,7 +918,7 @@ snco_opts.option(
 snco_opts.option(
     '-p', '--processes',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred', 'predict',
-                 'bc1predict', 'doublet', 'segdist'],
+                 'doublet', 'segdist'],
     required=False,
     type=click.IntRange(min=1),
     default=1,
@@ -915,7 +928,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--output-precision',
-    subcommands=['predict', 'bc1predict', 'doublet', 'bam2pred', 'csl2pred', 'stats', 'segdist'],
+    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred', 'stats', 'segdist'],
     required=False,
     type=click.IntRange(1, 10),
     default=5,
@@ -949,7 +962,7 @@ def _check_device(ctx, param, value):
 
 snco_opts.option(
     '-d', '--device',
-    subcommands=['predict', 'bc1predict', 'doublet', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
     type=str,
     default='cpu',
@@ -959,7 +972,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--batch-size',
-    subcommands=['predict', 'bc1predict', 'doublet', 'bam2pred', 'csl2pred'],
+    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.IntRange(1, 10_000),
     default=1_000,
@@ -973,7 +986,7 @@ def _get_rng(ctx, param, value):
 
 snco_opts.option(
     '-r', '--random-seed', 'rng',
-    subcommands=['loadbam', 'loadcsl', 'clean', 'sim', 'predict', 'bc1predict',
+    subcommands=['loadbam', 'loadcsl', 'clean', 'sim', 'predict',
                  'doublet', 'bam2pred', 'csl2pred', 'plot'],
     required=False,
     type=int,
@@ -986,7 +999,7 @@ snco_opts.option(
 snco_opts.option(
     '-v', '--verbosity',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred',
-                 'sim', 'concat', 'clean', 'predict', 'bc1predict',
+                 'sim', 'concat', 'clean', 'predict',
                  'doublet', 'stats', 'plot', 'segdist'],
     required=False,
     expose_value=False,

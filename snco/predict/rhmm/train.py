@@ -50,14 +50,12 @@ def estimate_haploid_parameters(X, rfactor):
     init_bg_lambda = np.mean(X_bg)
     gmm = GeneralMixtureModel([
             pmd.Poisson([init_fg_lambda, init_bg_lambda]),
-            pmd.Poisson([init_bg_lambda, init_bg_lambda])
+            pmd.DiracDelta([1.0, 1.0])
         ],
         inertia=0.9,
     ).fit(X_ordered)
     non_empty_fraction, empty_fraction = gmm.priors.numpy()
-    non_empty_poisson, empty_poisson = gmm.distributions
-    fg_lambda = non_empty_poisson.lambdas.numpy()[0]
-    bg_lambda = empty_poisson.lambdas.numpy().mean()
+    fg_lambda, bg_lambda = gmm.distributions[0].lambdas.numpy()
     return fg_lambda, bg_lambda, empty_fraction
 
 
@@ -70,9 +68,9 @@ def estimate_backcross_parameters(bc_haplotype=0):
     def _estimate_backcross_parameters(X, rfactor=100):
         X = np.concatenate(X, axis=0)
         het_mask = predict_homozygous_convolution(X, rfactor, bc_haplotype)
-        fg_lambda = X[het_mask, 1 - bc_haplotype].mean()
-        bg_lambda = X[~het_mask, 1 - bc_haplotype].mean()
-        empty_fraction = (X < bg_lambda).all(axis=1).mean()
+        init_fg_lambda = X[het_mask, 1 - bc_haplotype].mean()
+        init_bg_lambda = X[~het_mask, 1 - bc_haplotype].mean()
+        # todo, fit properly to data
         return fg_lambda, bg_lambda, empty_fraction
     return _estimate_backcross_parameters
 
@@ -89,7 +87,7 @@ def train_rhmm(co_markers, model_type='haploid', cm_per_mb=4.5,
     co_markers : MarkerRecords
         MarkerRecords dataset with haplotype specific read/variant information.
     model_type : str
-        Type of rHMM to create. One of "haploid", "backcross" or "diploid"
+        Type of rHMM to create. One of "haploid", "diploid_backcross" or "diploid_f2"
     cm_per_mb : float, optional
         Recombination rate in centimorgans per megabase (default: 4.5).
     segment_size : int, optional
@@ -119,16 +117,20 @@ def train_rhmm(co_markers, model_type='haploid', cm_per_mb=4.5,
     if model_type == 'haploid':
         states = [(0,), (1,)]
         estimate_parameters = estimate_haploid_parameters
-    elif model_type == 'backcross':
+    elif model_type == 'diploid_bc1':
         states = [(0, 0), (0, 1)] if bc_haplotype == 0 else [(0, 1), (1, 1)]
         estimate_parameters = estimate_backcross_parameters(bc_haplotype)
-    elif model_type == 'diploid':
+    elif model_type == 'diploid_f2':
         states = [(0, 0), (0, 1), (1, 1)]
         raise NotImplementedError('coming soon...')
     else:
         raise ValueError('rhmm_type must be one of "haploid", "backcross", or "diploid"')
     if model_lambdas is None or empty_fraction is None:
         fg_lambda, bg_lambda, empty_fraction = estimate_parameters(list(co_markers.deep_values()), rfactor)
+        log.debug(
+            'Estimated model parameters from data: '
+            f'fg_lambda {fg_lambda:.2g}, bg_lambda {bg_lambda:.2g}, empty_fraction {empty_fraction:.2g}'
+        )
     else:
         bg_lambda, fg_lambda = sorted(model_lambdas)
     rhmm = RigidHMM(

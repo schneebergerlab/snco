@@ -79,17 +79,6 @@ def predict_subcommand(**kwargs):
     run_predict(**kwargs)
 
 
-@main.command('bc1predict')
-@snco_opts('bc1predict')
-def bc1predict_subcommand(**kwargs):
-    '''
-    Uses rigid hidden Markov model to predict the haplotypes of WGS backcross 1 individuals
-    at each genomic bin.
-    '''
-    from .bc1predict import run_bc1predict
-    run_bc1predict(**kwargs)
-
-
 @main.command('doublet')
 @snco_opts('doublet')
 def doublet_subcommand(**kwargs):
