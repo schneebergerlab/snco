@@ -65,19 +65,18 @@ def predict_homozygous_convolution(m, ws=100, bc_haplotype=0):
 
 
 def fit_hom_het_gmm(X_ordered, init_fg_lambda, init_bg_lambda):
-    hom_zip = GeneralMixtureModel([
-        pmd.DiracDelta([1.0, 1.0]),
+    hom = GeneralMixtureModel([
         pmd.Poisson([init_fg_lambda, init_bg_lambda]),
         pmd.Poisson([init_fg_lambda, init_bg_lambda]),
-    ])
-    het_zip = GeneralMixtureModel([
-        pmd.DiracDelta([1.0, 1.0]),
+    ], frozen=True) # freezes priors but not lambdas
+    het = GeneralMixtureModel([
         pmd.Poisson([init_fg_lambda, init_bg_lambda]),
         pmd.Poisson([init_bg_lambda, init_fg_lambda]),
-    ])
-    gmm = GeneralMixtureModel([hom_zip, het_zip])
+    ], frozen=True)
+    zi = pmd.DiracDelta([1.0, 1.0])
+    gmm = GeneralMixtureModel([zi, hom, het])
     gmm.fit(X_ordered)
-    empty_fraction = hom_zip.priors.numpy()[0]
+    empty_fraction = gmm.priors.numpy()[0]
     fg_lambda, bg_lambda = hom_zip.distributions[1].lambdas.numpy()
     return fg_lambda, bg_lambda, empty_fraction
 
