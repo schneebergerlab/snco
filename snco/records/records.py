@@ -121,6 +121,8 @@ class BaseRecords(object):
     def __getitem__(self, index):
         if isinstance(index, str):
             return self._get_cb_record(index)
+        elif isinstance(index, list):
+            return self._records[(index, )]
         if isinstance(index, tuple):
             cb, chrom, *arr_idx = index
             if isinstance(cb, str) and isinstance(chrom, str):
@@ -159,6 +161,19 @@ class BaseRecords(object):
         raise KeyError(f"Invalid index: {index}")
 
     def add_metadata(self, **metadata):
+        '''
+        add metadata keys to the records object
+        
+        Parameters
+        ----------
+        **metadata : NestedData, NestedDataArray or dict
+            metadata objects to add to metadata. The provided variable names will be used as keys
+
+        Raises
+        ------
+        ValueError
+            if the provided metadata are not NestedData, NestedArray or valid dict objects
+        '''
         for key, value in metadata.items():
             if isinstance(value, (NestedData, NestedDataArray)):
                 self.metadata[key] = value
@@ -425,7 +440,7 @@ class BaseRecords(object):
             expr = func_or_expr
             environment = {
                 key: val for key, val in self.metadata.items()
-                if isinstance(val, MetadataDict) and val.levels[0] == 'cb'
+                if isinstance(val, (NestedData, NestedDataArray)) and val.levels[0] == 'cb'
             }
             environment['records'] = self
 

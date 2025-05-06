@@ -246,4 +246,10 @@ def genotype_from_inv_counts(inv_counts, min_markers_per_cb=100, **kwargs):
                             if sum(g.values()) >= min_markers_per_cb}
     genotypes, genotype_probs, genotype_nmarkers = parallel_assign_genotypes(genotype_markers, **kwargs)
     inv_counts = resolve_genotype_counts_to_co_markers(inv_counts, genotypes)
+    # convert genotype data from frozenset to str
+    genotypes= NestedData(
+        levels=('cb',),
+        dtype=str,
+        data={cb: ':'.join(sorted(geno)) for cb, geno in genotypes.items()}
+    )
     return genotypes, genotype_probs, genotype_nmarkers, inv_counts

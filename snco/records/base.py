@@ -133,7 +133,7 @@ class NestedData:
 
     def __getitem__(self, index):
         """
-        Advanced indexing into a metadict object
+        Advanced indexing into a nested dict
 
         Parameters
         ----------

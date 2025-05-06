@@ -339,7 +339,7 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4), ch
         chrom_sizes = {c: chrom_sizes[c] for c in chroms}
     fig, axes = chrom_subplots(chrom_sizes, figsize=figsize)
     try:
-        hap1, hap2 = co_markers.metadata['genotypes'][cb]['genotype']
+        hap1, hap2 = co_markers.metadata['genotypes'][cb].split(':')
     except KeyError:
         hap1, hap2 = 'hap1', 'hap2'
     axes[0].set_ylabel(f'Marker coverage ({hap1} vs {hap2})')

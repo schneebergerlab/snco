@@ -50,7 +50,7 @@ def genotype_grouper(records):
         raise ValueError('Genotype metadata not present, cannot group by genotype')
     def _geno_grouper(cb):
         try:
-            geno = ':'.join(sorted(genotypes[cb]))
+            geno = genotypes[cb]
         except KeyError:
             raise KeyError(f'Cell barcode {cb} not present in genotypes metadata')
         return geno
