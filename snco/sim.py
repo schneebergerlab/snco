@@ -206,7 +206,7 @@ def simulate_doublets(co_markers, n_doublets, rng=DEFAULT_RNG):
         Simulated haplotype-specific marker records for doublets.
     """
     sim_co_markers_doublets = MarkerRecords.new_like(co_markers)
-    barcodes = rng.choice(co_markers.barcodes, size=n_doublets * 2, replace=False)
+    barcodes = rng.choice(co_markers.barcodes, size=n_doublets * 2, replace=True)
     # sorting by total markers makes m_i and m_j relatively similar in size
     barcodes = sorted(barcodes, key=co_markers.total_marker_count)
     for cb_i, cb_j in zip(barcodes[0::2], barcodes[1::2]):
@@ -246,8 +246,13 @@ def generate_simulated_data(co_markers, ground_truth, conv_window_size=2_500_000
     sim_co_markers : MarkerRecords
         Simulated haplotype-specific marker records, including simulated singlet and doublet barcodes
     """
-    estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg=1.0)
-    bg_signal = co_markers.metadata['background_signal']
+    co_markers = estimate_overall_background_signal(
+        co_markers,
+        conv_window_size,
+        max_frac_bg=1.0,
+        apply_per_geno=False # todo, should this be exposed?
+    )
+    bg_signal = co_markers.metadata['background_signal']['ungrouped'] # bit of a hack
     frac_bg = co_markers.metadata['estimated_background_fraction']
     if bg_rate is not None:
         frac_bg = defaultdict(lambda: bg_rate)
@@ -331,8 +336,8 @@ def run_sim(marker_json_fn, output_json_fn, ground_truth_fn, *,
         ground_truth_haplotypes = read_ground_truth_haplotypes_json(ground_truth_fn)
     log.info(f'Read {len(ground_truth_haplotypes)} ground truth samples from {ground_truth_fn}')
     sim_co_markers = generate_simulated_data(
-        ground_truth_haplotypes,
         co_markers,
+        ground_truth_haplotypes,
         bg_rate=bg_marker_rate,
         conv_window_size=bg_window_size,
         nsim_per_sample=nsim_per_sample,
