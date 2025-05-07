@@ -1,1 +1,1 @@
-from .cli import run_predict, run_doublet
+from ._cli import run_predict, run_doublet

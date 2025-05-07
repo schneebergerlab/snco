@@ -5,10 +5,12 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
-from .utils import load_json
-from .records import MarkerRecords, PredictionRecords
-from .clean import estimate_overall_background_signal, subtract_background, random_bg_sample
-from .opts import DEFAULT_RANDOM_SEED
+from snco.utils import load_json
+from snco.records import MarkerRecords, PredictionRecords
+from snco.clean.background import (
+    estimate_overall_background_signal, subtract_background, random_bg_sample
+)
+from snco.opts import DEFAULT_RANDOM_SEED
 
 
 log = logging.getLogger('snco')

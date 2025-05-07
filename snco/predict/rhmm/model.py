@@ -203,21 +203,22 @@ class RigidHMM:
             f'Finished initialising model with {self._model.n_distributions} distributions'
         )
 
-    def predict(self, X, batch_size=128):
+    def predict_state_proba(self, X, batch_size=128):
         """
-        Predicts haplotype probabilities for input marker arrays.
+        Predicts state probabilities for input marker arrays. Each state can represent a single
+        haplotype (for haploid data) or a mixture of two or more haplotypes (for diploid+ data)
 
         Parameters
         ----------
-        X : list of np.ndarray
-            List of 2D arrays containing haplotype-specific read/variant counts per barcode.
+        X : list of np.ndarray or np.ndarray
+            3D array of shape (N, L, 2) containing haplotype-specific read/variant counts per barcode.
         batch_size : int, optional
             Batch size for model prediction (default: 128).
 
         Returns
         -------
         np.ndarray
-            Array of predicted probabilities.
+            3D array of predicted probabilities for each state, with shape (N, L, n_states).
         """
         proba = []
         for X_batch in np.array_split(X, int(np.ceil(len(X) / batch_size))):
@@ -229,12 +230,48 @@ class RigidHMM:
             # sum over all chain distributions representing the same state
             p_batch = p_batch.reshape(batch_size, chrom_size, self.nstates, self.rfactor).sum(axis=3)
             # fix nans introduced by pomegranate on positions where all state logprobs are -inf
-            # seems to occur
             interp_nan_inplace(p_batch, axis=1) # interp along chromosome axis
             proba.append(p_batch)
         proba = np.concatenate(proba, axis=0)
         # convert to single value per bin, representing the probability of alt hap
-        return proba @ self._state_haplo
+        return proba
+
+    def predict_haplo_proba(self, X, batch_size=128):
+        """
+        Predicts haplotype probabilities for input marker arrays.
+
+        Parameters
+        ----------
+        X : list of np.ndarray or np.ndarray
+            3D array of shape (N, L, 2) containing haplotype-specific read/variant counts per barcode.
+        batch_size : int, optional
+            Batch size for model prediction (default: 128).
+
+        Returns
+        -------
+        np.ndarray
+            2D array of predicted probabilities of alternative haplotype (hap 1), with shape (N, L).
+        """
+        return self.predict_state_proba(X, batch_size) @ self._state_haplo
+
+    def predict(self, X, batch_size=128):
+        """
+        Predicts haplotype probabilities for input marker arrays.
+        Alias to RigidHMM.predict_haplo_proba.
+
+        Parameters
+        ----------
+        X : list of np.ndarray or np.ndarray
+            3D array of shape (N, L, 2) containing haplotype-specific read/variant counts per barcode.
+        batch_size : int, optional
+            Batch size for model prediction (default: 128).
+
+        Returns
+        -------
+        np.ndarray
+            2D array of predicted probabilities of alternative haplotype (hap 1), with shape (N, L).
+        """
+        return self.predict_haplo_proba(X, batch_size)
 
     @property
     def params(self):

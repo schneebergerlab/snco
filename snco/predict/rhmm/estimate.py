@@ -6,7 +6,7 @@ import torch
 from pomegranate import distributions as pmd
 from pomegranate.gmm import GeneralMixtureModel
 
-from .signal import align_foreground_column, detect_homozygous_bins
+from snco.signal import align_foreground_column, detect_homozygous_bins
 
 
 def estimate_haploid_emissions(X, window=40):
