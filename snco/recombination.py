@@ -2,7 +2,7 @@ import numpy as np
 from scipy.ndimage import convolve1d
 
 from .records import NestedDataArray
-from .opts import DEFAULT_RANDOM_SEED
+from .defaults import DEFAULT_RANDOM_SEED
 
 
 DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)

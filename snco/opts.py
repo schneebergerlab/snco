@@ -5,10 +5,10 @@ import click
 import numpy as np
 
 from .logger import click_logger
-from .bam import DEFAULT_EXCLUDE_CONTIGS, get_ha_samples
+from snco.defaults import DEFAULT_EXCLUDE_CONTIGS, DEFAULT_RANDOM_SEED
+from snco.load.loadbam.utils import get_ha_samples
 
 log = logging.getLogger('snco')
-DEFAULT_RANDOM_SEED = 101
 
 
 class OptionRegistry:

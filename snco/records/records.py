@@ -11,7 +11,7 @@ import pandas as pd
 
 from .base import NestedData, NestedDataArray
 from .groupby import RecordsGroupyBy
-from ..bam import IntervalMarkerCounts
+from snco.load.counts import IntervalMarkerCounts
 
 log = logging.getLogger('snco')
 

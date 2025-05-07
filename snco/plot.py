@@ -25,7 +25,7 @@ from matplotlib.colors import Normalize, LinearSegmentedColormap
 from .utils import load_json
 from .recombination import recombination_landscape
 from .distortion import segregation_distortion
-from .opts import DEFAULT_RANDOM_SEED
+from .defaults import DEFAULT_RANDOM_SEED
 
 
 log = logging.getLogger('snco')

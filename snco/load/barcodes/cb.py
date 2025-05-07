@@ -1,29 +1,10 @@
-from copy import copy, deepcopy
-from collections import defaultdict
-from functools import reduce
-from operator import add
-import itertools as it
-
+import logging
+from copy import copy
 import numpy as np
+from .utils import edit_dist
 
 
-def edit_dist(umi1, umi2):
-    """
-    Calculate the edit (Hamming) distance between two unique molecular identifiers (UMIs).
-
-    Parameters
-    ----------
-    umi1 : str
-        First UMI string (DNA sequence).
-    umi2 : str
-        Second UMI string (DNA sequence).
-
-    Returns
-    -------
-    int
-        Number of differing positions between the two UMIs.
-    """
-    return sum(i != j for i, j in zip(umi1, umi2))
+log = logging.getLogger('snco')
 
 
 class BarcodeValidator:
@@ -302,47 +283,40 @@ class CellBarcodeWhitelist:
         return copy(self.whitelist_ordered)
 
 
-def umi_dedup_directional(
-    umi_hap_counts: dict[str, dict[str, int] | int],
-    has_haplotype: bool = True
-) -> dict:
-    '''
-    Deduplicate UMIs using the directional method (UMItools)
-    for a collection of UMIs aligning to the same gene/genomic bin,
-    maintaining information about which haplotype each read supports
+def read_cb_whitelist(barcode_fn, validate_barcodes=True,
+                      cb_correction_method='exact',
+                      allow_ns=False, allow_homopolymers=False):
+    """
+    Read a text file of cell barcodes and return them as a list.
+
+    In a multi-column file, the barcode must be in the first column.
     
     Parameters
     ----------
-    umi_hap_counts : dict
-        Dictionary of UMI -> haplotype -> count mappings if `has_haplotype` is True.
-        Otherwise, a dictionary of UMI -> count.
-    has_haplotype : bool, default: True
-        Indicates whether haplotype information is present in the input.
+    barcode_fn : str
+        Path to the text file containing cell barcodes.
+    validate_barcodes : bool, optional
+        Whether to validate the barcodes. The default is True.
+    cb_correction_method : str, optional
+        Method to correct barcodes, can be 'exact' or another method. The default is 'exact'.
+    allow_ns : bool, optional
+        Whether to allow 'N' bases in barcodes. The default is False.
+    allow_homopolymers : bool, optional
+        Whether to allow homopolymeric sequences in barcodes. The default is False.
 
     Returns
     -------
-    dict
-        Dictionary of deduplicated UMI counts. If haplotypes were used, each UMI maps
-        to a Counter of haplotype counts.
-    '''
-    edges = defaultdict(set)
-    if has_haplotype:
-        umi_counts = {umi: hap_counts.total() for umi, hap_counts in umi_hap_counts.items()}
+    CellBarcodeWhitelist
+        A `CellBarcodeWhitelist` object containing the read barcodes and their filtering options.
+    """
+    if barcode_fn is not None:
+        with open(barcode_fn) as f:
+            cb_whitelist = [cb.strip().split('\t')[0] for cb in f.readlines()]
+        log.info(f'Read {len(cb_whitelist)} cell barcodes from cb whitelist file {barcode_fn}')
     else:
-        umi_counts = umi_hap_counts
-    nodes = sorted(umi_counts, key=umi_counts.__getitem__, reverse=True)
-    for umi_i, umi_j in it.combinations(nodes, r=2):
-        if edit_dist(umi_i, umi_j) <= 1:
-            umi_i_count = umi_counts[umi_i]
-            umi_j_count = umi_counts[umi_j]
-            if umi_i_count >= (2 * umi_j_count + 1):
-                edges[umi_i].add(umi_j)
-    deduped = deepcopy(umi_hap_counts)
-    for parent in nodes:
-        for child in edges[parent]:
-            try:
-                deduped[parent] += deduped.pop(child)
-            except KeyError:
-                # umi already merged to a different parent
-                continue
-    return deduped
+        cb_whitelist = None
+    return CellBarcodeWhitelist(cb_whitelist,
+                                validate_barcodes,
+                                cb_correction_method,
+                                allow_ns=allow_ns,
+                                allow_homopolymers=allow_homopolymers)

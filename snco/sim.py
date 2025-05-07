@@ -10,7 +10,7 @@ from snco.records import MarkerRecords, PredictionRecords
 from snco.clean.background import (
     estimate_overall_background_signal, subtract_background, random_bg_sample
 )
-from snco.opts import DEFAULT_RANDOM_SEED
+from snco.defaults import DEFAULT_RANDOM_SEED
 
 
 log = logging.getLogger('snco')

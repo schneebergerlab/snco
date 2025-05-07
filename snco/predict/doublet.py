@@ -11,7 +11,7 @@ from .crossovers import detect_crossovers
 from ..records import NestedData
 from ..sim import simulate_doublets
 from .. import stats
-from ..opts import DEFAULT_RANDOM_SEED
+from ..defaults import DEFAULT_RANDOM_SEED
 
 
 log = logging.getLogger('snco')

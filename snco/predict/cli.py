@@ -9,7 +9,7 @@ from .crossovers import detect_crossovers
 from .doublet import detect_doublets
 from ..utils import load_json
 from .. import stats
-from ..opts import DEFAULT_RANDOM_SEED
+from ..defaults import DEFAULT_RANDOM_SEED
 
 
 log = logging.getLogger('snco')

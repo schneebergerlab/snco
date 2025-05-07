@@ -4,10 +4,10 @@ import numpy as np
 
 from joblib import Parallel, delayed
 
-from .utils import spawn_child_rngs
-from .records import NestedData
-from .bam import IntervalMarkerCounts
-from .opts import DEFAULT_RANDOM_SEED
+from .counts import IntervalMarkerCounts
+from snco.utils import spawn_child_rngs
+from snco.records import NestedData
+from snco.defaults import DEFAULT_RANDOM_SEED
 
 DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 
@@ -170,8 +170,8 @@ def parallel_assign_genotypes(genotype_markers, *, processes=1, rng=DEFAULT_RNG,
 
     for cb, geno, geno_prob, nmarkers in res:
         geno_assignments[cb] = geno
-        geno_probabilities[cb] = geno_prob
-        geno_nmarkers[cb] = nmarkers
+        geno_probabilities[cb] = float(geno_prob)
+        geno_nmarkers[cb] = int(nmarkers)
 
     return geno_assignments, geno_probabilities, geno_nmarkers
 

@@ -19,7 +19,7 @@ def loadbam_subcommand(**kwargs):
     to generate a json file of binned haplotype marker distributions for each cell barcode. 
     These can be used to call recombinations using the downstream `predict` command.
     '''
-    from .loadbam import run_loadbam
+    from snco.load.cli import run_loadbam
     run_loadbam(**kwargs)
 
 
@@ -31,7 +31,7 @@ def loadcsl_subcommand(**kwargs):
     haplotype marker distributions for each cell barcode. These can be used to
     call recombinations using the downstream `predict` command.
     '''
-    from .loadcsl import run_loadcsl
+    from snco.load.cli import run_loadcsl
     run_loadcsl(**kwargs)
 
 
@@ -42,7 +42,7 @@ def sim_subcommand(**kwargs):
     Simulate realistic haplotype marker distributions using real data from `load`,
     with known haplotypes/crossovers supplied from a bed file.
     '''
-    from .sim import run_sim
+    from snco.sim import run_sim
     run_sim(**kwargs)
 
 
@@ -53,7 +53,7 @@ def concat_subcommand(**kwargs):
     Concatenates marker jsons, potentially from different datasets, 
     adding suffixes to cell barcodes to avoid name collisions
     '''
-    from .concat import run_concat
+    from snco.concat import run_concat
     run_concat(**kwargs)
 
 
@@ -64,7 +64,7 @@ def clean_subcommand(**kwargs):
     Removes predicted background markers, that result from ambient nucleic acids, 
     from each cell barcode.
     '''
-    from .clean import run_clean
+    from snco.clean.cli import run_clean
     run_clean(**kwargs)
 
 
@@ -75,7 +75,7 @@ def predict_subcommand(**kwargs):
     Uses rigid hidden Markov model to predict the haplotypes of each cell barcode
     at each genomic bin.
     '''
-    from .predict import run_predict
+    from snco.predict.cli import run_predict
     run_predict(**kwargs)
 
 
@@ -85,7 +85,7 @@ def doublet_subcommand(**kwargs):
     '''
     Predict doublets using synthetic doublet detection method
     '''
-    from .predict import run_doublet
+    from snco.predict.cli import run_doublet
     run_doublet(**kwargs)
 
 
@@ -96,7 +96,7 @@ def stats_subcommand(**kwargs):
     Scores the quality of data and predictions for a set of haplotype calls
     generated with `predict`.
     '''
-    from .stats import run_stats
+    from snco.stats import run_stats
     run_stats(**kwargs)
 
 
@@ -107,7 +107,7 @@ def segdist_subcommand(**kwargs):
     Scores the quality of data and predictions for a set of haplotype calls
     generated with `predict`.
     '''
-    from .distortion import run_segdist
+    from snco.distortion import run_segdist
     run_segdist(**kwargs)
 
 
@@ -118,14 +118,14 @@ def plot_subcommand(**kwargs):
     Draw a marker plot for a given cell barcode,
     or the recombination landscape of a whole dataset
     '''
-    from .plot import run_plot
+    from snco.plot import run_plot
     run_plot(**kwargs)
 
 
 def _clean_predict_pipeline(co_markers, output_prefix, kwargs):
 
-    from .clean import run_clean
-    from .predict import run_predict
+    from snco.clean.cli import run_clean
+    from snco.predict.cli import run_predict
 
     if kwargs['run_clean']:
 
@@ -152,7 +152,7 @@ def bam_pipeline_subcommand(**kwargs):
     '''
     Pipeline chaining together the loadbam, clean and predict commands
     '''
-    from .loadbam import run_loadbam
+    from snco.load.cli import run_loadbam
 
     output_prefix = kwargs.pop('output_prefix')
     loadbam_kwargs = snco_opts.get_kwarg_subset('loadbam', kwargs)
@@ -168,7 +168,7 @@ def csl_pipeline_subcommand(**kwargs):
     '''
     Pipeline chaining together the loadcsl, clean and predict commands
     '''
-    from .loadcsl import run_loadcsl
+    from snco.load.cli import run_loadcsl
 
     output_prefix = kwargs.pop('output_prefix')
     loadcsl_kwargs = snco_opts.get_kwarg_subset('loadcsl', kwargs)
@@ -189,12 +189,12 @@ def sneqtl():
 @sneqtl.command('eqtl')
 @sneqtl_opts('eqtl')
 def eqtl_subcommand(**kwargs):
-    from .sneqtl.eqtl import run_eqtl
+    from snco.sneqtl.eqtl import run_eqtl
     run_eqtl(**kwargs)
 
 
 @sneqtl.command('peakcall')
 @sneqtl_opts('peakcall')
 def peakcall_subcommand(**kwargs):
-    from .sneqtl.peaks import run_peakcall
+    from snco.sneqtl.peaks import run_peakcall
     run_peakcall(**kwargs)
