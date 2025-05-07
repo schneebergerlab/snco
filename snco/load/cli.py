@@ -36,7 +36,8 @@ def _post_load_filtering(co_markers, min_markers_per_cb, min_markers_per_chrom, 
 
 
 def run_loadbam(bam_fn, output_json_fn, *,
-                cb_whitelist_fn=None, bin_size=25_000, seq_type=None,
+                cb_whitelist_fn=None, bin_size=25_000,
+                seq_type=None, ploidy_type='haploid',
                 cb_tag='CB', cb_correction_method='exact',
                 umi_tag='UB', umi_collapse_method='directional',
                 hap_tag='ha', hap_tag_type='star_diploid',
@@ -61,6 +62,9 @@ def run_loadbam(bam_fn, output_json_fn, *,
         The size of each bin in base pairs (default is 25,000).
     seq_type : str, optional
         The type of sequencing data (default is None).
+    ploidy_type : str or None
+        A string describing the ploidy type and crossing strategy of the data
+        (e.g. "haploid", "diploid_bc1", "diploid_f2", default is "haploid").
     cb_tag : str, optional
         The tag used to identify cell barcodes in the BAM file (default is 'CB').
     cb_correction_method : str, optional
@@ -107,6 +111,7 @@ def run_loadbam(bam_fn, output_json_fn, *,
         bam_fn, processes=processes,
         bin_size=bin_size,
         seq_type=seq_type,
+        ploidy_type=ploidy_type,
         cb_tag=cb_tag,
         umi_tag=umi_tag,
         umi_collapse_method=umi_collapse_method,
@@ -138,6 +143,7 @@ def run_loadbam(bam_fn, output_json_fn, *,
 
 def run_loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, *,
                 cb_whitelist_fn=None, bin_size=25_000, snp_counts_only=False,
+                seq_type=None, ploidy_type='haploid',
                 run_genotype=False, genotype_vcf_fn=None,
                 genotype_crossing_combinations=None, reference_genotype_name='col0',
                 genotype_em_max_iter=1000, genotype_em_min_delta=1e-3, genotype_em_bootstraps=25,
@@ -160,6 +166,11 @@ def run_loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, *,
         Path to a file containing a list of cell barcodes to be used (default is None).
     bin_size : int, optional
         The bin size for partitioning the genome into intervals (default is 25,000).
+    seq_type : str, optional
+        The type of sequencing data (default is None).
+    ploidy_type : str or None
+        A string describing the ploidy type and crossing strategy of the data
+        (e.g. "haploid", "diploid_bc1", "diploid_f2", default is None).
     snp_counts_only : bool, optional
         Whether to only count SNPs, instead of the number of reads per SNP (default is False).
     run_genotype : bool, optional
@@ -201,6 +212,8 @@ def run_loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, *,
         chrom_sizes_fn,
         bin_size=bin_size,
         cb_whitelist=cb_whitelist,
+        seq_type=seq_type,
+        ploidy_type=ploidy_type,
         validate_barcodes=validate_barcodes,
         run_genotype=run_genotype,
         genotype_vcf_fn=genotype_vcf_fn,

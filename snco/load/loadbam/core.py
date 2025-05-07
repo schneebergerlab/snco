@@ -33,7 +33,8 @@ def _get_interval_co_markers(bam_fn, chrom, bin_start, bin_end, **kwargs):
     return chrom_inv_counts
 
 
-def bam_to_co_markers(bam_fn, processes=1, seq_type=None, run_genotype=False, genotype_kwargs=None, **kwargs):
+def bam_to_co_markers(bam_fn, processes=1, seq_type=None, ploidy_type='haploid',
+                      run_genotype=False, genotype_kwargs=None, **kwargs):
     """
     Read from a BAM file, identify reads aligning to each haplotype for each cell barcode,
     and summarize the data into a `MarkerRecords` object.
@@ -46,6 +47,9 @@ def bam_to_co_markers(bam_fn, processes=1, seq_type=None, run_genotype=False, ge
         The number of parallel processes to use (default is 1).
     seq_type : str, optional
         The type of sequencing data (e.g., "10x_atac", "10x_rna", "bd_rna", "takara", "wgs").
+    ploidy_type : str or None
+        A string describing the ploidy type and crossing strategy of the data
+        (e.g. "haploid", "diploid_bc1", "diploid_f2").
     run_genotype : bool, optional
         If True, perform genotyping of parental accessions based on interval counts (default is False).
     genotype_kwargs : dict, optional
@@ -72,6 +76,7 @@ def bam_to_co_markers(bam_fn, processes=1, seq_type=None, run_genotype=False, ge
         chrom_sizes,
         bin_size,
         seq_type=seq_type,
+        ploidy_type=ploidy_type,
     )
 
     if genotype_kwargs is None:

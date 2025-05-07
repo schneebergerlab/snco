@@ -4,8 +4,13 @@ import numpy as np
 
 from .background import estimate_overall_background_signal, clean_marker_background
 from .filter import filter_low_coverage_barcodes, filter_genotyping_score
-from .mask import apply_haplotype_imbalance_mask, apply_marker_threshold, mask_regions_bed
-from ..utils import load_json
+from .mask import (
+    create_single_cell_haplotype_imbalance_mask,
+    create_resequencing_haplotype_imbalance_mask,
+    apply_haplotype_imbalance_mask,
+    apply_marker_threshold, mask_regions_bed
+)
+from ..utils import load_json, validate_ploidy
 from ..opts import DEFAULT_RANDOM_SEED
 
 
@@ -15,7 +20,7 @@ DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 
 def run_clean(marker_json_fn, output_json_fn, *,
               co_markers=None, cb_whitelist_fn=None, mask_bed_fn=None, bin_size=25_000,
-              min_markers_per_cb=0, min_markers_per_chrom=0, max_bin_count=20,
+              ploidy_type=None, min_markers_per_cb=0, min_markers_per_chrom=0, max_bin_count=20,
               clean_bg=True, bg_window_size=2_500_000, max_frac_bg=0.2, min_geno_prob=0.9,
               mask_imbalanced=True, max_marker_imbalance=0.75, apply_per_geno=True,
               rng=DEFAULT_RNG):
@@ -67,6 +72,7 @@ def run_clean(marker_json_fn, output_json_fn, *,
     """
     if co_markers is None:
         co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
+    ploidy_type = validate_ploidy(co_markers, ploidy_type)
 
     n = len(co_markers)
     if min_markers_per_cb:
@@ -106,14 +112,22 @@ def run_clean(marker_json_fn, output_json_fn, *,
     if mask_imbalanced:
         # mask any bins that still have extreme imbalance
         # (e.g. due to extreme allele-specific expression differences)
-        co_markers, n_masked = apply_haplotype_imbalance_mask(
-            co_markers, max_marker_imbalance,
-            apply_per_geno=apply_per_geno,
+        if co_markers.seq_type != "wgs":
+            mask, n_masked = create_single_cell_haplotype_imbalance_mask(
+                co_markers, max_marker_imbalance,
+                apply_per_geno=apply_per_geno,
+            )
+        else:
+            # special masking method for wgs data which has much greater coverage
+            mask, n_masked = create_resequencing_haplotype_imbalance_mask(
+                co_markers, apply_per_geno=apply_per_geno # maybe should expose params?
+            )
+        co_markers = apply_haplotype_imbalance_mask(
+            co_markers, mask, apply_per_geno=apply_per_geno
         )
         tot_bins = sum(co_markers.nbins.values())
         log.info(
-            f'Masked {n_masked:d}/{tot_bins} bins with '
-            f'marker imbalance greater than {max_marker_imbalance}'
+            f'Masked {n_masked:d}/{tot_bins} bins with extreme marker imbalance'
         )
 
 

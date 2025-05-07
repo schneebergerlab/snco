@@ -41,6 +41,7 @@ class BaseRecords(object):
                  chrom_sizes: dict[str, int],
                  bin_size: int,
                  seq_type: str | None = None,
+                 ploidy_type: str | None = None,
                  metadata: dict | None = None,
                  frozen=False):
         """
@@ -52,6 +53,9 @@ class BaseRecords(object):
             The size of each genomic bin.
         seq_type : str or None, optional
             A string describing the sequencing data type.
+        ploidy_type : str or None
+            A string describing the ploidy type and crossing strategy of the data
+            e.g. "haploid", "diploid_bc1", "diploid_f2".
         metadata : dict of snco.metadata.MetadataDict or None, optional
             Additional metadata for the record set.
         frozen : bool, default=False
@@ -60,6 +64,7 @@ class BaseRecords(object):
         self.chrom_sizes = chrom_sizes
         self.bin_size = bin_size
         self.seq_type = seq_type
+        self.ploidy_type = ploidy_type
         self.metadata = {}
         if metadata is not None:
             if not isinstance(metadata, dict):
@@ -263,6 +268,7 @@ class BaseRecords(object):
             copy(other.chrom_sizes),
             other.bin_size,
             copy(other.seq_type),
+            copy(other.ploidy_type),
             deepcopy(other.metadata)
         )
         new_instance._cmd = other._cmd
@@ -532,6 +538,7 @@ class BaseRecords(object):
             'cmd': self._cmd + [' '.join(sys.argv)],
             'bin_size': self.bin_size,
             'sequencing_data_type': self.seq_type,
+            'ploidy_type': self.ploidy_type,
             'chrom_sizes': self.chrom_sizes,
             'shape': self.nbins,
             'records': self._records.to_json(precision, encode_method),
@@ -588,6 +595,7 @@ class BaseRecords(object):
         new_instance = cls(obj['chrom_sizes'],
                            obj['bin_size'],
                            seq_type=obj['sequencing_data_type'],
+                           ploidy_type=obj['ploidy_type'],
                            metadata=obj['metadata'],
                            frozen=frozen)
         new_instance._cmd = obj['cmd'] 
@@ -613,6 +621,9 @@ class MarkerRecords(BaseRecords):
         Dictionary mapping chromosome names to the number of bins per chromosome.
     seq_type : str or None
         A string describing the sequencing data type.
+    ploidy_type : str or None
+        A string describing the ploidy type and crossing strategy of the data
+        e.g. "haploid", "diploid_bc1", "diploid_f2".
     metadata : dict
         Additional metadata for the record set.
     frozen : bool
@@ -670,6 +681,7 @@ class MarkerRecords(BaseRecords):
                  chrom_sizes: dict[str, int],
                  bin_size: int,
                  seq_type: str | None = None,
+                 ploidy_type: str | None = None,
                  metadata: dict | None = None,
                  frozen: bool = False):
         """
@@ -686,12 +698,15 @@ class MarkerRecords(BaseRecords):
             The size of each genomic bin.
         seq_type : str or None, optional
             A string describing the sequencing data type.
+        ploidy_type : str or None
+            A string describing the ploidy type and crossing strategy of the data
+            e.g. "haploid", "diploid_bc1", "diploid_f2".
         metadata : dict or None, optional
             Additional metadata for the record set.
         frozen : bool, default=False
             If True, prevents creation of new keys in the records.
         """
-        super().__init__(chrom_sizes, bin_size, seq_type, metadata, frozen)
+        super().__init__(chrom_sizes, bin_size, seq_type, ploidy_type, metadata, frozen)
         self._ndim = 2
         self._dim2_shape = 2
         self._init_val = 0.0
@@ -778,6 +793,9 @@ class PredictionRecords(BaseRecords):
         Dictionary mapping chromosome names to the number of bins per chromosome.
     seq_type : str or None
         A string describing the sequencing data type.
+    ploidy_type : str or None
+        A string describing the ploidy type and crossing strategy of the data
+        e.g. "haploid", "diploid_bc1", "diploid_f2".
     metadata : dict
         Additional metadata for the record set.
     frozen : bool
@@ -835,6 +853,7 @@ class PredictionRecords(BaseRecords):
                  chrom_sizes: dict[str, int],
                  bin_size: int,
                  seq_type: str | None = None,
+                 ploidy_type: str | None = None,
                  metadata: dict | None = None,
                  frozen: bool = False):
         """
@@ -851,12 +870,15 @@ class PredictionRecords(BaseRecords):
             The size of each genomic bin.
         seq_type : str or None, optional
             A string describing the sequencing data type.
+        ploidy_type : str or None
+            A string describing the ploidy type and crossing strategy of the data
+            e.g. "haploid", "diploid_bc1", "diploid_f2".
         metadata : dict or None, optional
             Additional metadata for the record set.
         frozen : bool, default=False
             If True, prevents creation of new keys in the records.
         """
-        super().__init__(chrom_sizes, bin_size, seq_type, metadata, frozen)
+        super().__init__(chrom_sizes, bin_size, seq_type, ploidy_type, metadata, frozen)
         self._ndim = 1
         self._dim2_shape = np.nan
         self._init_val = np.nan

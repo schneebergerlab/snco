@@ -100,6 +100,7 @@ def parse_cellsnp_lite_interval_counts(csl_dir, bin_size, cb_whitelist,
 
 
 def cellsnp_lite_to_co_markers(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist,
+                               seq_type=None, ploidy_type='haploid',
                                validate_barcodes=True, snp_counts_only=False,
                                run_genotype=False, genotype_vcf_fn=None,
                                reference_name='col0', genotype_kwargs=None):
@@ -118,6 +119,11 @@ def cellsnp_lite_to_co_markers(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist,
         The bin size for partitioning the genome into intervals.
     cb_whitelist : set
         A set of cell barcodes to include in the analysis.
+    seq_type : str or None
+        The type of sequencing data (e.g., "10x_atac", "10x_rna", "bd_rna", "takara", "wgs").
+    ploidy_type : str or None
+        A string describing the ploidy type and crossing strategy of the data
+        (e.g. "haploid", "diploid_bc1", "diploid_f2").
     validate_barcodes : bool, optional
         If True, validates sequenced barcodes to remove homopolymers and Ns (default is True).
     snp_counts_only : bool, optional
@@ -155,7 +161,8 @@ def cellsnp_lite_to_co_markers(csl_dir, chrom_sizes_fn, bin_size, cb_whitelist,
     co_markers = MarkerRecords(
         chrom_sizes,
         bin_size,
-        seq_type='csl_snps',
+        seq_type=seq_type,
+        ploidy_type=ploidy_type,
     )
 
     if run_genotype:

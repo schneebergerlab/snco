@@ -7,7 +7,7 @@ import torch
 from .rhmm import train_rhmm, RigidHMM
 from .crossovers import detect_crossovers
 from .doublet import detect_doublets
-from ..utils import load_json
+from ..utils import load_json, validate_ploidy
 from .. import stats
 from ..defaults import DEFAULT_RANDOM_SEED
 
@@ -19,7 +19,7 @@ DEFAULT_DEVICE = torch.device('cpu')
 
 def run_predict(marker_json_fn, output_json_fn, *,
                 co_markers=None,
-                cb_whitelist_fn=None, bin_size=25_000, model_type="haploid",
+                cb_whitelist_fn=None, bin_size=25_000, ploidy_type=None,
                 segment_size=1_000_000, terminal_segment_size=50_000,
                 cm_per_mb=4.5, model_lambdas=None, empty_fraction=None,
                 predict_doublets=True, n_doublets=0.25, k_neighbours=0.25,
@@ -42,6 +42,11 @@ def run_predict(marker_json_fn, output_json_fn, *,
         Path to barcode whitelist file.
     bin_size : int, optional
         Genomic bin size (default: 25,000).
+    ploidy_type : str, optional
+        Ploidy type of data used to infer type of model to use. Options are
+        "haploid" with model states [0, 1], "diploid_bc1" with states [00, 01],
+        or "diploid_f2" with states [00, 01, 11]. Default is to infer from data
+        if possible, else "haploid"
     segment_size : int, optional
         Size of internal segments for modeling (default: 1,000,000).
     terminal_segment_size : int, optional
@@ -80,14 +85,16 @@ def run_predict(marker_json_fn, output_json_fn, *,
     """
     if co_markers is None:
         co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
+    ploidy_type = validate_ploidy(co_markers, ploidy_type)
+
     rhmm = train_rhmm(
         co_markers,
-        model_type=model_type, # todo: add to CLI
+        model_type=ploidy_type,
         cm_per_mb=cm_per_mb,
         segment_size=segment_size,
         terminal_segment_size=terminal_segment_size,
         model_lambdas=model_lambdas,
-        empty_fraction=empty_fraction, # todo: add to CLI
+        empty_fraction=empty_fraction,
         device=device,
     )
     co_preds = detect_crossovers(

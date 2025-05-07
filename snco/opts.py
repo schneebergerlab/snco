@@ -75,6 +75,9 @@ def validate_loadbam_input(func):
     '''decorator to validate the input of the loadbam command'''
     def _validate(**kwargs):
         seq_type = kwargs.get('seq_type')
+        if kwargs.get('ploidy_type') is None:
+            # set to haploid for loadbam and loadcsl, other commands infer from data
+            kwargs['ploidy_type'] = 'haploid'
         if kwargs.get('cb_correction_method') == 'auto':
             cb_tag = kwargs.get('cb_tag')
             method = 'exact' if cb_tag in ('CB', 'RG') else '1mm'
@@ -123,6 +126,9 @@ def validate_loadbam_input(func):
 def validate_loadcsl_input(func):
     '''decorator to validate the input of the loadcsl command'''
     def _validate(**kwargs):
+        if kwargs.get('ploidy_type') is None:
+            # set to haploid for loadbam and loadcsl, other commands infer from data
+            kwargs['ploidy_type'] = 'haploid'
         if kwargs.get('run_genotype') and kwargs.get('genotype_vcf_fn') is None:
             log.error('--genotype-vcf-fn must be provided when --haplotype is switched on')
         return func(**kwargs)
@@ -331,7 +337,7 @@ def _replace_other_with_nonetype(ctx, param, value):
 snco_opts.option(
     '-x', '--seq-type',
     required=False,
-    subcommands=['loadbam', 'bam2pred'],
+    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred'],
     type=click.Choice(
         ['10x_rna', '10x_atac', 'bd_rna', 'bd_atac', 'takara_dna', 'wgs', 'other'],
         case_sensitive=False
@@ -343,15 +349,15 @@ snco_opts.option(
 
 
 snco_opts.option(
-    '-y', '--data-ploidy-type', 'model_type',
+    '-y', '--data-ploidy-type', 'ploidy_type',
     required=False,
-    subcommands=['predict', 'bam2pred'],
+    subcommands=['loadbam', 'loadcsl', 'clean', 'predict', 'bam2pred', 'csl2pred'],
     type=click.Choice(
         ['haploid', 'diploid_bc1', 'diploid_f2'],
         case_sensitive=False
     ),
-    default='haploid',
-    help='presets for different data ploidy data, instructs what type of model to use' # todo !!
+    default=None,
+    help='presets for different data ploidy data, instructs what type of model to use'
 )
 
 
