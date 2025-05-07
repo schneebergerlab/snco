@@ -91,6 +91,8 @@ def create_resequencing_haplotype_imbalance_mask(co_markers, expected_ratio='aut
         Number of median absolute deviations (MADs) to use for outlier detection.
     correction : float, optional
         Small value added to numerator and denominator to avoid division by zero.
+    apply_per_geno : bool, default=True
+        Mask separately per genotype.
 
     Returns
     -------
