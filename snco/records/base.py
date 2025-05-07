@@ -581,7 +581,7 @@ class NestedData:
                 for dt in dtype:
                     try:
                         return dt(obj)
-                    except ValueError:
+                    except (ValueError, TypeError):
                         continue
                 else:
                     raise ValueError(f'Could not convert object {obj} with dtypes {dtype_converters}')
