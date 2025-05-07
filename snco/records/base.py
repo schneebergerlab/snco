@@ -541,7 +541,9 @@ class NestedData:
             for val in obj:
                 json_serialisable.append(cls._json_serialise_data(val, precision))
         elif isinstance(obj, (float, np.floating)):
-            json_serialisable = round(float(obj), precision)
+            json_serialisable = float(obj)
+            if precision is not None:
+                json_serialisable = round(json_serialisable, precision)
         elif isinstance(obj, np.integer):
             json_serialisable = int(obj)
         elif isinstance(obj, (str, int, bool)) or obj is None:

@@ -514,9 +514,9 @@ class BaseRecords(object):
             return self
         raise NotImplementedError()
 
-    def _metadata_to_json(self, precision):
+    def _metadata_to_json(self):
         return {
-            name: metadata.to_json(precision) for name, metadata in self.metadata.items()
+            name: metadata.to_json(precision=None) for name, metadata in self.metadata.items()
         }
 
     def to_json(self, precision: int = 5, encode_method="full"):
@@ -542,7 +542,7 @@ class BaseRecords(object):
             'chrom_sizes': self.chrom_sizes,
             'shape': self.nbins,
             'records': self._records.to_json(precision, encode_method),
-            'metadata': self._metadata_to_json(precision)
+            'metadata': self._metadata_to_json()
         })
 
     def write_json(self, fp: str, precision: int = 2):

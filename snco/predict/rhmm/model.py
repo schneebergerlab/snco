@@ -41,6 +41,12 @@ class RigidHMM:
         end of sequence and transitions.
     trans_prob : float
         Probability of transition between rigid states.
+    fg_lambda : float
+        Foreground (signal) Poisson mean.
+    bg_lambda : float
+        Background Poisson mean.
+    empty_fraction : float
+        Fraction of empty bins in zero inflated model.
     device : torch.device, optional
         Device on which to allocate model (default: CPU).
     """
@@ -49,25 +55,25 @@ class RigidHMM:
                  fg_lambda, bg_lambda, empty_fraction,
                  device=DEFAULT_DEVICE):
         for hap_comb in states:
-            if not isinstance(hap_comb, (tuple, list, set, frozenset)):
+            if not isinstance(hap_comb, (tuple, list)):
                 raise ValueError(
                     'states should be a list/tuple of tuples, which represent haplotype combinations'
                 )
             for hap in hap_comb:
                 if hap not in (0, 1):
                     raise ValueError('haplotypes can only be 0 or 1')
-        self.states = states
+        self.states = tuple(tuple(s) for s in states)
         self.nstates = len(self.states)
         self._state_haplo = np.mean(self.states, axis=1)
-        self.rfactor = rfactor
-        self.term_rfactor = term_rfactor
-        self.trans_prob = trans_prob
+        self.rfactor = int(rfactor)
+        self.term_rfactor = int(term_rfactor)
+        self.trans_prob = float(trans_prob)
         self.term_prob = 1 / (self.rfactor - self.term_rfactor)
         assert 0.0 < self.trans_prob < 1.0
         assert (self.trans_prob + self.term_prob) < 1.0
-        self.fg_lambda = fg_lambda
-        self.bg_lambda = bg_lambda
-        self.empty_fraction = empty_fraction
+        self.fg_lambda = float(fg_lambda)
+        self.bg_lambda = float(bg_lambda)
+        self.empty_fraction = float(empty_fraction)
         self._device = device
         self.initialise_model()
 
@@ -180,15 +186,6 @@ class RigidHMM:
     def initialise_model(self):
         """
         Initializes the DenseHMM model using estimated Poisson parameters.
-
-        Parameters
-        ----------
-        fg_lambda : float
-            Foreground (signal) Poisson mean.
-        bg_lambda : float
-            Background Poisson mean.
-        empty_fraction : float
-            Fraction of empty bins in zero inflated model.
         """
         self._transition_probs = {}
         self._calculate_transition_probs()
@@ -278,8 +275,8 @@ class RigidHMM:
     def params(self):
         return {
             'states': [list(s) for s in self.states],
-            'rfactor': int(self.rfactor),
-            'term_rfactor': int(self.term_rfactor),
+            'rfactor': float(self.rfactor),
+            'term_rfactor': float(self.term_rfactor),
             'trans_prob': float(self.trans_prob),
             'fg_lambda': float(self.fg_lambda),
             'bg_lambda': float(self.bg_lambda),

@@ -45,7 +45,7 @@ def detect_crossovers(co_markers, rhmm, batch_size=128, processes=1):
     co_preds.add_metadata(
         rhmm_params=NestedData(
             levels=('misc', ),
-            dtype=(int, float, list),
+            dtype=(float, list),
             data=rhmm.params
         )
     )
