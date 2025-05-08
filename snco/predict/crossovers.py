@@ -4,8 +4,8 @@ import pandas as pd
 
 import torch
 
-from ..logger import progress_bar
 from ..records import PredictionRecords, NestedData
+from snco.main.logger import progress_bar
 
 
 def detect_crossovers(co_markers, rhmm, batch_size=128, processes=1):

@@ -11,7 +11,7 @@ from .mask import (
     apply_marker_threshold, mask_regions_bed
 )
 from ..utils import load_json, validate_ploidy
-from ..opts import DEFAULT_RANDOM_SEED
+from snco.defaults import DEFAULT_RANDOM_SEED
 
 
 log = logging.getLogger('snco')

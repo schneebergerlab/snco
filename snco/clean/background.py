@@ -6,7 +6,7 @@ import pandas as pd
 from snco.utils import load_json
 from snco.signal import argmax_smoothed_haplotype
 from snco.records import MarkerRecords, NestedData, NestedDataArray
-from snco.opts import DEFAULT_RANDOM_SEED
+from snco.defaults import DEFAULT_RANDOM_SEED
 
 log = logging.getLogger('snco')
 DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)

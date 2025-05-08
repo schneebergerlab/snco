@@ -19,7 +19,7 @@ def loadbam_subcommand(**kwargs):
     to generate a json file of binned haplotype marker distributions for each cell barcode. 
     These can be used to call recombinations using the downstream `predict` command.
     '''
-    from snco.load.cli import run_loadbam
+    from snco.load.commands import run_loadbam
     run_loadbam(**kwargs)
 
 
@@ -31,7 +31,7 @@ def loadcsl_subcommand(**kwargs):
     haplotype marker distributions for each cell barcode. These can be used to
     call recombinations using the downstream `predict` command.
     '''
-    from snco.load.cli import run_loadcsl
+    from snco.load.commands import run_loadcsl
     run_loadcsl(**kwargs)
 
 
@@ -64,7 +64,7 @@ def clean_subcommand(**kwargs):
     Removes predicted background markers, that result from ambient nucleic acids, 
     from each cell barcode.
     '''
-    from snco.clean.cli import run_clean
+    from snco.clean.commands import run_clean
     run_clean(**kwargs)
 
 
@@ -75,7 +75,7 @@ def predict_subcommand(**kwargs):
     Uses rigid hidden Markov model to predict the haplotypes of each cell barcode
     at each genomic bin.
     '''
-    from snco.predict.cli import run_predict
+    from snco.predict.commands import run_predict
     run_predict(**kwargs)
 
 
@@ -85,7 +85,7 @@ def doublet_subcommand(**kwargs):
     '''
     Predict doublets using synthetic doublet detection method
     '''
-    from snco.predict.cli import run_doublet
+    from snco.predict.commands import run_doublet
     run_doublet(**kwargs)
 
 
@@ -124,8 +124,8 @@ def plot_subcommand(**kwargs):
 
 def _clean_predict_pipeline(co_markers, output_prefix, kwargs):
 
-    from snco.clean.cli import run_clean
-    from snco.predict.cli import run_predict
+    from snco.clean.commands import run_clean
+    from snco.predict.commands import run_predict
 
     if kwargs['run_clean']:
 
@@ -152,7 +152,7 @@ def bam_pipeline_subcommand(**kwargs):
     '''
     Pipeline chaining together the loadbam, clean and predict commands
     '''
-    from snco.load.cli import run_loadbam
+    from snco.load.commands import run_loadbam
 
     output_prefix = kwargs.pop('output_prefix')
     loadbam_kwargs = snco_opts.get_kwarg_subset('loadbam', kwargs)
@@ -168,7 +168,7 @@ def csl_pipeline_subcommand(**kwargs):
     '''
     Pipeline chaining together the loadcsl, clean and predict commands
     '''
-    from snco.load.cli import run_loadcsl
+    from snco.load.commands import run_loadcsl
 
     output_prefix = kwargs.pop('output_prefix')
     loadcsl_kwargs = snco_opts.get_kwarg_subset('loadcsl', kwargs)
