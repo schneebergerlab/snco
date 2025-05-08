@@ -134,7 +134,7 @@ def run_predict(marker_json_fn, output_json_fn, *,
 
 def run_doublet(marker_json_fn, pred_json_fn, output_json_fn, *,
                 cb_whitelist_fn=None, bin_size=25_000,
-                n_doublets=0.25, k_neighbours=0.25,
+                normalise_coverage=False, n_doublets=0.25, k_neighbours=0.25,
                 generate_stats=True, output_precision=3, batch_size=1_000,
                 processes=1, device=DEFAULT_DEVICE, rng=DEFAULT_RNG):
     """
