@@ -28,3 +28,10 @@ def interp_nan_inplace(arr, axis):
             x = np.flatnonzero(nan_mask)
             vec[nan_mask] = np.interp(x, xp, fp)
 
+
+def sorted_edit_distance(state1, state2):
+    dist = 0
+    for h1, h2 in zip(sorted(state1), sorted(state2)):
+        if h1 != h2:
+            dist += 1
+    return dist

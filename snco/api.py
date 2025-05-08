@@ -208,6 +208,8 @@ class PredictionRecordsWrapper(PredictionRecords, RecordsAPIMixin):
                 p_co = np.abs(np.diff(hp))
                 p_co = np.where(p_co < 5e3, p_co, 0)
                 n_co = p_co.sum()
+                if self.ploidy_type.startswith('diploid'):
+                    n_co *= 2
                 cb_info.append(f'{chrom}: {n_co:.2f}')
             cb_info = ', '.join(cb_info)
             rows.append(f"<tr><td>{cb}</td><td>{cb_info}</td></tr>")

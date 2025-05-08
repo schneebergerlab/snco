@@ -9,7 +9,7 @@ from pomegranate import distributions as pmd
 from pomegranate.hmm import DenseHMM
 from pomegranate.gmm import GeneralMixtureModel
 
-from .utils import interp_nan_inplace
+from .utils import interp_nan_inplace, sorted_edit_distance
 
 
 log = logging.getLogger('snco')
@@ -84,7 +84,7 @@ class RigidHMM:
             elif (i + 1) == self.rfactor:
                 self._transition_probs[i] = Transition(
                     self_loop=1.0 - self.trans_prob - self.term_prob,
-                    co=self.trans_prob / (self.nstates - 1),
+                    co=self.trans_prob,
                     end=self.term_prob
                 )
             # internal point of the chain
@@ -157,7 +157,8 @@ class RigidHMM:
                     )
                 if self._transition_probs[i].co:
                     for other in self.states:
-                        if state != other:
+                        # only connect states with edit dist 1 with crossovers
+                        if sorted_edit_distance(state, other) == 1:
                             self._model.add_edge(
                                 self._distributions[state][i],
                                 self._distributions[other][0],

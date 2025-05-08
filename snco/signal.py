@@ -65,9 +65,9 @@ def align_foreground_column(X, window=40):
     return X_reordered
 
 
-def detect_homozygous_bins(X_ordered, window=40):
+def detect_heterozygous_bins(X_ordered, window=40):
     """
-    Detect homozygous bins based on smoothed haplotype imbalance.
+    Detect heterozygous bins based on smoothed haplotype imbalance.
 
     Parameters
     ----------
@@ -82,11 +82,11 @@ def detect_homozygous_bins(X_ordered, window=40):
     list of np.ndarray
         List of boolean masks indicating homozygous bins for each input array.
     """
-    homozygous_mask = []
+    heterozygous_mask = []
     for x in X_ordered:
         smoothed = smooth_counts_sum(x, window)
         # test the ratio of the fg and bg count sums.
         # In hom/het bins they should be 2:0 vs 1:1 respectively
         mask = smoothed[:, 0] < 2 * smoothed[:, 1]
-        homozygous_mask.append(mask)
-    return homozygous_mask
+        heterozygous_mask.append(mask)
+    return heterozygous_mask

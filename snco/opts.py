@@ -349,7 +349,7 @@ snco_opts.option(
 
 
 snco_opts.option(
-    '-y', '--data-ploidy-type', 'ploidy_type',
+    '-y', '--ploidy-type',
     required=False,
     subcommands=['loadbam', 'loadcsl', 'clean', 'predict', 'bam2pred', 'csl2pred'],
     type=click.Choice(
@@ -646,7 +646,7 @@ snco_opts.option(
     '--max-bin-count',
     subcommands=['clean', 'bam2pred', 'csl2pred'],
     type=click.IntRange(5, 1000),
-    default=20,
+    default=None,
     help='maximum number of markers per cell per bin (higher values are thresholded)'
 )
 
@@ -732,6 +732,24 @@ snco_opts.option(
     help=('optional lambda parameters for foreground and background Poisson distributions of '
           'model. Default is to fit to the data')
 )
+
+
+def _resolve_normalise(ctx, param, value):
+    if value is None:
+        return 'auto'
+    return value
+
+
+snco_opts.option(
+    '--normalise-coverage/--no-normalise-coverage',
+    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
+    required=False,
+    default=None,
+    callback=_resolve_normalise,
+    help=('whether to normalise marker counts so that totals for each barcode are equivalent'
+          'default: yes for --seq-type "wgs", otherwise no')
+)
+
 
 snco_opts.option(
     '--predict-doublets/--no-predict-doublets',

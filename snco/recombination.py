@@ -154,6 +154,8 @@ def recombination_landscape(co_preds,
             chrom_co_probs = np.where(
                 chrom_co_probs >= min_prob, chrom_co_probs, 0
             )
+            if co_preds.ploidy_type.startswith('diploid'):
+                chrom_co_probs *= 2
             # filter gradients where there are no markers
             if denominators is not None:
                 chrom_denom = denominators[geno, chrom]

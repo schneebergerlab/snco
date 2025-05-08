@@ -78,8 +78,9 @@ def validate_ploidy(data, ploidy_type):
             # use haploid as fallback default
             ploidy_type = 'haploid'
     elif data.ploidy_type != ploidy_type:
-        log.warn(f'Recorded ploidy type of data is "{data.ploidy_type}", but requested '
-                 f'model ploidy is "{ploidy_type}". This may not be intended')
+        log.warn(f'Recorded ploidy type of data is "{data.ploidy_type}", but specified '
+                 f'ploidy is "{ploidy_type}". This may not be intended.')
+    data.ploidy_type = ploidy_type
     return ploidy_type
 
 

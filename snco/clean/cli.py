@@ -84,30 +84,32 @@ def run_clean(marker_json_fn, output_json_fn, *,
             f'or fewer than {min_markers_per_chrom} markers per chromosome'
         )
     n = len(co_markers)
-    if min_geno_prob:
+    if min_geno_prob and 'genotypes' in co_markers.metadata:
         co_markers = filter_genotyping_score(co_markers, min_geno_prob)
         log.info(
             f'Removed {n - len(co_markers)} barcodes with genotyping probability < {min_geno_prob}'
         )
 
     n = len(co_markers)
-    # estimate ambient marker rate for each CB and try to scrub common background markers
-    log.info('Estimating background marker rates.')
-    co_markers = estimate_overall_background_signal(
-        co_markers, bg_window_size, max_frac_bg, apply_per_geno=apply_per_geno
-    )
-    log.info(
-        f'Removed {n - len(co_markers)} barcodes with greater than {max_frac_bg * 100}%'
-        ' background contamination'
-    )
-    av_bg = np.mean(
-        list(co_markers.metadata['estimated_background_fraction'].values())
-    )
-    log.info(f'Average estimated background fraction is {av_bg:.3f}')
-    if clean_bg:
-        log.info('Attempting to filter likely background markers')
-        co_markers = clean_marker_background(
-            co_markers, apply_per_geno=apply_per_geno, rng=rng)
+    # currently this method does not make sense for non-haploid samples
+    if ploidy_type == 'haploid':
+        # estimate ambient marker rate for each CB and try to scrub common background markers
+        log.info('Estimating background marker rates.')
+        co_markers = estimate_overall_background_signal(
+            co_markers, bg_window_size, max_frac_bg, apply_per_geno=apply_per_geno
+        )
+        log.info(
+            f'Removed {n - len(co_markers)} barcodes with greater than {max_frac_bg * 100}%'
+            ' background contamination'
+        )
+        av_bg = np.mean(
+            list(co_markers.metadata['estimated_background_fraction'].values())
+        )
+        log.info(f'Average estimated background fraction is {av_bg:.3f}')
+        if clean_bg:
+            log.info('Attempting to filter likely background markers')
+            co_markers = clean_marker_background(
+                co_markers, apply_per_geno=apply_per_geno, rng=rng)
 
     if mask_imbalanced:
         # mask any bins that still have extreme imbalance
@@ -141,8 +143,9 @@ def run_clean(marker_json_fn, output_json_fn, *,
     )
 
     # threshold bins that have a large number of reads
-    co_markers = apply_marker_threshold(co_markers, max_bin_count)
-    log.info(f'Thresholded bins with >{max_bin_count} markers')
+    if max_bin_count is not None:
+        co_markers = apply_marker_threshold(co_markers, max_bin_count)
+        log.info(f'Thresholded bins with >{max_bin_count} markers')
 
     if mask_bed_fn is not None:
         co_markers = mask_regions_bed(co_markers, mask_bed_fn)

@@ -6,7 +6,7 @@ import torch
 from pomegranate import distributions as pmd
 from pomegranate.gmm import GeneralMixtureModel
 
-from snco.signal import align_foreground_column, detect_homozygous_bins
+from snco.signal import align_foreground_column, detect_heterozygous_bins
 
 
 def estimate_haploid_emissions(X, window=40):
@@ -58,24 +58,24 @@ def estimate_diploid_emissions_ordered(X_ordered, window=40):
     tuple of float
         Estimated (fg_lambda, bg_lambda, empty_fraction).
     """
-    mask = detect_homozygous_bins(X_ordered, window)
+    mask = detect_heterozygous_bins(X_ordered, window)
     X_flattened = np.concatenate(X_ordered)
     mask = np.concatenate(mask)
     init_fg_lambda = X_flattened[mask, 1].mean()
     init_bg_lambda = X_flattened[~mask, 1].mean()
 
-    hom = GeneralMixtureModel([
-        pmd.Poisson([init_fg_lambda, init_bg_lambda]),
-        pmd.Poisson([init_fg_lambda, init_bg_lambda]),
-    ], frozen=True) # freezes priors but not lambdas
-    het = GeneralMixtureModel([
-        pmd.Poisson([init_fg_lambda, init_bg_lambda]),
-        pmd.Poisson([init_bg_lambda, init_fg_lambda]),
-    ], frozen=True)
-    zi = pmd.DiracDelta([1.0, 1.0])
-    gmm = GeneralMixtureModel([zi, hom, het]).fit(X_flattened)
+    gmm = GeneralMixtureModel([
+        pmd.DiracDelta([1.0, 1.0]),
+        pmd.Poisson([init_fg_lambda * 2, init_bg_lambda]),
+        pmd.Poisson([init_fg_lambda, init_fg_lambda]),
+    ])
+    gmm = gmm.fit(X_flattened)
     empty_fraction = gmm.priors.numpy()[0]
-    fg_lambda, bg_lambda = hom.distributions[1].lambdas.numpy()
+    fg_lambda = np.mean([
+        gmm.distributions[1].lambdas.numpy()[0] / 2,
+        *gmm.distributions[2].lambdas.numpy()
+    ]) # average across the lambdas to get a single result
+    bg_lambda = gmm.distributions[1].lambdas.numpy()[1]
     return fg_lambda, bg_lambda, empty_fraction
 
 
