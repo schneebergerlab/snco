@@ -183,10 +183,14 @@ class IntervalUMICounts:
             A new IntervalMarkerCounts object containing the collapsed counts.
         """
 
+        collapsed = IntervalMarkerCounts(self.chrom, self.bin_idx)
         if self.umi_collapse_method is None:
-            umi_eval_method = methodcaller('total')
-        else:
-            umi_eval_method = lambda hap_counts: 1
+            for cb in self:
+                # No UMIs, so counts are directly: self._counts[cb][None][hap]
+                hap_counts = self._counts[cb].get(None, {})
+                if hap_counts:
+                    collapsed[cb] = hap_counts
+            return collapsed
 
         if self.hap_tag_type == "star_diploid":
             hap_eval_method = self._hap_collapse_star_diploid
@@ -198,10 +202,9 @@ class IntervalUMICounts:
             for hap_counts in umi_hap_counts.values():
                 hap = hap_eval_method(hap_counts)
                 if hap is not None:
-                    total[hap] += umi_eval_method(hap_counts)
+                    total[hap] += 1
             return total
 
-        collapsed = IntervalMarkerCounts(self.chrom, self.bin_idx)
         for cb in self:
             if self.umi_collapse_method == 'directional':
                 deduped = umi_dedup_directional(self[cb])
