@@ -1,5 +1,5 @@
 import click
-from .opts import snco_opts, sneqtl_opts
+from .opts import snco_opts
 
 
 @click.group()
@@ -175,26 +175,3 @@ def csl_pipeline_subcommand(**kwargs):
     loadcsl_kwargs['output_json_fn'] = None
     co_markers = run_loadcsl(**loadcsl_kwargs)
     _clean_predict_pipeline(co_markers, output_prefix, kwargs)
-
-
-@click.group()
-@click.version_option()
-def sneqtl():
-    '''
-    sneqtl: a toolkit for performing single nucleus eQTL mapping with snco results
-    '''
-    pass
-
-
-@sneqtl.command('eqtl')
-@sneqtl_opts('eqtl')
-def eqtl_subcommand(**kwargs):
-    from snco.sneqtl.eqtl import run_eqtl
-    run_eqtl(**kwargs)
-
-
-@sneqtl.command('peakcall')
-@sneqtl_opts('peakcall')
-def peakcall_subcommand(**kwargs):
-    from snco.sneqtl.peaks import run_peakcall
-    run_peakcall(**kwargs)
