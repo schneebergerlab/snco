@@ -139,6 +139,7 @@ def run_loadbam(bam_fn, output_json_fn, *,
     if output_json_fn is not None:
         log.info(f'Writing markers to {output_json_fn}')
         co_markers.write_json(output_json_fn)
+    return co_markers
 
 
 def run_loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, *,
@@ -237,3 +238,4 @@ def run_loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, *,
     if output_json_fn is not None:
         log.info(f'Writing markers to {output_json_fn}')
         co_markers.write_json(output_json_fn)
+    return co_markers

@@ -2,9 +2,8 @@ import pytest
 from collections import Counter, defaultdict
 
 # Import the function under test
-from snco.barcodes import (
-    umi_dedup_directional, BarcodeCorrector, BarcodeValidator
-)
+from snco.load.barcodes.umi import umi_dedup_directional
+from snco.load.barcodes.cb import BarcodeCorrector, BarcodeValidator
 
 
 def test_barcode_validator():

@@ -17,11 +17,11 @@ def marker_records():
     markers.add_metadata(
         genotypes=NestedData(
             levels=('cb',),
-            dtype=frozenset,
+            dtype=str,
             data={
-                'ATATGTG': frozenset(['parent1', 'parent2']),
-                'CAGTTTG': frozenset(['parent1', 'parent2']),
-                'ACGGTTG': frozenset(['parent1', 'parent3']),
+                'ATATGTG': 'parent1:parent2',
+                'CAGTTTG': 'parent1:parent2',
+                'ACGGTTG': 'parent1:parent3',
             }
         )
     )

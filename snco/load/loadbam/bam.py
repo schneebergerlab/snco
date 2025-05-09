@@ -6,6 +6,7 @@ import pysam
 from .haplotypes import MultiHaplotypeValidator
 from .utils import get_ha_samples
 from ..counts import IntervalUMICounts
+from snco.defaults import DEFAULT_EXCLUDE_CONTIGS
 
 
 log = logging.getLogger('snco')
@@ -91,7 +92,7 @@ class BAMHaplotypeIntervalReader:
         self._bam_fn = bam_fn
         self.bin_size = bin_size
         self.cb_tag = cb_tag
-        self.umi_tag = umi_tag
+        self.umi_tag = umi_tag if umi_collapse_method is not None else None
         self.hap_tag = hap_tag
         self.hap_tag_type = hap_tag_type
         self.haplotypes = MultiHaplotypeValidator(allowed_haplotypes)
