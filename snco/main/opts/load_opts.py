@@ -137,7 +137,7 @@ snco_opts.option(
 
 snco_opts.option(
     '--validate-barcodes/--no-validate',
-    subcommands=['loadcsl', 'csl2pred'],
+    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred'],
     required=False,
     default=True,
     help='whether to check that cell barcodes are valid sequences',

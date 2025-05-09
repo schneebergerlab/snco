@@ -43,7 +43,7 @@ def run_loadbam(bam_fn, output_json_fn, *,
                 hap_tag='ha', hap_tag_type='star_diploid',
                 run_genotype=False, genotype_crossing_combinations=None,
                 genotype_em_max_iter=1000, genotype_em_min_delta=1e-3,
-                genotype_em_bootstraps=25,
+                genotype_em_bootstraps=25, validate_barcodes=True,
                 min_markers_per_cb=100, min_markers_per_chrom=20, min_geno_prob=0.9,
                 exclude_contigs=None, processes=1, rng=DEFAULT_RNG):
     """
@@ -106,7 +106,11 @@ def run_loadbam(bam_fn, output_json_fn, *,
     MarkerRecords
         A `MarkerRecords` object containing processed haplotype marker distributions.
     """
-    cb_whitelist = read_cb_whitelist(cb_whitelist_fn, cb_correction_method)
+    cb_whitelist = read_cb_whitelist(
+        cb_whitelist_fn,
+        validate_barcodes=validate_barcodes,
+        cb_correction_method=cb_correction_method
+    )
     co_markers = bam_to_co_markers(
         bam_fn, processes=processes,
         bin_size=bin_size,
