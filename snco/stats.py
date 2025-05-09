@@ -188,6 +188,8 @@ def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=2.5e-3, max_phr
     bg_frac = co_markers.metadata.get('estimated_background_fraction', {})
     doublet_rate = co_preds.metadata.get('doublet_probability', {})
 
+    co_mult_factor = 2 if co_preds.ploidy_type.startswith('diploid') else 1
+
     for cb, cb_co_markers in co_markers.items():
         cb_co_preds = co_preds[cb]
         qual_metrics.append([
@@ -197,7 +199,7 @@ def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=2.5e-3, max_phr
             np.log10(genotype_nmarkers.get(cb, np.nan)),
             total_markers(cb_co_markers),
             bg_frac.get(cb, np.nan),
-            n_crossovers(cb_co_preds, min_co_prob=nco_min_prob),
+            n_crossovers(cb_co_preds, min_co_prob=nco_min_prob) * co_mult_factor,
             accuracy_score(cb_co_markers, cb_co_preds, max_score=max_phred_score),
             uncertainty_score(cb_co_preds),
             doublet_rate.get(cb, np.nan),

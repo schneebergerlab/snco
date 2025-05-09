@@ -25,7 +25,7 @@ from matplotlib.colors import Normalize, LinearSegmentedColormap
 from .utils import load_json
 from .recombination import recombination_landscape
 from .distortion import segregation_distortion
-from .opts import DEFAULT_RANDOM_SEED
+from .defaults import DEFAULT_RANDOM_SEED
 
 
 log = logging.getLogger('snco')
@@ -255,7 +255,7 @@ def chrom_markerplot(co_markers, chrom_size, bin_size, ax=None, max_yheight=20,
     return ax
 
 
-def _add_co_prob_colormesh(ax, hp, chrom_size, bin_size, ylims, cmap):
+def _add_co_prob_colormesh(ax, hp, chrom_size, bin_size, ylims, cmap, norm):
     nbins = len(hp)
     xpos = np.insert(np.arange(nbins) * bin_size, nbins, chrom_size)
     ax.pcolormesh(
@@ -263,7 +263,7 @@ def _add_co_prob_colormesh(ax, hp, chrom_size, bin_size, ylims, cmap):
         ylims,
         hp.reshape(1, -1),
         cmap=cmap,
-        norm=Normalize(0, 1),
+        norm=norm,
         alpha=0.5,
         zorder=-2,
         rasterized=True
@@ -339,12 +339,25 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4), ch
         chrom_sizes = {c: chrom_sizes[c] for c in chroms}
     fig, axes = chrom_subplots(chrom_sizes, figsize=figsize)
     try:
-        hap1, hap2 = co_markers.metadata['genotypes'][cb]['genotype']
+        hap1, hap2 = co_markers.metadata['genotypes'][cb].split(':')
     except KeyError:
         hap1, hap2 = 'hap1', 'hap2'
     axes[0].set_ylabel(f'Marker coverage ({hap1} vs {hap2})')
-    cmap = LinearSegmentedColormap.from_list('hap_cmap', [ref_colour, alt_colour])
-
+    if co_preds is not None:
+        if co_preds.ploidy_type == 'haploid':
+            cmap = LinearSegmentedColormap.from_list('haploid_cmap', [ref_colour, alt_colour])
+            norm = Normalize(0, 1)
+        elif co_preds.ploidy_type == 'diploid_bc1':
+            cmap = LinearSegmentedColormap.from_list('bc1_cmap', [ref_colour, alt_colour])
+            states = co_preds.metadata.get('rhmm_params', {}).get('states', None)
+            if states is None:
+                norm = Normalize(0, 1)
+            else:
+                states.sort()
+                norm = Normalize(0, 0.5) if states[0][0] == states[0][1] == 0 else Normalize(0.5, 1)
+        else:
+            cmap = LinearSegmentedColormap.from_list('f2_cmap', [ref_colour, '#999999', alt_colour])
+            norm = Normalize(0, 1)
     if show_gt:
         try:
             gt = co_markers.metadata['ground_truth'][cb]
@@ -353,7 +366,7 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4), ch
             gt = None
 
     if max_yheight == 'auto':
-        m = np.concatenate([co_markers[cb, chrom].ravel() for chrom in co_markers.chrom_sizes])
+        m = np.concatenate(list(co_markers[cb].values()))
         max_yheight = np.percentile(m, 99.5)
     ylim_offset = max_yheight * 0.05
 
@@ -376,12 +389,14 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4), ch
             hp = co_preds[cb, chrom]
             if show_mesh_prob:
                 _add_co_prob_colormesh(
-                    ax, hp, co_markers.chrom_sizes[chrom], co_markers.bin_size, ylims, cmap
+                    ax, hp, co_markers.chrom_sizes[chrom], co_markers.bin_size, ylims, cmap, norm
                 )
             if annotate_co_number:
                 p_co = np.abs(np.diff(hp))
                 p_co = np.where(p_co > nco_min_prob_change, p_co, 0)
                 n_co = p_co.sum()
+                if co_preds.ploidy_type.startswith('diploid'):
+                    n_co *= 2
                 ax.annotate(text=f'{n_co.sum():.2f} COs', xy=(0.05, 0.05), xycoords='axes fraction')
         if show_gt:
             _add_gt_vlines(
@@ -560,7 +575,19 @@ def plot_allele_ratio(co_preds,
             axes[-1].plot([], [], color=colour, label=geno)
             axes[-1].legend()
     axes[0].set_ylabel('Allele ratio')
-    axes[0].set_ylim(0, 1)
+
+    if co_preds.ploidy_type == "diploid_bc1":
+        rhmm_params = co_preds.metadata.get('rhmm_params', {})
+        states = rhmm_params.get('states', None)
+        if states is None:
+            ylim = (0, 1)
+        else:
+            states.sort()
+            ylim = (0, 0.5) if states[0][0] == states[0][1] == 0 else (0.5, 1)
+    else:
+        ylim = (0, 1)
+
+    axes[0].set_ylim(*ylim)
 
     plt.tight_layout()
     return fig, axes

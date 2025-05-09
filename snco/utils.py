@@ -1,52 +1,12 @@
 import logging
 from collections import Counter
-
 import numpy as np
 
-from .barcodes import CellBarcodeWhitelist
-from .records import MarkerRecords, PredictionRecords
+from snco.load.barcodes import CellBarcodeWhitelist
+from snco.records import MarkerRecords, PredictionRecords
 
 
 log = logging.getLogger('snco')
-
-
-def read_cb_whitelist(barcode_fn, validate_barcodes=True,
-                      cb_correction_method='exact',
-                      allow_ns=False, allow_homopolymers=False):
-    """
-    Read a text file of cell barcodes and return them as a list.
-
-    In a multi-column file, the barcode must be in the first column.
-    
-    Parameters
-    ----------
-    barcode_fn : str
-        Path to the text file containing cell barcodes.
-    validate_barcodes : bool, optional
-        Whether to validate the barcodes. The default is True.
-    cb_correction_method : str, optional
-        Method to correct barcodes, can be 'exact' or another method. The default is 'exact'.
-    allow_ns : bool, optional
-        Whether to allow 'N' bases in barcodes. The default is False.
-    allow_homopolymers : bool, optional
-        Whether to allow homopolymeric sequences in barcodes. The default is False.
-
-    Returns
-    -------
-    CellBarcodeWhitelist
-        A `CellBarcodeWhitelist` object containing the read barcodes and their filtering options.
-    """
-    if barcode_fn is not None:
-        with open(barcode_fn) as f:
-            cb_whitelist = [cb.strip().split('\t')[0] for cb in f.readlines()]
-        log.info(f'Read {len(cb_whitelist)} cell barcodes from cb whitelist file {barcode_fn}')
-    else:
-        cb_whitelist = None
-    return CellBarcodeWhitelist(cb_whitelist,
-                                validate_barcodes,
-                                cb_correction_method,
-                                allow_ns=allow_ns,
-                                allow_homopolymers=allow_homopolymers)
 
 
 def load_json(json_fn, cb_whitelist_fn, bin_size, data_type='markers', subset=None):
@@ -110,6 +70,20 @@ def load_json(json_fn, cb_whitelist_fn, bin_size, data_type='markers', subset=No
     return data
 
 
+def validate_ploidy(data, ploidy_type):
+    if ploidy_type is None:
+        if data.ploidy_type is not None:
+            ploidy_type = data.ploidy_type
+        else:
+            # use haploid as fallback default
+            ploidy_type = 'haploid'
+    elif data.ploidy_type != ploidy_type:
+        log.warn(f'Recorded ploidy type of data is "{data.ploidy_type}", but specified '
+                 f'ploidy is "{ploidy_type}". This may not be intended.')
+    data.ploidy_type = ploidy_type
+    return ploidy_type
+
+
 def spawn_child_rngs(rng):
     """
     Spawn a series of random number generators (RNGs) based on a given parent RNG.
@@ -130,21 +104,3 @@ def spawn_child_rngs(rng):
     """
     while True:
         yield np.random.default_rng(rng.spawn(1)[0])
-
-
-def genotyping_results_formatter(genotypes):
-    """
-    Format the genotyping results into a human-readable string.
-    """
-    geno_counts = Counter(
-        [':'.join(sorted(cb_g)) for cb_g in genotypes.values()]
-    )
-    fmt = 'Genotyping results:\n'
-    ljust_size = max([len(g) for g in geno_counts.keys()]) + 5
-    ljust_size = max(ljust_size, 12)
-    fmt += f'   Genotype'.ljust(ljust_size)
-    fmt += 'Num. barcodes\n'
-    for geno, count in geno_counts.most_common():
-        fmt += f'   {geno}'.ljust(ljust_size)
-        fmt += f'{count}\n'
-    return fmt

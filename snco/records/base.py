@@ -133,7 +133,7 @@ class NestedData:
 
     def __getitem__(self, index):
         """
-        Advanced indexing into a metadict object
+        Advanced indexing into a nested dict
 
         Parameters
         ----------
@@ -541,7 +541,9 @@ class NestedData:
             for val in obj:
                 json_serialisable.append(cls._json_serialise_data(val, precision))
         elif isinstance(obj, (float, np.floating)):
-            json_serialisable = round(float(obj), precision)
+            json_serialisable = float(obj)
+            if precision is not None:
+                json_serialisable = round(json_serialisable, precision)
         elif isinstance(obj, np.integer):
             json_serialisable = int(obj)
         elif isinstance(obj, (str, int, bool)) or obj is None:
@@ -581,7 +583,7 @@ class NestedData:
                 for dt in dtype:
                     try:
                         return dt(obj)
-                    except ValueError:
+                    except (ValueError, TypeError):
                         continue
                 else:
                     raise ValueError(f'Could not convert object {obj} with dtypes {dtype_converters}')

@@ -2,7 +2,7 @@ import numpy as np
 from scipy.ndimage import convolve1d
 
 from .records import NestedDataArray
-from .opts import DEFAULT_RANDOM_SEED
+from .defaults import DEFAULT_RANDOM_SEED
 
 
 DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
@@ -154,6 +154,8 @@ def recombination_landscape(co_preds,
             chrom_co_probs = np.where(
                 chrom_co_probs >= min_prob, chrom_co_probs, 0
             )
+            if co_preds.ploidy_type.startswith('diploid'):
+                chrom_co_probs *= 2
             # filter gradients where there are no markers
             if denominators is not None:
                 chrom_denom = denominators[geno, chrom]

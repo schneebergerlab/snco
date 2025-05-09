@@ -206,8 +206,10 @@ class PredictionRecordsWrapper(PredictionRecords, RecordsAPIMixin):
             for chrom in self.chrom_sizes:
                 hp = self[cb, chrom]
                 p_co = np.abs(np.diff(hp))
-                p_co = np.where(p_co < 5e3, p_co, 0)
+                p_co = np.where(p_co < 5e-3, 0, p_co)
                 n_co = p_co.sum()
+                if self.ploidy_type.startswith('diploid'):
+                    n_co *= 2
                 cb_info.append(f'{chrom}: {n_co:.2f}')
             cb_info = ', '.join(cb_info)
             rows.append(f"<tr><td>{cb}</td><td>{cb_info}</td></tr>")
