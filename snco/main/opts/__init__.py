@@ -3,4 +3,3 @@ from . import (
     pred_opts, plot_opts, segdist_opts, util_opts
 )
 from .snco_opts import snco_opts
-from .sneqtl_opts import sneqtl_opts

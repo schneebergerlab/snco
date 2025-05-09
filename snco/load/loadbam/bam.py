@@ -4,6 +4,7 @@ import numpy as np
 import pysam
 
 from .haplotypes import MultiHaplotypeValidator
+from .utils import get_ha_samples
 from ..counts import IntervalUMICounts
 
 
@@ -145,7 +146,10 @@ class BAMHaplotypeIntervalReader:
         bin_start = self.bin_size * bin_idx
         bin_end = bin_start + self.bin_size - 1
 
-        interval_counts = IntervalUMICounts(chrom, bin_idx, self.umi_collapse_method, self.hap_tag_type)
+        interval_counts = IntervalUMICounts(
+            chrom, bin_idx, self.umi_collapse_method,
+            self.hap_tag_type, self.haplotypes,
+        )
 
         for aln in self.bam.fetch(chrom, bin_start, bin_end):
 

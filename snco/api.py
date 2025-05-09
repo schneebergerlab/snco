@@ -1,7 +1,7 @@
 import numpy as np
 
-from .records import MarkerRecords, PredictionRecords
-from .plot import single_cell_markerplot, plot_recombination_landscape, plot_allele_ratio
+from snco.records import MarkerRecords, PredictionRecords
+from snco.plot import single_cell_markerplot, plot_recombination_landscape, plot_allele_ratio
 
 
 class RecordsAPIMixin:

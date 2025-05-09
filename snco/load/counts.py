@@ -90,6 +90,8 @@ class IntervalUMICounts:
         The UMI collapse method used ('directional', 'exact' or None).
     hap_tag_type : str
         The haplotype tag type used ('star_diploid', 'multi_haplotype').
+    haplotype_validator : snco.load.loadbam.haplotypes.HaplotypeValidator or None
+        class used to validate haplotypes of counts
 
     Methods
     -------
@@ -100,6 +102,7 @@ class IntervalUMICounts:
     bin_idx: int
     umi_collapse_method: str
     hap_tag_type: str
+    haplotype_validator: None
 
     def __post_init__(self):
         self.has_umi = self.umi_collapse_method is not None

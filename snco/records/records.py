@@ -594,8 +594,8 @@ class BaseRecords(object):
             raise ValueError(f'json file does not match signature for {cls.__qualname__}')
         new_instance = cls(obj['chrom_sizes'],
                            obj['bin_size'],
-                           seq_type=obj['sequencing_data_type'],
-                           ploidy_type=obj['ploidy_type'],
+                           seq_type=obj.get('sequencing_data_type', 'other'),
+                           ploidy_type=obj.get('ploidy_type', 'haploid'),
                            metadata=obj['metadata'],
                            frozen=frozen)
         new_instance._cmd = obj['cmd'] 
