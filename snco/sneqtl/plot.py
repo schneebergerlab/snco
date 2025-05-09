@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import Normalize, LinearSegmentedColormap
 import seaborn as sns
 
-from ..plot import chrom_subplots, chrom2d_subplots
+from snco.plot import chrom_subplots, chrom2d_subplots
 
 DEFAULT_PALETTE = sns.color_palette(
     ['#0072b2', '#d55e00', '#009e73', '#f0e442', '#cc79a7', '#56b4e9', '#e69f00']

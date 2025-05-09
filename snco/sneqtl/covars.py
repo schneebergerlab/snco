@@ -8,7 +8,7 @@ from sklearn.decomposition import PCA
 from sklearn.mixture import GaussianMixture
 from sklearn.metrics import silhouette_score
 
-from ..opts import DEFAULT_RANDOM_SEED
+from snco.defaults import DEFAULT_RANDOM_SEED
 
 log = logging.getLogger('snco')
 

@@ -11,10 +11,10 @@ from scipy import stats
 import statsmodels.api as sm
 import joblib
 
-from .. import PredictionRecords
-from ..opts import DEFAULT_RANDOM_SEED
-from ..logger import progress_bar
 from . import covars, utils, peaks
+from snco.records import PredictionRecords
+from snco.defaults import DEFAULT_RANDOM_SEED
+from snco.cli.logger import progress_bar
 
 log = logging.getLogger('snco')
 
