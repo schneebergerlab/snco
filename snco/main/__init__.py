@@ -1,1 +1,1 @@
-from .commands import main, sneqtl
+from .commands import main

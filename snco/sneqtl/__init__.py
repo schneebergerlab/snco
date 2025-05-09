@@ -1,1 +1,0 @@
-from .eqtl import SNeQTLAnalysis

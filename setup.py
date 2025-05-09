@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='snco',
-    version='0.3.1',
+    version='0.4',
     description=(
         'crossover mapping for single cell/nucleus sequencing data'
     ),
@@ -10,15 +10,13 @@ setup(
     entry_points={
         'console_scripts': [
             'snco = snco.main:main',
-            'sneqtl = snco.main:sneqtl'
         ]
     },
     packages=[
         'snco',
     ],
     scripts=['scripts/syri_vcf_to_stardiploid.py',
-             'scripts/collapse_ha_specific_alns.py',
-             'scripts/single_cell_gene_counts.py'],
+             'scripts/collapse_ha_specific_alns.py'],
     install_requires=[
         'numpy',
         'scipy',
@@ -29,11 +27,9 @@ setup(
         'joblib',
         'pysam',
         'matplotlib',
-        'scikit-learn',
-        'seaborn', # only for sneqtl plotting, may remove in future
     ],
     extras_require={
         'test': ['pytest']
     },
-    tests_require=['pytest'],  # optional/legacy
+    tests_require=['pytest'],
 )
