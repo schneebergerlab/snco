@@ -75,7 +75,7 @@ def median_absolute_deviation(arr):
 
 
 def create_resequencing_haplotype_imbalance_mask(co_markers, expected_ratio='auto',
-                                                 nmad_mask=5, correction=1e-2,
+                                                 nmad_mask=3, correction=1e-2,
                                                  apply_per_geno=True):
     """
     Special haplotype imbalance method for resequencing data (not scRNA)
@@ -104,16 +104,22 @@ def create_resequencing_haplotype_imbalance_mask(co_markers, expected_ratio='aut
     n_masked_all_genos = []
     for geno, geno_co_markers in co_markers.groupby(by='genotype' if apply_per_geno else 'none'):
         n_masked = 0
+        chrom_allele_ratios = {}
+        chrom_marker_masks = {}
         for chrom in geno_co_markers.chrom_sizes:
             m = geno_co_markers[:, chrom].stack_values()
             m_norm = (m / m.sum(axis=(1, 2))[:, np.newaxis, np.newaxis]).sum(axis=0)
             tot = m_norm.sum(axis=1)
-            marker_mask = tot > 0
-            allele_ratio = (m_norm[:, 0] + correction) / (tot + correction)
-            if expected_ratio == 'auto':
-                expected_ratio = np.median(allele_ratio[marker_mask])
-            mad = median_absolute_deviation(allele_ratio[marker_mask])
-            allele_ratio[tot == 0] = expected_ratio
+            chrom_marker_masks[chrom] = tot > 0
+            chrom_allele_ratios[chrom] = (m_norm[:, 0] + correction) / (tot + correction)
+
+        ar = np.concatenate([ar[chrom_marker_masks[chrom]] for chrom, ar in chrom_allele_ratios.items()])
+        if expected_ratio == 'auto':
+            expected_ratio = np.median(ar)
+        mad = median_absolute_deviation(ar)
+
+        for chrom, allele_ratio in chrom_allele_ratios.items():
+            allele_ratio[~chrom_marker_masks[chrom]] = expected_ratio
             mask = binary_dilation(np.logical_or(
                 allele_ratio < (expected_ratio - mad * nmad_mask),
                 allele_ratio > (expected_ratio + mad * nmad_mask),

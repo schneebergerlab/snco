@@ -188,7 +188,6 @@ class IntervalUMICounts:
 
         collapsed = IntervalMarkerCounts(self.chrom, self.bin_idx)
         if self.umi_collapse_method is None:
-            print(self._counts)
             for cb in self:
                 # No UMIs, so counts are directly: self._counts[cb][None][hap]
                 hap_counts = self._counts[cb].get(None, {})

@@ -12,6 +12,20 @@ from snco.defaults import DEFAULT_EXCLUDE_CONTIGS
 log = logging.getLogger('snco')
 
 
+def length_normalised_alignment_score(aln):
+    read_length = aln.query_length
+    if not read_length:
+        read_length = aln.infer_query_length()
+    if aln.is_paired:
+        read_length *= 2
+    try:
+        alignment_score = aln.get_tag('AS')
+    except KeyError:
+        log.warn('Some reads do not have an AS tag and cannot be filtered by alignment score')
+        return 1.0
+    return alignment_score / read_length
+        
+
 class BAMHaplotypeIntervalReader:
     """
     File wrapper class for reading aggregated bin counts for each cell barcode/haplotype.
@@ -57,6 +71,8 @@ class BAMHaplotypeIntervalReader:
                  hap_tag_type='star_diploid',
                  allowed_haplotypes=None,
                  cb_whitelist=None,
+                 min_alignment_score=None,
+                 min_mapq=None,
                  umi_collapse_method='directional',
                  exclude_contigs=None):
         """
@@ -97,6 +113,17 @@ class BAMHaplotypeIntervalReader:
         self.hap_tag_type = hap_tag_type
         self.haplotypes = MultiHaplotypeValidator(allowed_haplotypes)
         self.cb_whitelist = cb_whitelist
+
+        if min_alignment_score is not None:
+            self.alnscore_filter = lambda aln: length_normalised_alignment_score(aln) < min_alignment_score
+        else:
+            self.alnscore_filter = lambda aln: False
+
+        if min_mapq is not None:
+            self.mapq_filter = lambda aln: aln.mapq < min_mapq
+        else:
+            self.mapq_filter = lambda aln: False
+
         self.umi_collapse_method = umi_collapse_method
         if exclude_contigs is None:
             exclude_contigs = DEFAULT_EXCLUDE_CONTIGS
@@ -162,6 +189,10 @@ class BAMHaplotypeIntervalReader:
             if aln.is_paired:
                 if aln.is_reverse or not aln.is_proper_pair:
                     continue
+
+            # remove alignments with low AS or MAPQ
+            if self.alnscore_filter(aln) or self.mapq_filter(aln):
+                continue
 
             try:
                 hap = aln.get_tag(self.hap_tag)

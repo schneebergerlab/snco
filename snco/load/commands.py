@@ -41,6 +41,7 @@ def run_loadbam(bam_fn, output_json_fn, *,
                 cb_tag='CB', cb_correction_method='exact',
                 umi_tag='UB', umi_collapse_method='directional',
                 hap_tag='ha', hap_tag_type='star_diploid',
+                min_alignment_score=0.95, min_mapq=None,
                 run_genotype=False, genotype_crossing_combinations=None,
                 genotype_em_max_iter=1000, genotype_em_min_delta=1e-3,
                 genotype_em_bootstraps=25, validate_barcodes=True,
@@ -132,6 +133,7 @@ def run_loadbam(bam_fn, output_json_fn, *,
             'rng': rng
         },
         cb_whitelist=cb_whitelist,
+        min_alignment_score=min_alignment_score,
         exclude_contigs=exclude_contigs,
     )
     co_markers = _post_load_filtering(

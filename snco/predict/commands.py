@@ -96,7 +96,10 @@ def run_predict(marker_json_fn, output_json_fn, *,
         normalise_coverage = co_markers.seq_type == "wgs"
         log.info(f'Set normalise_coverage to {normalise_coverage} to match seq_type {co_markers.seq_type}')
     if normalise_coverage:
-        co_markers = normalise_marker_counts(co_markers)
+        co_markers = normalise_marker_counts(
+            co_markers,
+            normalise_haplotypes=False if ploidy_type == 'diploid_bc1' else True
+        )
 
     rhmm = train_rhmm(
         co_markers,

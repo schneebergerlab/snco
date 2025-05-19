@@ -73,6 +73,16 @@ snco_opts.option(
 
 
 snco_opts.option(
+    '--min-alignment-score',
+    subcommands=['loadbam', 'bam2pred'],
+    required=False,
+    type=click.FloatRange(0, 1),
+    default=0.95,
+    help='only reads with a length normalised alignment score greater than this value are used'
+)
+
+
+snco_opts.option(
     '--genotype/--no-genotype', 'run_genotype',
     subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred'],
     required=False,
