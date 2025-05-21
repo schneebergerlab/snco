@@ -150,16 +150,6 @@ def mean_haplotype(cb_co_preds):
     return np.concatenate(list(cb_co_preds.values())).mean()
 
 
-def geno_to_string(genotype):
-    '''
-    convert a genotype frozenset to a string
-    '''
-    if genotype is None:
-        return None
-    else:
-        return ':'.join(sorted(genotype))
-
-
 def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=2.5e-3, max_phred_score=10):
     """
     Calculates various quality metrics for each cell barcode's marker and prediction data.
@@ -194,7 +184,7 @@ def calculate_quality_metrics(co_markers, co_preds, nco_min_prob=2.5e-3, max_phr
         cb_co_preds = co_preds[cb]
         qual_metrics.append([
             cb,
-            geno_to_string(genotypes.get(cb, None)),
+            genotypes.get(cb, None),
             genotype_probs.get(cb, np.nan),
             np.log10(genotype_nmarkers.get(cb, np.nan)),
             total_markers(cb_co_markers),

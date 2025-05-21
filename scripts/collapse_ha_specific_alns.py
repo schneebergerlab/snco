@@ -25,26 +25,41 @@ def aln_collapser(bam_bundle_iter, pos_tol=10):
     for _, bundle in bam_bundle_iter:
         high_score = 0
         representative_aln = None
+        representative_mate = None
+        is_paired = False
         ha_flag = []
         hs_chroms = []
         hs_positions = []
         for aln in bundle:
             if aln.is_unmapped:
                 continue
+            if aln.is_paired and not aln.is_proper_pair:
+                continue
             if aln.get_tag('NH') > 1:
                 # skip bundles with multimappers
                 break
             score = aln.get_tag('AS')
             if score > high_score:
-                representative_aln = aln
+                if aln.is_read1:
+                    representative_aln = aln
+                else:
+                    representative_mate = aln
+                    is_paired = True
                 ha_flag = [aln.get_tag('RG'),]
                 high_score = score
                 hs_chroms = [aln.reference_name, ]
                 hs_positions = [aln.reference_start, ]
             elif score == high_score:
-                ha_flag.append(aln.get_tag('RG'))
-                hs_chroms.append(aln.reference_name)
-                hs_positions.append(aln.reference_start)
+                if aln.is_read1:
+                    if representative_aln is None:
+                        representative_aln = aln
+                    ha_flag.append(aln.get_tag('RG'))
+                    hs_chroms.append(aln.reference_name)
+                    hs_positions.append(aln.reference_start)
+                else:
+                    if representative_mate is None:
+                        representative_mate = aln
+                    is_paired = True
             else:
                 continue
         else:
@@ -54,6 +69,10 @@ def aln_collapser(bam_bundle_iter, pos_tol=10):
                     representative_aln.set_tag('ha', ','.join(ha_flag))
                     representative_aln.set_tag('RG', None)
                     yield representative_aln
+                    if is_paired:
+                        representative_mate.set_tag('ha', ','.join(ha_flag))
+                        representative_mate.set_tag('RG', None)
+                        yield representative_mate
 
 
 @contextmanager

@@ -11,7 +11,6 @@ from snco.defaults import DEFAULT_RANDOM_SEED
 
 DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 
-
 def update_probs(probs, sample_markers):
     """
     Update genotype probabilities based on observed marker counts.
@@ -47,7 +46,7 @@ def update_probs(probs, sample_markers):
     return {geno: marker_agg[geno] / agg_sum for geno in probs}
 
 
-def random_resample_geno_markers(cb_geno_markers, n_resamples, rng):
+def random_resample_geno_markers(cb_geno_markers, n_resamples, rng, max_sample_size=1000):
     """
     Randomly resample genotype markers with replacement.
 
@@ -68,10 +67,10 @@ def random_resample_geno_markers(cb_geno_markers, n_resamples, rng):
     """
     genos = list(cb_geno_markers.keys())
     counts = np.array(list(cb_geno_markers.values()))
-    tot = counts.sum()
+    sample_size = min(counts.sum(), max_sample_size)
     p = counts / tot
     for _ in range(n_resamples):
-        idx = rng.choice(np.arange(len(p)), size=tot, replace=True, p=p)
+        idx = rng.choice(np.arange(len(p)), size=sample_size, replace=True, p=p)
         yield Counter(genos[i] for i in idx)
 
 
@@ -115,7 +114,7 @@ def assign_genotype_with_em(cb, cb_geno_markers, *, crossing_combinations,
     prob_bootstraps = defaultdict(list)
     for marker_sample in random_resample_geno_markers(cb_geno_markers, n_bootstraps, rng):
         probs = init_probs
-        for _ in range(max_iter):
+        for i in range(max_iter):
             prev_probs = probs
             probs = update_probs(probs, marker_sample)
             delta = sum(abs(prev_probs[g] - probs[g]) for g in crossing_combinations)
