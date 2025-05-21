@@ -1,14 +1,18 @@
 import logging
 from snco.load.loadbam.utils import get_ha_samples
 
+
+def log_parameters(log_name):
+    log = logging.getLogger(log_name)
+    def _log_parameters(kwargs):
+        '''decorator which logs the final values of all parameters used to execute snco'''
+        for param, value in kwargs.items():
+            log.debug(f'set parameter {param} to {value}')
+        return kwargs
+    return _log_parameters
+
+
 log = logging.getLogger('snco')
-
-
-def log_parameters(kwargs):
-    '''decorator which logs the final values of all parameters used to execute snco'''
-    for param, value in kwargs.items():
-        log.debug(f'set parameter {param} to {value}')
-    return kwargs
 
 
 def validate_loadbam_input(kwargs):

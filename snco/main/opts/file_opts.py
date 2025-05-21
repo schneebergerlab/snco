@@ -5,6 +5,7 @@ from .snco_opts import snco_opts
 _input_file_type = click.Path(exists=True, file_okay=True, dir_okay=False)
 _input_dir_type = click.Path(exists=True, file_okay=False, dir_okay=True)
 _output_file_type = click.Path(exists=False)
+_output_dir_type = click.Path(exists=False, file_okay=False, dir_okay=True)
 
 
 snco_opts.argument(

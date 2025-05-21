@@ -54,6 +54,6 @@ snco_opts.option(
         case_sensitive=False
     ),
     default='info',
-    callback=click_logger,
+    callback=click_logger('snco'),
     help='Logging level, either debug, info, warning, error or critical'
 )

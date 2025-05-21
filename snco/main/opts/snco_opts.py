@@ -13,7 +13,7 @@ snco_opts = OptionRegistry(
                  'sim', 'concat', 'clean', 'predict',
                  'doublet', 'stats', 'plot', 'segdist']
 )
-snco_opts.register_callback(log_parameters)
+snco_opts.register_callback(log_parameters('snco'))
 snco_opts.register_callback(
     validate_loadbam_input,
     subcommands=['loadbam', 'bam2pred'],

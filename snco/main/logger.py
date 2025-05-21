@@ -1,3 +1,4 @@
+import os
 import sys
 import logging
 from datetime import datetime
@@ -16,12 +17,17 @@ LOG_FORMATTING = {
 }
 
 
-def format_log_msg(lvl, msg):
-    dt = datetime.now().strftime("%Y%m%d:%H:%M:%S")
-    fmt = LOG_FORMATTING[lvl]
-    label = fmt['label'].rjust(5)
-    prefix = click.style(f'[{dt}] SNCO {label}:', fg=fmt['fg'])
-    return f'{prefix} {msg}'
+def log_msg_formatter(tool_name=None):
+    if tool_name is None:
+        tool_name = os.path.split(sys.argv[0])[1]
+    tool_name = tool_name.upper()
+    def _format_log_msg(lvl, msg):
+        dt = datetime.now().strftime("%Y%m%d:%H:%M:%S")
+        fmt = LOG_FORMATTING[lvl]
+        label = fmt['label'].rjust(5)
+        prefix = click.style(f'[{dt}] {tool_name} {label}:', fg=fmt['fg'])
+        return f'{prefix} {msg}'
+    return _format_log_msg
 
 
 class LogFilter(logging.Filter):
@@ -41,11 +47,15 @@ class LogFilter(logging.Filter):
 
 class LogFormatter(logging.Formatter):
 
+    def __init__(self, tool_name):
+        super().__init__()
+        self.format_log_msg = log_msg_formatter(tool_name)
+
     def format(self, record):
         if not record.exc_info:
             lvl = record.levelname
             msg = record.getMessage()
-            msg = '\n'.join(format_log_msg(lvl, line) for line in msg.splitlines())
+            msg = '\n'.join(self.format_log_msg(lvl, line) for line in msg.splitlines())
             return msg
         return logging.Formatter.format(self, record)
 
@@ -63,19 +73,21 @@ class ClickLogHandler(logging.Handler):
             self.handleError(record)
 
 
-def click_logger(ctx, params, value):
-    log = logging.getLogger('snco')
-    log.setLevel(value)
-    log_filter = LogFilter(memory=10)
-    log.addFilter(log_filter)
-    log_handler = ClickLogHandler()
-    log_handler.formatter = LogFormatter()
-    log.handlers = [log_handler]
-    log.propagate = False
-    return log
+def click_logger(tool_name):
+    def _click_logger(ctx, params, value):
+        log = logging.getLogger(tool_name)
+        log.setLevel(value)
+        log_filter = LogFilter(memory=10)
+        log.addFilter(log_filter)
+        log_handler = ClickLogHandler()
+        log_handler.formatter = LogFormatter(tool_name)
+        log.handlers = [log_handler]
+        log.propagate = False
+        return log
+    return _click_logger
 
 
 def progress_bar(iterable, label=None, **kwargs):
     if label is not None:
-        label = format_log_msg('INFO', label)
+        label = log_msg_formatter()('INFO', label)
     return click.progressbar(iterable, label=label, **kwargs)
