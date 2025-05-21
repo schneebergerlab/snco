@@ -1,12 +1,7 @@
 import sys
 import os
-from operator import attrgetter
-import subprocess as sp
-import tempfile
+from statistics import median
 from contextlib import contextmanager
-import itertools as it
-
-import numpy as np
 
 import pysam
 import click
@@ -16,13 +11,27 @@ def test_close_alignment_positions(chroms, positions, pos_tol=10):
     same_chrom = all([c == chroms[0] for c in chroms])
     if not same_chrom:
         return False
-    med_pos = np.median(positions)
+    med_pos = median(positions)
     same_pos = all([abs(pos - med_pos) <= pos_tol for pos in positions])
     return same_pos
 
 
+def group_by_queryname(bam_iter):
+    prev_qname = None
+    group = []
+    for aln in bam_iter:
+        qname = aln.query_name
+        if qname != prev_qname and group:
+            yield group
+            group = []
+        group.append(aln)
+        prev_qname = qname
+    if group:
+        yield group
+
+
 def aln_collapser(bam_bundle_iter, pos_tol=10):
-    for _, bundle in bam_bundle_iter:
+    for bundle in bam_bundle_iter:
         high_score = 0
         representative_aln = None
         representative_mate = None
@@ -64,13 +73,14 @@ def aln_collapser(bam_bundle_iter, pos_tol=10):
                 continue
         else:
             if representative_aln is not None:
+                ha_flag.sort()
+                ha_tag = ','.join(ha_flag)
                 if test_close_alignment_positions(hs_chroms, hs_positions, pos_tol):
-                    ha_flag.sort()
-                    representative_aln.set_tag('ha', ','.join(ha_flag))
+                    representative_aln.set_tag('ha', ha_tag)
                     representative_aln.set_tag('RG', None)
                     yield representative_aln
                     if is_paired:
-                        representative_mate.set_tag('ha', ','.join(ha_flag))
+                        representative_mate.set_tag('ha', ha_tag)
                         representative_mate.set_tag('RG', None)
                         yield representative_mate
 
@@ -94,10 +104,10 @@ def collapse_bam_alignments(bam_fn, position_tolerance=10):
         }
     )
 
-    bam_iter = aln_collapser(it.groupby(
-        bam.fetch(until_eof=True),
-        key=attrgetter('query_name')
-    ), position_tolerance)
+    bam_iter = aln_collapser(
+        group_by_queryname(bam.fetch(until_eof=True)),
+        position_tolerance
+    )
 
     try:
         yield header, bam_iter

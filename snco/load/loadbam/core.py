@@ -113,7 +113,7 @@ def bam_to_co_markers(bam_fn, processes=1, seq_type=None, ploidy_type='haploid',
                     'If haplotyping is switched off and crossing_combinations are not provided, the bam file '
                     'can only contain two haplotypes'
                 )
-        genotypes_dummy = defaultdict(lambda: {'genotype': geno})
+        genotypes_dummy = defaultdict(lambda: geno)
         inv_counts = resolve_genotype_counts_to_co_markers(inv_counts, genotypes_dummy)
     for ic in inv_counts:
         co_markers.update(ic)
