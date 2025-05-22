@@ -67,7 +67,8 @@ def random_resample_geno_markers(cb_geno_markers, n_resamples, rng, max_sample_s
     """
     genos = list(cb_geno_markers.keys())
     counts = np.array(list(cb_geno_markers.values()))
-    sample_size = min(counts.sum(), max_sample_size)
+    tot = counts.sum()
+    sample_size = min(tot, max_sample_size)
     p = counts / tot
     for _ in range(n_resamples):
         idx = rng.choice(np.arange(len(p)), size=sample_size, replace=True, p=p)
