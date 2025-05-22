@@ -3,8 +3,8 @@ import numpy as np
 
 from .utils import (
     validate_data, deep_operator,
-    array_encoder_full, array_encoder_sparse,
-    array_decoder_full, array_decoder_sparse,
+    array_encoder_full, array_encoder_rle, array_encoder_sparse,
+    array_decoder_full, array_decoder_rle, array_decoder_sparse,
 )
 
 DTYPES = {
@@ -706,6 +706,8 @@ class NestedDataArray(NestedData):
         elif isinstance(obj, np.ndarray):
             if encode_method == 'full':
                 json_serialisable = array_encoder_full(obj, precision)
+            elif encode_method == 'rle':
+                json_serialisable = array_encoder_rle(obj, precision)
             elif encode_method == 'sparse':
                 json_serialisable = array_encoder_sparse(obj, precision)
             else:
@@ -720,6 +722,8 @@ class NestedDataArray(NestedData):
             raise ValueError('object is not a json representation of a numpy.ndarray')
         if encode_method == 'full':
             decoder = array_decoder_full
+        elif encode_method == 'rle':
+            decoder = array_decoder_rle
         elif encode_method == 'sparse':
             decoder = array_decoder_sparse
         else:

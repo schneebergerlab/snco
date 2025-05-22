@@ -34,11 +34,47 @@ def validate_data(obj, expected_depth, expected_dtype):
     _validate_recursive(obj, 0)
 
 
+def quantise(arr, precision):
+    levels = 10 ** precision + 1
+    q = np.clip((arr * (levels - 1)).round(), 0, levels - 1)
+    return q.astype(np.uint16), levels
+
+
+def dequantise(q, levels, dtype):
+    return q.astype(dtype) / (levels - 1)
+
+
+def run_length_encode(arr):
+    if len(arr) == 0:
+        return np.array([], dtype=arr.dtype), np.array([], dtype=np.uint32)
+    diffs = np.diff(arr)
+    change_indices = np.flatnonzero(diffs != 0) + 1
+    starts = np.concatenate(([0], change_indices))
+    ends = np.concatenate((change_indices, [len(arr)]))
+    values = arr[starts]
+    lengths = ends - starts
+    return values, lengths
+
+
+def run_length_decode(values, lengths):
+    return np.repeat(values, lengths)
+
+
 def array_encoder_full(arr, precision):
     return  {
         'shape': arr.shape,
         'dtype': arr.dtype.str,
         'data': [round(float(v), precision) for v in arr.ravel()]
+    }
+
+
+def array_encoder_rle(arr, precision):
+    quants, levels = quantise_probs(arr.ravel())
+    vals, lens = run_length_encode(quants)
+    return {
+        'shape': arr.shape,
+        'dtype': arr.dtype.str,
+        'data': (vals.tolist(), lens.tolist(), levels)
     }
 
 
@@ -53,11 +89,21 @@ def array_encoder_sparse(arr, precision):
         'data': (idx.tolist(), val)
     }
 
+
 def array_decoder_full(json_obj):
     return np.array(
         json_obj['data'],
         dtype=json_obj['dtype']
     ).reshape(json_obj['shape'])
+
+
+def array_decoder_rle(json_obj):
+    shape = json_obj['shape']
+    dtype = json_obj['dtype']
+    vals, lens, levels = json_obj['data']
+    quants = run_length_decode(vals, lens)
+    arr = dequantise(quants, levels, dtype).reshape(shape)
+    return arr
 
 
 def array_decoder_sparse(json_obj):

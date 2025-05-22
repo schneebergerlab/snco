@@ -299,6 +299,7 @@ class BaseRecords(object):
         else:
             s = self.copy()
         s._records.add_level_suffix(suffix, level='cb', inplace=True)
+        s._add_cb_suffix_metadata(suffix)
 
         if not inplace:
             return s
@@ -599,7 +600,9 @@ class BaseRecords(object):
                            metadata=obj['metadata'],
                            frozen=frozen)
         new_instance._cmd = obj['cmd'] 
-        new_instance._records = NestedDataArray.from_json(obj['records'], subset=subset)
+        new_instance._records = NestedDataArray.from_json(
+            obj['records'], subset=subset
+        )
         return new_instance
 
 
@@ -890,7 +893,7 @@ class PredictionRecords(BaseRecords):
             inplace=inplace
         )
 
-    def to_frame(self, cb_whitelist=None):
+    def to_frame(self, cb_whitelist=None, dtype=None):
         """
         Convert the `PredictionRecords` object to a pandas DataFrame.
 
@@ -898,6 +901,8 @@ class PredictionRecords(BaseRecords):
         ----------
         cb_whitelist : list or None, optional
             List of cell barcodes to filter.
+        dtype : type or None, optional
+            dtype to convert values to
 
         Returns
         -------
@@ -914,7 +919,12 @@ class PredictionRecords(BaseRecords):
         if cb_whitelist is None:
             cb_whitelist = self.barcodes
         for cb in cb_whitelist:
-            frame.append(np.concatenate([self._records[cb, chrom] for chrom in self.chrom_sizes]))
+            frame.append(
+                np.concatenate(
+                    [self._records[cb, chrom] for chrom in self.chrom_sizes],
+                    dtype=dtype
+                )
+            )
         return pd.DataFrame(frame, index=cb_whitelist, columns=columns)
 
     def get_haplotype(self, chrom, pos, cb_whitelist=None):
@@ -942,3 +952,6 @@ class PredictionRecords(BaseRecords):
         for cb in cb_whitelist:
             series.append(self._records[cb][chrom][idx])
         return pd.Series(series, index=cb_whitelist, name=f'{chrom}:{pos:d}')
+
+    def to_json(self, precision: int = 5):
+        return super().to_json(precision, encode_method='rle')

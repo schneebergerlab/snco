@@ -1,4 +1,4 @@
-from .records import BaseRecords
+from .records.records import BaseRecords
 from .utils import load_json
 
 
