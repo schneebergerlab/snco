@@ -69,7 +69,7 @@ def array_encoder_full(arr, precision):
 
 
 def array_encoder_rle(arr, precision):
-    quants, levels = quantise_probs(arr.ravel())
+    quants, levels = quantise(arr.ravel(), precision)
     vals, lens = run_length_encode(quants)
     return {
         'shape': arr.shape,
