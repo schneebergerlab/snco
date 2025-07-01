@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name='snco',
@@ -12,9 +12,7 @@ setup(
             'snco = snco.main:main',
         ]
     },
-    packages=[
-        'snco',
-    ],
+    packages=find_packages(),
     scripts=['scripts/syri_vcf_to_stardiploid.py',
              'scripts/collapse_ha_specific_alns.py'],
     install_requires=[
