@@ -11,7 +11,7 @@ The easiest way to install `snco` is using the `conda` yaml provided:
 ```
 git clone https://github.com/schneebergerlab/snco.git
 cd snco
-conda env create -f snco.yaml
+conda env create -f snco.yml
 ```
 
 alternatively, you can install it using pip:
