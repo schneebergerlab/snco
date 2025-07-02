@@ -50,7 +50,7 @@ def aln_collapser(bam_bundle_iter, pos_tol=10):
                 break
             score = aln.get_tag('AS')
             if score > high_score:
-                if aln.is_read1:
+                if not aln.is_paired or aln.is_read1:
                     representative_aln = aln
                 else:
                     representative_mate = aln
@@ -60,7 +60,7 @@ def aln_collapser(bam_bundle_iter, pos_tol=10):
                 hs_chroms = [aln.reference_name, ]
                 hs_positions = [aln.reference_start, ]
             elif score == high_score:
-                if aln.is_read1:
+                if not aln.is_paired or aln.is_read1:
                     if representative_aln is None:
                         representative_aln = aln
                     ha_flag.append(aln.get_tag('RG'))
