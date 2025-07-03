@@ -7,7 +7,7 @@ snco_opts.option(
     '--cb-correction-method',
     subcommands=['loadbam', 'bam2pred'],
     required=False,
-    type=click.Choice(['exact', '1mm', 'auto'], case_sensitive=False),
+    type=click.Choice(['exact', '1mm', 'none', 'auto'], case_sensitive=False),
     default='auto',
     help='method for correcting/matching cell barcodes to whitelist'
 )

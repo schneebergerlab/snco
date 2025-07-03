@@ -41,6 +41,11 @@ def validate_loadbam_input(kwargs):
         log.info('turning off UMI processing')
         kwargs['umi_tag'] = None
         kwargs['umi_collapse_method'] = None
+    if kwargs.get('cb_correction_method') == 'none':
+        log.info('turning off CB processing')
+        # use exact just without validation of barcodes (they no longer have to be sequences)
+        kwargs['cb_correction_method'] = 'exact'
+        kwargs['validate_barcodes'] = False
     if kwargs.get('cb_tag') == 'CB' and kwargs.get('cb_correction_method') == '1mm':
         log.warn("'--cb-tag' is set to 'CB', which usually indicates pre-corrected barcodes, but "
                  "'--cb-correction-method' is set to '1mm'. This may lead to overcorrection")
