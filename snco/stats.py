@@ -28,7 +28,7 @@ def total_markers(cb_co_markers):
     tot = 0
     for m in cb_co_markers.values():
         tot += m.sum(axis=None)
-    return np.log10(tot)
+    return np.log10(tot) if tot else 0
 
 
 def n_crossovers(cb_co_preds, min_co_prob=5e-3):
@@ -80,7 +80,11 @@ def accuracy_score(cb_co_markers, cb_co_preds, max_score=10):
         p = cb_co_preds[chrom]
         nom += (m[:, 0] * (1 - p)).sum() + (m[:, 1] * p).sum()
         denom += m.sum(axis=None)
-    return np.minimum(-np.log2(1 - (nom / denom)), max_score)
+    ratio = nom / denom if denom > 0 else 0
+    delta = 1 - ratio
+    if delta <= 2 ** -max_score:
+        return max_score
+    return -np.log2(delta)
 
 
 def uncertainty_score(cb_co_preds):
@@ -125,12 +129,14 @@ def coverage_score(cb_co_markers, max_score=10):
     tot = 0
     for m in cb_co_markers.values():
         idx, = np.nonzero(m.sum(axis=1))
-        try:
+        if idx.size > 0:
             cov += idx[-1] - idx[0] + 1
-        except IndexError:
-            cov += 0
         tot += len(m)
-    return np.minimum(-np.log2(1 - (cov / tot)), max_score)
+    ratio = cov / tot if tot > 0 else 0
+    delta = 1 - ratio
+    if delta <= 2 ** -max_score:
+        return max_score
+    return -np.log2(delta)
 
 
 def mean_haplotype(cb_co_preds):
