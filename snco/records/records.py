@@ -954,4 +954,4 @@ class PredictionRecords(BaseRecords):
         return pd.Series(series, index=cb_whitelist, name=f'{chrom}:{pos:d}')
 
     def to_json(self, precision: int = 5):
-        return super().to_json(precision, encode_method='rle')
+        return super().to_json(precision, encode_method='full')
