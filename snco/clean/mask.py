@@ -6,7 +6,7 @@ from ..records import MarkerRecords, NestedDataArray
 
 
 def create_single_cell_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0.75, min_cb=20,
-                                                apply_per_geno=True):
+                                                ploidy_type='haploid', apply_per_geno=True):
     """
     Create a mask for bins with high haplotype imbalance.
 
@@ -18,8 +18,11 @@ def create_single_cell_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0
         Maximum allowed haplotype ratio before masking.
     min_cb : int, default=20
         Minimum number of cell barcodes required per bin.
+    ploidy_type: str, default="haploid"
+        The ploidy type of the data - one of "haploid", "diploid_bc1" or "diploid"
     apply_per_geno : bool, default=True
         Mask separately per genotype.
+    
 
     Returns
     -------
@@ -46,6 +49,9 @@ def create_single_cell_haplotype_imbalance_mask(co_markers, max_imbalance_mask=0
             with np.errstate(invalid='ignore'):
                 bin_sum = m.sum(axis=1)
                 ratio = m[:, 0] / bin_sum
+            # map ratios to 0.5 for backcross data
+            if ploidy_type == "diploid_bc1":
+                ratio /= (2 / 3)
             np.nan_to_num(ratio, nan=0.5, copy=False)
             ratio_mask = (ratio > max_imbalance_mask) | (ratio < (1 - max_imbalance_mask))
             count_mask = tot_obs[chrom] >= min_cb
@@ -75,7 +81,7 @@ def median_absolute_deviation(arr):
 
 
 def create_resequencing_haplotype_imbalance_mask(co_markers, expected_ratio='auto',
-                                                 nmad_mask=3, correction=1e-2,
+                                                 nmad_mask=4, correction=1e-2,
                                                  apply_per_geno=True):
     """
     Special haplotype imbalance method for resequencing data (not scRNA)

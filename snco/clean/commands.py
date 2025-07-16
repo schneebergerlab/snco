@@ -115,11 +115,18 @@ def run_clean(marker_json_fn, output_json_fn, *,
         # mask any bins that still have extreme imbalance
         # (e.g. due to extreme allele-specific expression differences)
         if co_markers.seq_type != "wgs":
+            log.info(
+                f'Masking marker imbalances with single-cell method'
+            )
             mask, n_masked = create_single_cell_haplotype_imbalance_mask(
                 co_markers, max_marker_imbalance,
                 apply_per_geno=apply_per_geno,
+                ploidy_type=ploidy_type,
             )
         else:
+            log.info(
+                f'Masking marker imbalances with whole-genome resequencing method'
+            )
             # special masking method for wgs data which has much greater coverage
             mask, n_masked = create_resequencing_haplotype_imbalance_mask(
                 co_markers, apply_per_geno=apply_per_geno # maybe should expose params?
