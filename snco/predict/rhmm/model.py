@@ -250,7 +250,7 @@ class RigidHMM:
         np.ndarray
             2D array of predicted probabilities of alternative haplotype (hap 1), with shape (N, L).
         """
-        return self.predict_state_proba(X, batch_size) @ self._state_haplo
+        return np.clip(self.predict_state_proba(X, batch_size) @ self._state_haplo, 0, 1)
 
     def predict(self, X, batch_size=128):
         """
