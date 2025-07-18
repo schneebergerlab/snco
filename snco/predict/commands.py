@@ -26,7 +26,7 @@ def run_predict(marker_json_fn, output_json_fn, *,
                 cm_per_mb=4.5, model_lambdas=None, empty_fraction=None,
                 normalise_coverage=False, predict_doublets=True,
                 n_doublets=0.25, k_neighbours=0.25,
-                generate_stats=True, nco_min_prob_change=2.5e-3,
+                generate_stats=True, write_bed=True, nco_min_prob_change=2.5e-3,
                 output_precision=3, processes=1,
                 batch_size=1_000, device=DEFAULT_DEVICE,
                 rng=DEFAULT_RNG):
@@ -70,6 +70,8 @@ def run_predict(marker_json_fn, output_json_fn, *,
         Number or fraction of neighbors for KNN (default: 0.25).
     generate_stats : bool, optional
         Whether to generate prediction statistics (default: True).
+    write_bed : bool, optional
+        Optional bed file of predicted haplotypes (default: True)
     nco_min_prob_change : float, optional
         Threshold for detecting non-crossover changes (default: 2.5e-3).
     output_precision : int, optional
@@ -132,6 +134,9 @@ def run_predict(marker_json_fn, output_json_fn, *,
             )
         log.info(f'Writing predictions to {output_json_fn}')
         co_preds.write_json(output_json_fn, output_precision)
+        if write_bed:
+            output_bed_fn = f'{os.path.splitext(output_json_fn)[0]}.bed'
+            co_preds.write_bed(output_bed_fn, precision=output_precision)
     return co_preds
 
 

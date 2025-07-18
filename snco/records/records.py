@@ -955,3 +955,22 @@ class PredictionRecords(BaseRecords):
 
     def to_json(self, precision: int = 5):
         return super().to_json(precision, encode_method='full')
+
+    def write_bed(self, fn, precision: int = 2):
+        invs = []
+        bs = self.bin_size
+        for chrom, cs in self.chrom_sizes.items():
+            for cb in self.barcodes:
+                p = np.round(self[cb, chrom], decimals=precision)
+                i = 0
+                iv = p[0]
+                for j, jv in enumerate(p[1:], 1):
+                    if iv != jv:
+                        invs.append((chrom, i * bs, j * bs, cb, iv))
+                        i = j
+                        iv = jv
+                invs.append((chrom, i * bs, cs, cb, iv))
+        invs.sort()
+        with open(fn, 'w') as f:
+            for chrom, start, end, cb, score in invs:
+                f.write(f'{chrom}\t{start:d}\t{end:d}\t{cb}\t{score:.{precision}f}\t.\n')

@@ -312,6 +312,9 @@ def read_cb_whitelist(barcode_fn, validate_barcodes=True,
     if barcode_fn is not None:
         with open(barcode_fn) as f:
             cb_whitelist = [cb.strip().split('\t')[0] for cb in f.readlines()]
+            if cb_whitelist[0] == 'cb':
+                # assume this is the header
+                cb_whitelist = cb_whitelist[1:]
         log.info(f'Read {len(cb_whitelist)} cell barcodes from cb whitelist file {barcode_fn}')
     else:
         cb_whitelist = None
