@@ -11,39 +11,82 @@ from snco.defaults import DEFAULT_RANDOM_SEED
 
 DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 
-def update_probs(probs, sample_markers):
+def em_assign(cb_markers, genotypes, max_iter=100, min_delta=1e-3, error_rate_prior=0.01):
     """
-    Update genotype probabilities based on observed marker counts.
+    Estimate genotype probabilities for a single barcode using the Expectation-Maximization (EM) algorithm
+    under a genotype-level error model.
+
+    The likelihood model assumes that each observed marker supports either:
+    - One of the two haplotypes in the candidate genotype (true match), or
+    - Neither haplotype (false match, modeled by an error rate).
+
+    The EM algorithm iteratively updates genotype posterior probabilities and the global error rate until
+    convergence or a maximum number of iterations is reached.
 
     Parameters
     ----------
-    probs : dict
-        A dictionary of genotype probabilities for a barcode where keys are genotypes 
-        (frozensets of two parental haplotypes) and values are the corresponding probabilities.
-    sample_markers : dict
-        A dictionary where keys are haplotype sets (frozensets) and values are the observed 
-        counts of markers supporting that haplotype set, for a given cell barcode.
+    cb_markers : dict of {frozenset, int}
+        Dictionary where keys are frozensets of haplotypes supported by a marker (e.g., {'A'}, {'A','B'}),
+        and values are the counts of such markers observed for the barcode.
+    genotypes : list of frozenset
+        List of candidate genotypes to evaluate. Each genotype is a frozenset containing two haplotypes.
+    max_iter : int, optional
+        Maximum number of EM iterations. Default is 100.
+    min_delta : float, optional
+        Minimum change in genotype probabilities plus error rate for convergence. Default is 1e-3.
+    error_rate_prior : float, optional
+        Initial value for the error rate parameter. Default is 0.01.
 
     Returns
     -------
-    dict
-        Updated genotype probabilities where keys are genotypes and values are the updated 
-        probabilities.
+    probs : ndarray of shape (n_genotypes,)
+        Posterior probabilities for each genotype in `genotypes`, in the same order.
+    error_rate : float
+        Estimated global error rate, i.e., the expected proportion of markers that do not match
+        either haplotype of the true genotype.
+
+    Notes
+    -----
+    - The model does not account for linkage or crossover structure; markers are assumed independent 
+      given the genotype
+    - Error rate is constrained to avoid numerical instability.
+    - Convergence is determined by the sum of absolute changes in genotype probabilities and error rate.
     """
-    marker_agg = Counter()
-    for haps, marker_count in sample_markers.items():
-        n_genos = 0
-        genos_supported = []
-        for geno in probs:
-            if haps.intersection(geno):
-                n_genos += 1
-                genos_supported.append(geno)
-        for geno in genos_supported:
-            marker_agg[geno] += probs[geno] * marker_count / n_genos
-    agg_sum = sum(marker_agg.values())
-    if agg_sum == 0:
-        return probs
-    return {geno: marker_agg[geno] / agg_sum for geno in probs}
+    n = len(genotypes)
+    probs = np.ones(n) / n  # genotype priors
+    error_rate = error_rate_prior
+    eps = 1e-12
+
+    geno_matches = np.zeros(len(genotypes))
+    geno_nonmatches = np.zeros(len(genotypes))
+    tot = 0
+    for hap_group, count in cb_markers.items():
+        tot += count
+        for i, geno in enumerate(genotypes):
+            if hap_group & geno:
+                geno_matches[i] += count
+            else:
+                geno_nonmatches[i] += count
+    
+    for _ in range(max_iter):
+        # Compute likelihood per haplotype
+        logh = np.log(1 - error_rate)
+        loge = np.log(error_rate)
+        
+        geno_ll = np.exp(geno_matches * logh + geno_nonmatches * loge)
+
+        numerators = (probs * geno_ll) + eps
+        denom = numerators.sum()
+        post_probs = numerators / denom
+
+        # Update error rate
+        post_error_rate = (geno_nonmatches * post_probs).sum() / tot
+        delta = np.abs(post_probs - probs).sum() + abs(post_error_rate - error_rate)
+        error_rate = np.clip(post_error_rate, eps, 0.5 - eps)
+        probs = post_probs
+        if delta < min_delta:
+            break
+    return probs, error_rate
 
 
 def random_resample_geno_markers(cb_geno_markers, n_resamples, rng, max_sample_size=1000):
@@ -112,24 +155,26 @@ def assign_genotype_with_em(cb, cb_geno_markers, *, crossing_combinations,
     """
     n_genos = len(crossing_combinations)
     init_probs = {geno: 1 / n_genos for geno in crossing_combinations}
-    prob_bootstraps = defaultdict(list)
+    prob_bootstraps = []
+    error_rate_bootstraps = []
     for marker_sample in random_resample_geno_markers(cb_geno_markers, n_bootstraps, rng):
-        probs = init_probs
-        for i in range(max_iter):
-            prev_probs = probs
-            probs = update_probs(probs, marker_sample)
-            delta = sum(abs(prev_probs[g] - probs[g]) for g in crossing_combinations)
-            if delta < min_delta:
-                break
-        for geno, p in probs.items():
-            prob_bootstraps[geno].append(p)
-    probs = {geno: np.mean(p) for geno, p in prob_bootstraps.items()}
+        probs, error_rate = em_assign(
+            marker_sample,
+            crossing_combinations,
+            max_iter=max_iter,
+            min_delta=min_delta,
+        )
+        prob_bootstraps.append(probs)
+        error_rate_bootstraps.append(error_rate)
+    probs = {geno: p for geno, p in
+             zip(crossing_combinations, np.mean(prob_bootstraps, axis=0))}
     max_prob = max(probs.values())
     # when two or more genotypes are equally likely, select on at random
     genos_with_max_prob = [geno for geno, p in probs.items() if np.isclose(p, max_prob, atol=min_delta)]
     genos_with_max_prob.sort(key=lambda fznset: sorted(fznset))
     geno = rng.choice(genos_with_max_prob)
-    return cb, geno, max_prob, sum(cb_geno_markers.values())
+    error_rate = np.mean(error_rate_bootstraps)
+    return cb, geno, max_prob, sum(cb_geno_markers.values()), error_rate
 
 
 def parallel_assign_genotypes(genotype_markers, *, processes=1, rng=DEFAULT_RNG, **kwargs):
@@ -167,13 +212,15 @@ def parallel_assign_genotypes(genotype_markers, *, processes=1, rng=DEFAULT_RNG,
     geno_assignments = NestedData(levels=('cb',), dtype=frozenset)
     geno_probabilities = NestedData(levels=('cb',), dtype=float)
     geno_nmarkers = NestedData(levels=('cb',), dtype=int)
+    geno_error_rates = NestedData(levels=('cb',), dtype=frozenset)
 
-    for cb, geno, geno_prob, nmarkers in res:
+    for cb, geno, geno_prob, nmarkers, error_rate in res:
         geno_assignments[cb] = geno
         geno_probabilities[cb] = float(geno_prob)
         geno_nmarkers[cb] = int(nmarkers)
+        geno_error_rates[cb] = float(error_rate)
 
-    return geno_assignments, geno_probabilities, geno_nmarkers
+    return geno_assignments, geno_probabilities, geno_nmarkers, geno_error_rates
 
 
 def resolve_genotype_counts_to_co_markers(inv_counts, genotypes):
@@ -244,7 +291,10 @@ def genotype_from_inv_counts(inv_counts, min_markers_per_cb=100, **kwargs):
     if min_markers_per_cb > 0:
         genotype_markers = {cb: g for cb, g in genotype_markers.items()
                             if sum(g.values()) >= min_markers_per_cb}
-    genotypes, genotype_probs, genotype_nmarkers = parallel_assign_genotypes(genotype_markers, **kwargs)
+    (genotypes, genotype_probs,
+     genotype_nmarkers, genotype_error_rates) = parallel_assign_genotypes(
+         genotype_markers, **kwargs
+     )
     inv_counts = resolve_genotype_counts_to_co_markers(inv_counts, genotypes)
     # convert genotype data from frozenset to str
     genotypes= NestedData(
@@ -252,4 +302,4 @@ def genotype_from_inv_counts(inv_counts, min_markers_per_cb=100, **kwargs):
         dtype=str,
         data={cb: ':'.join(sorted(geno)) for cb, geno in genotypes.items()}
     )
-    return genotypes, genotype_probs, genotype_nmarkers, inv_counts
+    return genotypes, genotype_probs, genotype_nmarkers, genotype_error_rates, inv_counts
