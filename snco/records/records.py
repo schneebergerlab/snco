@@ -96,6 +96,8 @@ class BaseRecords(object):
         return np.full(self._get_arr_shape(chrom), self._init_val, dtype=np.float32)
 
     def _check_arr(self, arr: np.ndarray, chrom: str):
+        if not isinstance(arr, np.ndarray):
+            raise ValueError('Item must be numpy.ndarray')
         correct_shape = self._get_arr_shape(chrom)
         if arr.shape != correct_shape:
             raise ValueError('Array has incorrect shape')
@@ -123,30 +125,32 @@ class BaseRecords(object):
             cb_record[chrom] = self._new_arr(chrom)
         return cb_record[chrom]
 
+    def _slice_records_creating_missing(self, index):
+        while True:
+            try:
+                return self._records[index]
+            except KeyError as e:
+                if len(e.missing_key_path) == 1:
+                    cb = e.missing_key_path[0]
+                    _ = self._get_cb_record(cb)
+                else:
+                    cb, chrom = e.missing_key_path
+                    _ = self._get_or_create_array(cb, chrom)
+                    # continue until indexing no longer raises
+
     def __getitem__(self, index):
         if isinstance(index, str):
             return self._get_cb_record(index)
-        elif isinstance(index, list):
-            return self._records[(index, )]
+
+        if isinstance(index, list):
+            index = (index,)
+
         if isinstance(index, tuple):
-            cb, chrom, *arr_idx = index
-            if isinstance(cb, str) and isinstance(chrom, str):
-                return self._get_or_create_array(cb, chrom)[tuple(arr_idx)]
-            else:
-                if self.frozen:
-                    return self._records[index]
-                # perform indexing whilst filling gaps. Somewhat inefficient but should work
-                while True:
-                    try:
-                        return self._records[index]
-                    except KeyError as e:
-                        if len(e.missing_key) == 1:
-                            cb = e.missing_key[0]
-                            _ = self._get_cb_record(cb)
-                        else:
-                            cb, chrom = e.missing_key
-                            _ = self._get_or_create_array(cb, chrom)
-                            # continue until indexing no longer raises
+            if self.frozen:
+                # normal slicing, raises if a key is missing
+                return self._records[index]
+            # otherwise we attempt to fill gaps with the correct defaults
+            return self._slice_records_creating_missing(index)
         raise KeyError(f"Invalid index type: {index}")
 
     def _set_cb_record(self, cb, val):
@@ -165,7 +169,7 @@ class BaseRecords(object):
                 arr = self._get_or_create_array(cb, chrom)
                 arr[tuple(arr_idx)] = value
             else:
-                self[index] = value
+                raise KeyError(f"Invalid tuple index: {index}")
         else:
             raise KeyError(f"Invalid tuple index: {index}")
 

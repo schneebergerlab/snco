@@ -15,6 +15,16 @@ DTYPES = {
 }
 
 
+class DeepKeyError(KeyError):
+    def __init__(self, missing_key, path):
+        super().__init__(missing_key)
+        self.missing_key_path = path + (missing_key,)
+
+    def __str__(self):
+        kp = ' -> '.join(repr(k) for k in self.missing_key_path)
+        return f'Key not found at key path {kp}'
+
+
 class NestedData:
 
     """
@@ -152,8 +162,11 @@ class NestedData:
         # if all indices are str, we simply traverse the nested dicts
         if all(isinstance(idx, str) for idx in index):
             selected_data = self._data
-            for idx in index:
-                selected_data = selected_data[idx]
+            for i, idx in enumerate(index):
+                try:
+                    selected_data = selected_data[idx]
+                except KeyError:
+                    raise DeepKeyError(idx, index[:i])
             if isinstance(selected_data, self.dtype):
                 return selected_data
             else:
@@ -180,15 +193,13 @@ class NestedData:
                     _select(val, depth + 1, key_path + (key,))
             elif isinstance(idx, list):
                 for key in idx:
+                    if key not in obj:
+                        raise DeepKeyError(key, key_path)
                     _select(obj[key], depth + 1, key_path + (key,))
             else:
                 # Allow index by key only
                 if idx not in obj:
-                    missing_key_path = key_path + (idx, )
-                    kp = ' -> '.join(repr(k) for k in missing_key_path)
-                    key_error = KeyError(f'Key {idx} not found at key path {kp}')
-                    key_error.missing_key = missing_key_path
-                    raise key_error
+                    raise DeepKeyError(idx, key_path)
                 _select(obj[idx], depth + 1, key_path)
 
         _select(self._data, 0, ())
