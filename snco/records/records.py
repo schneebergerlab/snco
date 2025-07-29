@@ -133,7 +133,20 @@ class BaseRecords(object):
             if isinstance(cb, str) and isinstance(chrom, str):
                 return self._get_or_create_array(cb, chrom)[tuple(arr_idx)]
             else:
-                return self._records[index]
+                if self.frozen:
+                    return self._records[index]
+                # perform indexing whilst filling gaps. Somewhat inefficient but should work
+                while True:
+                    try:
+                        return self._records[index]
+                    except KeyError as e:
+                        if len(e.missing_key) == 1:
+                            cb = e.missing_key[0]
+                            _ = self._get_cb_record(cb)
+                        else:
+                            cb, chrom = e.missing_key
+                            _ = self._get_or_create_array(cb, chrom)
+                            # continue until indexing no longer raises
         raise KeyError(f"Invalid index type: {index}")
 
     def _set_cb_record(self, cb, val):

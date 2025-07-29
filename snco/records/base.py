@@ -184,7 +184,11 @@ class NestedData:
             else:
                 # Allow index by key only
                 if idx not in obj:
-                    raise KeyError(f'Key {idx} not found at level {self.levels[depth]}')
+                    missing_key_path = key_path + (idx, )
+                    kp = ' -> '.join(repr(k) for k in missing_key_path)
+                    key_error = KeyError(f'Key {idx} not found at key path {kp}')
+                    key_error.missing_key = missing_key_path
+                    raise key_error
                 _select(obj[idx], depth + 1, key_path)
 
         _select(self._data, 0, ())
