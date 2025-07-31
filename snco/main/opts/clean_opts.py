@@ -61,6 +61,14 @@ snco_opts.option(
 )
 
 
+snco_opts.option(
+    '--max-genotyping-error', 'max_geno_error_rate',
+    subcommands=['loadbam', 'loadcsl', 'clean', 'bam2pred', 'csl2pred'],
+    required=False,
+    type=click.FloatRange(0.0, 1.0),
+    default=0.25,
+    help='for samples with genotyping, the maximum rate of background noise reads inferred from genotyping'
+)
 
 snco_opts.option(
     '--nsim-per-sample',

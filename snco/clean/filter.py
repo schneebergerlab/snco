@@ -24,7 +24,7 @@ def filter_low_coverage_barcodes(co_markers, min_cov=0, min_cov_per_chrom=0):
     return co_markers.query(_low_cov_query)
 
 
-def filter_genotyping_score(co_markers, min_geno_prob=0.9):
+def filter_genotyping_score(co_markers, min_geno_prob=0.9, max_geno_error_rate=0.25):
     """
     Remove barcodes with genotyping probability below a given threshold.
 
@@ -34,6 +34,8 @@ def filter_genotyping_score(co_markers, min_geno_prob=0.9):
         Marker records with metadata containing genotyping probabilities.
     min_geno_prob : float, default=0.9
         Minimum allowed genotype probability.
+    max_geno_error_rate : float, default=0.25
+        The maximum inferred background noise rate from genotyping
 
     Returns
     -------
@@ -42,10 +44,11 @@ def filter_genotyping_score(co_markers, min_geno_prob=0.9):
     """
     try:
         geno_probs = co_markers.metadata['genotype_probability']
+        genotype_error_rates = co_markers.metadata['genotype_error_rates']
     except KeyError:
         return co_markers
 
     def _geno_query(cb):
-        return geno_probs[cb] >= min_geno_prob
+        return (geno_probs[cb] >= min_geno_prob) & (genotype_error_rates[cb] <= max_geno_error_rate)
 
     return co_markers.query(_geno_query)

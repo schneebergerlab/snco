@@ -21,7 +21,8 @@ DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 def run_clean(marker_json_fn, output_json_fn, *,
               co_markers=None, cb_whitelist_fn=None, mask_bed_fn=None, bin_size=25_000,
               ploidy_type=None, min_markers_per_cb=0, min_markers_per_chrom=0, max_bin_count=20,
-              clean_bg=True, bg_window_size=2_500_000, max_frac_bg=0.2, min_geno_prob=0.9,
+              clean_bg=True, bg_window_size=2_500_000, max_frac_bg=0.2,
+              min_geno_prob=0.9, max_geno_error_rate=0.25,
               mask_imbalanced=True, max_marker_imbalance=0.75, apply_per_geno=True,
               rng=DEFAULT_RNG):
     """
@@ -56,6 +57,8 @@ def run_clean(marker_json_fn, output_json_fn, *,
         Maximum tolerated background contamination.
     min_geno_prob : float, default=0.9
         Minimum genotype confidence required.
+    max_geno_error_rate : float, optional
+        Maximum genotyping background noise rate allowed for each barcode to be included (default is 0.25).
     mask_imbalanced : bool, default=True
         Whether to mask bins with haplotype imbalance.
     max_marker_imbalance : float, default=0.75
@@ -85,7 +88,7 @@ def run_clean(marker_json_fn, output_json_fn, *,
         )
     n = len(co_markers)
     if min_geno_prob and 'genotypes' in co_markers.metadata:
-        co_markers = filter_genotyping_score(co_markers, min_geno_prob)
+        co_markers = filter_genotyping_score(co_markers, min_geno_prob, max_geno_error_rate)
         log.info(
             f'Removed {n - len(co_markers)} barcodes with genotyping probability < {min_geno_prob}'
         )

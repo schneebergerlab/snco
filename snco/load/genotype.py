@@ -64,10 +64,10 @@ def em_assign(cb_markers, genotypes, max_iter=100, min_delta=1e-3, error_rate_pr
         tot += count
         for i, geno in enumerate(genotypes):
             if hap_group & geno:
-                geno_matches[i] += count
+                geno_matches[i] += count / len(hap_group)
             else:
-                geno_nonmatches[i] += count
-    
+                geno_nonmatches[i] += count / len(hap_group)
+
     for _ in range(max_iter):
         # Compute likelihood per haplotype
         logh = np.log(1 - error_rate)
@@ -75,9 +75,9 @@ def em_assign(cb_markers, genotypes, max_iter=100, min_delta=1e-3, error_rate_pr
         
         geno_ll = np.exp(geno_matches * logh + geno_nonmatches * loge)
 
-        numerators = (probs * geno_ll) + eps
+        numerators = probs * geno_ll
         denom = numerators.sum()
-        post_probs = numerators / denom
+        post_probs = (numerators / denom) + eps
 
         # Update error rate
         post_error_rate = (geno_nonmatches * post_probs).sum() / tot
@@ -212,7 +212,7 @@ def parallel_assign_genotypes(genotype_markers, *, processes=1, rng=DEFAULT_RNG,
     geno_assignments = NestedData(levels=('cb',), dtype=frozenset)
     geno_probabilities = NestedData(levels=('cb',), dtype=float)
     geno_nmarkers = NestedData(levels=('cb',), dtype=int)
-    geno_error_rates = NestedData(levels=('cb',), dtype=frozenset)
+    geno_error_rates = NestedData(levels=('cb',), dtype=float)
 
     for cb, geno, geno_prob, nmarkers, error_rate in res:
         geno_assignments[cb] = geno
