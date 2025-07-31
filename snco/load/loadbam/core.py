@@ -90,13 +90,16 @@ def bam_to_co_markers(bam_fn, processes=1, seq_type=None, ploidy_type='haploid',
             raise ValueError('must use "multi_haplotype" type hap tag to perform genotyping')
 
         log.info(f'Genotyping barcodes with {len(genotype_kwargs["crossing_combinations"])} possible genotypes')
-        genotypes, genotype_probs, genotype_nmarkers, inv_counts = genotype_from_inv_counts(inv_counts, **genotype_kwargs)
+        (genotypes, genotype_probs,
+         genotype_nmarkers, genotype_error_rates,
+         inv_counts) = genotype_from_inv_counts(inv_counts, **genotype_kwargs)
         if log.getEffectiveLevel() <= logging.DEBUG:
             log.debug(genotyping_results_formatter(genotypes))
         co_markers.add_metadata(
             genotypes=genotypes,
             genotype_probability=genotype_probs,
-            genotyping_nmarkers=genotype_nmarkers
+            genotyping_nmarkers=genotype_nmarkers,
+            genotype_error_rates=genotype_error_rates
         )
 
     elif kwargs.get('hap_tag_type', 'star_diploid') == "multi_haplotype":
