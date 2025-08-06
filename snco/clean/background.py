@@ -89,7 +89,7 @@ def estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg
     return co_markers
 
 
-def subtract_background(m, bg_signal, frac_bg):
+def subtract_background(m, bg_signal, frac_bg, return_bg=False):
     """
     Deterministically subtract estimated background contamination from a marker count matrix.
 
@@ -124,8 +124,11 @@ def subtract_background(m, bg_signal, frac_bg):
     if w_sum == 0:
         return m.copy()
     bg_expected = weights * (tot * frac_bg / w_sum)
-    bg = np.minimum(bg_expected, m)
-    return np.round(m - bg).astype(int)
+    bg = np.round(np.minimum(bg_expected, m)).astype(int)
+    fg = m - bg
+    if not return_bg:
+        return fg
+    return fg, bg
 
 
 def clean_marker_background(co_markers, apply_per_geno=True):

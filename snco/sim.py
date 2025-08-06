@@ -8,7 +8,7 @@ import pandas as pd
 from snco.utils import load_json
 from snco.records import MarkerRecords, PredictionRecords
 from snco.clean.background import (
-    estimate_overall_background_signal, subtract_background, random_bg_sample
+    estimate_overall_background_signal, subtract_background
 )
 from snco.defaults import DEFAULT_RANDOM_SEED
 
@@ -132,7 +132,7 @@ def apply_gt_to_markers(gt, m, bg_rate, bg_signal, rng=DEFAULT_RNG):
     s = len(m)
 
     # simulate a realistic background signal using the average background across the dataset
-    fg, bg = subtract_background(m, bg_signal, bg_rate, return_bg=True, rng=rng)
+    fg, bg = subtract_background(m, bg_signal, bg_rate, return_bg=True)
 
     # flatten haplotypes
     fg = fg.sum(axis=1)
