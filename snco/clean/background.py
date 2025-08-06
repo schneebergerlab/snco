@@ -6,10 +6,8 @@ import pandas as pd
 from snco.utils import load_json
 from snco.signal import argmax_smoothed_haplotype
 from snco.records import MarkerRecords, NestedData, NestedDataArray
-from snco.defaults import DEFAULT_RANDOM_SEED
 
 log = logging.getLogger('snco')
-DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 
 
 def _estimate_marker_background(m, ws=100):
@@ -91,77 +89,46 @@ def estimate_overall_background_signal(co_markers, conv_window_size, max_frac_bg
     return co_markers
 
 
-def random_bg_sample(m, bg_signal, n_bg, rng=DEFAULT_RNG):
+def subtract_background(m, bg_signal, frac_bg):
     """
-    Randomly sample background signal proportionally to observed counts and background model.
+    Deterministically subtract estimated background contamination from a marker count matrix.
+
+    This function removes background signal from a barcode's marker counts by allocating
+    the expected number of background markers proportionally to both the
+    observed counts and a background probability model. Subtraction is capped so that
+    no cell goes below zero.
 
     Parameters
     ----------
-    m : np.ndarray
-        Marker count matrix with shape (bins, haplotypes).
-    bg_signal : np.ndarray
-        Background probabilities with shape (bins, haplotypes).
-    n_bg : int
-        Number of background markers to sample.
-    rng : np.random.Generator, optional
-        Random number generator.
-
-    Returns
-    -------
-    np.ndarray
-        Matrix of sampled background markers.
-    """
-    bg_idx = np.nonzero(m)
-    m_valid = m[bg_idx]
-    p = m_valid * bg_signal[bg_idx]
-    bg = np.zeros_like(m)
-    p_denom = p.sum(axis=None)
-    if p_denom == 0:
-        return bg
-    p = p / p_denom
-    n_p = p.shape[0]
-    bg_c = np.bincount(rng.choice(np.arange(n_p), size=n_bg, replace=True, p=p), minlength=n_p)
-    bg[bg_idx] = np.minimum(bg_c, m_valid)
-    return bg
-
-
-def subtract_background(m, bg_signal, frac_bg, return_bg=False, rng=DEFAULT_RNG):
-    """
-    Subtract background signal from marker matrix.
-
-    Parameters
-    ----------
-    m : np.ndarray
-        Marker count matrix with shape (bins, haplotypes).
-    bg_signal : np.ndarray
-        Background probabilities with shape (bins, haplotypes).
+    m : ndarray of shape (bins, haplotypes)
+        Observed marker count matrix for a single barcode.
+    bg_signal : ndarray of shape (bins, haplotypes)
+        Background probability matrix for the same chromosome, typically normalized
+        so that its sum equals 1. Higher values indicate bins and haplotypes where
+        background contamination is more likely.
     frac_bg : float
-        Estimated background fraction for barcode.
-    return_bg : bool, default=False
-        Whether to return background matrix as well as background-subtracted marker matrix
-    rng : np.random.Generator, optional
-        Random number generator.
+        Estimated background contamination fraction for this barcode. The function
+        will subtract approximately `round(tot * frac_bg)` markers in total.
 
     Returns
     -------
-    np.ndarray or tuple of np.ndarray
-        Background-subtracted marker matrix (and optionally the background matrix).
+    ndarray of shape (bins, haplotypes)
+        Background-corrected marker count matrix, rounded to integers and guaranteed
+        to have non-negative entries.
     """
-    tot = m.sum(axis=None)
-    if tot:
-        n_bg = round(tot * frac_bg)
-        bg = random_bg_sample(m, bg_signal, n_bg, rng=rng)
-    else:
-        # no markers on this chromosome
-        log.warning('Saw chromosome with no markers when estimating background signal')
-        bg = m.copy()
-    m_sub = m - bg
-    if not return_bg:
-        return m_sub
-    return m_sub, bg
+    tot = m.sum()
+    if tot == 0:
+        return m.copy()
+    weights = m * bg_signal
+    w_sum = weights.sum()
+    if w_sum == 0:
+        return m.copy()
+    bg_expected = weights * (tot * frac_bg / w_sum)
+    bg = np.minimum(bg_expected, m)
+    return np.round(m - bg).astype(int)
 
 
-def clean_marker_background(co_markers, apply_per_geno=True, rng=DEFAULT_RNG):
+def clean_marker_background(co_markers, apply_per_geno=True):
     """
     Subtract estimated background signal from marker data for each barcode.
 
@@ -187,6 +154,6 @@ def clean_marker_background(co_markers, apply_per_geno=True, rng=DEFAULT_RNG):
     for cb, chrom, m in co_markers.deep_items():
         geno = genotypes[cb] if apply_per_geno else 'ungrouped'
         co_markers_c[cb, chrom] = subtract_background(
-            m, bg_signal[geno, chrom], frac_bg[cb], rng=rng
+            m, bg_signal[geno, chrom], frac_bg[cb]
         )
     return co_markers_c

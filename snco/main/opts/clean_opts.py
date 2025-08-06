@@ -101,6 +101,24 @@ snco_opts.option(
 
 
 snco_opts.option(
+    '--normalise-bins/--no-normalise-bins',
+    subcommands=['clean', 'bam2pred', 'csl2pred'],
+    required=False,
+    default=True,
+    help='Whether to normalise the coverage of bins to account for marker density/expression variation.'
+)
+
+
+snco_opts.option(
+    '--bin-shrinkage-quantile',
+    subcommands=['clean', 'bam2pred', 'csl2pred'],
+    type=click.FloatRange(0, 1),
+    default=0.99,
+    help='The quantile used when computing the shrinkage parameter for bin normalisation.'
+)
+
+
+snco_opts.option(
     '--max-bin-count',
     subcommands=['clean', 'bam2pred', 'csl2pred'],
     type=click.IntRange(5, 1000),

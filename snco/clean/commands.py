@@ -4,6 +4,7 @@ import numpy as np
 
 from .background import estimate_overall_background_signal, clean_marker_background
 from .filter import filter_low_coverage_barcodes, filter_genotyping_score
+from .normalise import normalise_bin_coverage
 from .mask import (
     create_single_cell_haplotype_imbalance_mask,
     create_resequencing_haplotype_imbalance_mask,
@@ -20,7 +21,8 @@ DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 
 def run_clean(marker_json_fn, output_json_fn, *,
               co_markers=None, cb_whitelist_fn=None, mask_bed_fn=None, bin_size=25_000,
-              ploidy_type=None, min_markers_per_cb=0, min_markers_per_chrom=0, max_bin_count=20,
+              ploidy_type=None, min_markers_per_cb=0, min_markers_per_chrom=0,
+              normalise_bins=True, bin_shrinkage_quantile=0.99, max_bin_count=20,
               clean_bg=True, bg_window_size=2_500_000, max_frac_bg=0.2,
               min_geno_prob=0.9, max_geno_error_rate=0.25,
               mask_imbalanced=True, max_marker_imbalance=0.75, apply_per_geno=True,
@@ -47,6 +49,10 @@ def run_clean(marker_json_fn, output_json_fn, *,
         Minimum total markers required for a barcode.
     min_markers_per_chrom : int, default=0
         Minimum markers per chromosome per barcode.
+    normalise_bins : bool, default=True
+        Whether to normalise the coverage of bins to account for marker density/expression variation.
+    bin_shrinkage_quantile : float, default=0.99
+        The quantile used when computing the shrinkage parameter for bin normalisation.
     max_bin_count : int, default=20
         Maximum marker count allowed per bin.
     clean_bg : bool, default=True
@@ -92,6 +98,12 @@ def run_clean(marker_json_fn, output_json_fn, *,
         log.info(
             f'Removed {n - len(co_markers)} barcodes with genotyping probability < {min_geno_prob}'
         )
+
+    if normalise_bins:
+        log.info(
+            f'Normalising bin coverage to reduce marker or expression biases'
+        )
+        co_markers = normalise_bin_coverage(co_markers, shrinkage_q=bin_shrinkage_quantile)
 
     n = len(co_markers)
     # currently this method does not make sense for non-haploid samples
