@@ -56,23 +56,6 @@ snco_opts.option(
 )
 
 
-def _resolve_normalise(ctx, param, value):
-    if value is None:
-        return 'auto'
-    return value
-
-
-snco_opts.option(
-    '--normalise-coverage/--no-normalise-coverage',
-    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
-    required=False,
-    default=None,
-    callback=_resolve_normalise,
-    help=('whether to normalise marker counts so that totals for each barcode are equivalent'
-          'default: yes for --seq-type "wgs", otherwise no')
-)
-
-
 snco_opts.option(
     '--predict-doublets/--no-predict-doublets',
     subcommands=['predict', 'bam2pred', 'csl2pred'],

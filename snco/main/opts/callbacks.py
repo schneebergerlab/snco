@@ -79,6 +79,13 @@ def validate_loadcsl_input(kwargs):
     return kwargs
 
 
+def validate_clean_input(kwargs):
+    '''decorator to validate the input of the clean command'''
+    if kwargs.get('normalise_depth') is None:
+        kwargs['normalise_depth'] = 'auto'
+    return kwargs
+
+
 def validate_pred_input(kwargs):
     '''decorator to validate the input of the predict command'''
     bin_size = kwargs.get('bin_size')

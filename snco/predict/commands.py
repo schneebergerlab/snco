@@ -7,7 +7,6 @@ import torch
 from .rhmm import train_rhmm, RigidHMM
 from .crossovers import detect_crossovers
 from .doublet import detect_doublets
-from .utils import normalise_marker_counts
 
 from snco.utils import load_json, validate_ploidy
 from snco import stats
@@ -24,8 +23,7 @@ def run_predict(marker_json_fn, output_json_fn, *,
                 cb_whitelist_fn=None, bin_size=25_000, ploidy_type=None,
                 segment_size=1_000_000, terminal_segment_size=50_000,
                 cm_per_mb=4.5, model_lambdas=None, empty_fraction=None,
-                normalise_coverage=False, predict_doublets=True,
-                n_doublets=0.25, k_neighbours=0.25,
+                predict_doublets=True, n_doublets=0.25, k_neighbours=0.25,
                 generate_stats=True, write_bed=True, nco_min_prob_change=2.5e-3,
                 output_precision=3, processes=1,
                 batch_size=1_000, device=DEFAULT_DEVICE,
@@ -60,8 +58,6 @@ def run_predict(marker_json_fn, output_json_fn, *,
         Optional Poisson lambdas to parameterise rHMM.
     empty_fraction : float, optional
         Estimated fraction of empty bins in zero inflated model. If None, estimate from data.
-    normalise_coverage : bool, optional
-        Whether to normalise each barcode by sequencing depth before making predictions. (default: False)
     predict_doublets : bool, optional
         Whether to detect doublets (default: True).
     n_doublets : float or int, optional
@@ -93,15 +89,6 @@ def run_predict(marker_json_fn, output_json_fn, *,
     if co_markers is None:
         co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
     ploidy_type = validate_ploidy(co_markers, ploidy_type)
-
-    if normalise_coverage == 'auto':
-        normalise_coverage = co_markers.seq_type == "wgs"
-        log.info(f'Set normalise_coverage to {normalise_coverage} to match seq_type {co_markers.seq_type}')
-    if normalise_coverage:
-        co_markers = normalise_marker_counts(
-            co_markers,
-            normalise_haplotypes=False if ploidy_type == 'diploid_bc1' else True
-        )
 
     rhmm = train_rhmm(
         co_markers,

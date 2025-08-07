@@ -119,6 +119,16 @@ snco_opts.option(
 
 
 snco_opts.option(
+    '--normalise-depth/--no-normalise-depth',
+    subcommands=['clean', 'bam2pred', 'csl2pred'],
+    required=False,
+    default=None,
+    help=('whether to normalise marker counts so that totals for each barcode are equivalent'
+          'default: yes for --seq-type "wgs", otherwise no')
+)
+
+
+snco_opts.option(
     '--max-bin-count',
     subcommands=['clean', 'bam2pred', 'csl2pred'],
     type=click.IntRange(5, 1000),

@@ -4,7 +4,7 @@ import numpy as np
 
 from .background import estimate_overall_background_signal, clean_marker_background
 from .filter import filter_low_coverage_barcodes, filter_genotyping_score
-from .normalise import normalise_bin_coverage
+from .normalise import normalise_bin_coverage, normalise_barcode_depth
 from .mask import (
     create_single_cell_haplotype_imbalance_mask,
     create_resequencing_haplotype_imbalance_mask,
@@ -22,7 +22,8 @@ DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 def run_clean(marker_json_fn, output_json_fn, *,
               co_markers=None, cb_whitelist_fn=None, mask_bed_fn=None, bin_size=25_000,
               ploidy_type=None, min_markers_per_cb=0, min_markers_per_chrom=0,
-              normalise_bins=True, bin_shrinkage_quantile=0.99, max_bin_count=20,
+              normalise_bins=True, bin_shrinkage_quantile=0.99,
+              normalise_depth=True, max_bin_count=20,
               clean_bg=True, bg_window_size=2_500_000, max_frac_bg=0.2,
               min_geno_prob=0.9, max_geno_error_rate=0.25,
               mask_imbalanced=True, max_marker_imbalance=0.75, apply_per_geno=True,
@@ -51,6 +52,8 @@ def run_clean(marker_json_fn, output_json_fn, *,
         Minimum markers per chromosome per barcode.
     normalise_bins : bool, default=True
         Whether to normalise the coverage of bins to account for marker density/expression variation.
+    normalise_depth : bool, default='auto'
+        Whether to normalise the total coverage of barcodes to make it approximately equal.
     bin_shrinkage_quantile : float, default=0.99
         The quantile used when computing the shrinkage parameter for bin normalisation.
     max_bin_count : int, default=20
@@ -154,6 +157,15 @@ def run_clean(marker_json_fn, output_json_fn, *,
             f'Normalising bin coverage to reduce marker or expression biases'
         )
         co_markers = normalise_bin_coverage(co_markers, shrinkage_q=bin_shrinkage_quantile)
+
+    if normalise_depth == 'auto':
+        normalise_depth = co_markers.seq_type == 'wgs'
+
+    if normalise_depth:
+        log.info(
+            f'Normalising total depth to remove sequencing depth differences'
+        )
+        co_markers = normalise_barcode_depth(co_markers)
 
     n = len(co_markers)
     co_markers = filter_low_coverage_barcodes(

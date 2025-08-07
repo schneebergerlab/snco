@@ -3,7 +3,7 @@ import numpy as np
 from snco.records import MarkerRecords
 
 
-def normalise_bin_coverage(markers, shrinkage_q=0.99):
+def normalise_bin_coverage(co_markers, shrinkage_q=0.99):
     """
     Down-weight bins with extreme coverage to reduce bias from regions with high expression,
     high marker density, or collapsed repeats.
@@ -15,7 +15,7 @@ def normalise_bin_coverage(markers, shrinkage_q=0.99):
 
     Parameters
     ----------
-    markers : MarkerRecords
+    co_markers : MarkerRecords
         Marker data structure containing count matrices for multiple barcodes and chromosomes.
         Each entry should be a 2D NumPy array of shape (bins, haplotypes).
     shrinkage_q : float, optional, default=0.99
@@ -24,8 +24,8 @@ def normalise_bin_coverage(markers, shrinkage_q=0.99):
         (e.g., 0.75) apply stronger normalization.
     """
     tot = {}
-    n_cb = len(markers)
-    for cb, chrom, m in markers.deep_items():
+    n_cb = len(co_markers)
+    for cb, chrom, m in co_markers.deep_items():
         if chrom not in tot:
             tot[chrom] = m.copy()
         else:
@@ -46,9 +46,19 @@ def normalise_bin_coverage(markers, shrinkage_q=0.99):
         f = np.minimum(1.0, f * scale)
         norm_factor[chrom] = f
 
-    normalised = MarkerRecords.new_like(markers)
-    for cb, chrom, m in markers.deep_items():
+    co_markers_n = MarkerRecords.new_like(co_markers)
+    for cb, chrom, m in co_markers.deep_items():
         scaled = m * norm_factor[chrom]
-        normalised[cb, chrom] = np.round(scaled).astype(int)
+        co_markers_n[cb, chrom] = np.round(scaled).astype(int)
 
-    return normalised
+    return co_markers_n
+
+
+def normalise_barcode_depth(co_markers):
+    total_counts = {cb: co_markers.total_marker_count(cb) for cb in co_markers.barcodes}
+    norm_factor = np.median(list(total_counts.values()))
+    co_markers_n = MarkerRecords.new_like(co_markers)
+    for cb, chrom, m in co_markers.deep_items():
+        scaled = m / total_counts[cb] * norm_factor
+        co_markers_n[cb, chrom] = np.round(scaled).astype(int)
+    return co_markers_n

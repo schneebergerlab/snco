@@ -4,6 +4,7 @@ from .callbacks import (
     log_parameters,
     validate_loadbam_input,
     validate_loadcsl_input,
+    validate_clean_input,
     validate_pred_input,
 )
 
@@ -21,6 +22,10 @@ snco_opts.register_callback(
 snco_opts.register_callback(
     validate_loadcsl_input,
     subcommands=['loadcsl', 'csl2pred'],
+)
+snco_opts.register_callback(
+    validate_clean_input,
+    subcommands=['clean', 'bam2pred', 'csl2pred']
 )
 snco_opts.register_callback(
     validate_pred_input,
