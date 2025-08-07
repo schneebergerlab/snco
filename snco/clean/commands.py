@@ -118,7 +118,8 @@ def run_clean(marker_json_fn, output_json_fn, *,
         if clean_bg:
             log.info('Attempting to filter likely background markers')
             co_markers = clean_marker_background(
-                co_markers, apply_per_geno=apply_per_geno, rng=rng)
+                co_markers, apply_per_geno=apply_per_geno
+            )
 
     if mask_imbalanced:
         # mask any bins that still have extreme imbalance
