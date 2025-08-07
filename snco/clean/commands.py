@@ -99,12 +99,6 @@ def run_clean(marker_json_fn, output_json_fn, *,
             f'Removed {n - len(co_markers)} barcodes with genotyping probability < {min_geno_prob}'
         )
 
-    if normalise_bins:
-        log.info(
-            f'Normalising bin coverage to reduce marker or expression biases'
-        )
-        co_markers = normalise_bin_coverage(co_markers, shrinkage_q=bin_shrinkage_quantile)
-
     n = len(co_markers)
     # currently this method does not make sense for non-haploid samples
     if ploidy_type == 'haploid':
@@ -154,6 +148,11 @@ def run_clean(marker_json_fn, output_json_fn, *,
             f'Masked {n_masked:d}/{tot_bins} bins with extreme marker imbalance'
         )
 
+    if normalise_bins:
+        log.info(
+            f'Normalising bin coverage to reduce marker or expression biases'
+        )
+        co_markers = normalise_bin_coverage(co_markers, shrinkage_q=bin_shrinkage_quantile)
 
     n = len(co_markers)
     co_markers = filter_low_coverage_barcodes(
