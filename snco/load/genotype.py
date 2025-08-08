@@ -69,23 +69,32 @@ def em_assign(cb_markers, genotypes, max_iter=100, min_delta=1e-3, error_rate_pr
                 geno_nonmatches[i] += count / len(hap_group)
 
     for _ in range(max_iter):
-        # Compute likelihood per haplotype
+        error_rate = np.clip(error_rate, eps, 1 - eps)
         logh = np.log(1 - error_rate)
         loge = np.log(error_rate)
-        
-        geno_ll = np.exp(geno_matches * logh + geno_nonmatches * loge)
+
+        geno_ll = geno_matches * logh + geno_nonmatches * loge
+        max_log = np.max(geno_ll)
+        geno_ll = np.exp(geno_ll - max_log)
 
         numerators = probs * geno_ll
         denom = numerators.sum()
-        post_probs = (numerators / denom) + eps
 
-        # Update error rate
-        post_error_rate = (geno_nonmatches * post_probs).sum() / tot
+        if denom <= eps:
+            probs = np.ones(n) / n
+            error_rate = er
+            break
+
+        post_probs = numerators / denom
+
+        post_error_rate = (geno_nonmatches * post_probs).sum() / max(tot, eps)
         delta = np.abs(post_probs - probs).sum() + abs(post_error_rate - error_rate)
         error_rate = np.clip(post_error_rate, eps, 0.5 - eps)
         probs = post_probs
+
         if delta < min_delta:
             break
+
     return probs, error_rate
 
 

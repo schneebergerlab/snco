@@ -46,6 +46,8 @@ def run_clean(marker_json_fn, output_json_fn, *,
         BED file of regions to mask.
     bin_size : int, default=25000
         Bin size for aggregation in base pairs.
+    ploidy_type : str, default=None
+        The ploidy type of the data, can be "haploid", "diploid_bc1" or "diploid_f2"
     min_markers_per_cb : int, default=0
         Minimum total markers required for a barcode.
     min_markers_per_chrom : int, default=0
@@ -96,33 +98,11 @@ def run_clean(marker_json_fn, output_json_fn, *,
             f'or fewer than {min_markers_per_chrom} markers per chromosome'
         )
     n = len(co_markers)
-    if min_geno_prob and 'genotypes' in co_markers.metadata:
+    if 'genotypes' in co_markers.metadata:
         co_markers = filter_genotyping_score(co_markers, min_geno_prob, max_geno_error_rate)
         log.info(
             f'Removed {n - len(co_markers)} barcodes with genotyping probability < {min_geno_prob}'
         )
-
-    n = len(co_markers)
-    # currently this method does not make sense for non-haploid samples
-    if ploidy_type == 'haploid':
-        # estimate ambient marker rate for each CB and try to scrub common background markers
-        log.info('Estimating background marker rates.')
-        co_markers = estimate_overall_background_signal(
-            co_markers, bg_window_size, max_frac_bg, apply_per_geno=apply_per_geno
-        )
-        log.info(
-            f'Removed {n - len(co_markers)} barcodes with greater than {max_frac_bg * 100}%'
-            ' background contamination'
-        )
-        av_bg = np.mean(
-            list(co_markers.metadata['estimated_background_fraction'].values())
-        )
-        log.info(f'Average estimated background fraction is {av_bg:.3f}')
-        if clean_bg:
-            log.info('Attempting to filter likely background markers')
-            co_markers = clean_marker_background(
-                co_markers, apply_per_geno=apply_per_geno
-            )
 
     if mask_imbalanced:
         # mask any bins that still have extreme imbalance
@@ -157,6 +137,28 @@ def run_clean(marker_json_fn, output_json_fn, *,
             f'Normalising bin coverage to reduce marker or expression biases'
         )
         co_markers = normalise_bin_coverage(co_markers, shrinkage_q=bin_shrinkage_quantile)
+
+    n = len(co_markers)
+    # currently this method does not make sense for non-haploid samples
+    if ploidy_type == 'haploid':
+        # estimate ambient marker rate for each CB and try to scrub common background markers
+        log.info('Estimating background marker rates.')
+        co_markers = estimate_overall_background_signal(
+            co_markers, bg_window_size, max_frac_bg, apply_per_geno=apply_per_geno
+        )
+        log.info(
+            f'Removed {n - len(co_markers)} barcodes with greater than {max_frac_bg * 100}%'
+            ' background contamination'
+        )
+        av_bg = np.mean(
+            list(co_markers.metadata['estimated_background_fraction'].values())
+        )
+        log.info(f'Average estimated background fraction is {av_bg:.3f}')
+        if clean_bg:
+            log.info('Attempting to filter likely background markers')
+            co_markers = clean_marker_background(
+                co_markers, apply_per_geno=apply_per_geno
+            )
 
     if normalise_depth == 'auto':
         normalise_depth = co_markers.seq_type == 'wgs'
