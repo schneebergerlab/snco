@@ -39,6 +39,20 @@ def trans_prob_decay(rfactor, trans_prob, decay_rate=0.25,  floor=TINY_PROB):
     return np.maximum(scale * trans_prob, floor)
 
 
+def term_prob_decay(rfactor, term_rfactor, nstates, decay_rate=0.25, floor=TINY_PROB):
+    '''
+    calculates the decay rate of the states to be at the end of the sequence.
+    Set to zero to make the terminal segments entirely rigid (no crossovers allowed within 
+    term_rfactor bins of the end of the chromosome).
+    '''
+    scale = np.ones(rfactor)
+    scale[:term_rfactor] = floor
+    if decay_rate:
+        scale[term_rfactor:] = 1 - np.exp(-(np.arange(rfactor - term_rfactor) + 1) / decay_rate)
+    scale = np.maximum(scale, floor)
+    return scale / scale.sum() / nstates
+
+
 class RigidHMM:
     """
     Implements a rigid Hidden Markov Model (rHMM) for modeling haplotype transitions
@@ -90,9 +104,7 @@ class RigidHMM:
         self.term_rfactor = int(term_rfactor)
         self.trans_prob = float(trans_prob)
         self.trans_prob_decay_rate = float(trans_prob_decay_rate)
-        self.term_prob = 1 / (self.rfactor - self.term_rfactor)
         assert 0.0 < self.trans_prob < 1.0
-        assert (self.trans_prob + self.term_prob) < 1.0
         self.dist_type = dist_type.lower()
         self.fg_params = fg_params
         self.bg_params = bg_params
@@ -111,32 +123,40 @@ class RigidHMM:
 
     def _calculate_transition_probs(self):
         trans_probs = trans_prob_decay(self.rfactor, self.trans_prob, self.trans_prob_decay_rate)
+        end_probs = term_prob_decay(
+            self.rfactor, self.term_rfactor, self.nstates, self.trans_prob_decay_rate
+        )
+        start_probs = end_probs[::-1]
         for i in range(self.rfactor):
             # first state of chain
+            remaining_prob = 1.0 - trans_probs[i] - end_probs[i]
+            assert remaining_prob > 0
             if i == 0:
+                # self loop and rigid transition should be equally likely - no penalising this
                 self._transition_probs[i] = Transition(
-                    self_loop=1.0 - self.trans_prob - self.term_prob - trans_probs[i],
-                    rigid=self.trans_prob,
+                    self_loop=remaining_prob / 2,
+                    rigid=remaining_prob / 2,
                     co=trans_probs[i],
-                    start=self.term_prob,
+                    start=start_probs[i],
+                    end=end_probs[i]
                 )
             # last state of chain
             elif (i + 1) == self.rfactor:
+                # no rigid transition for last of chain
                 self._transition_probs[i] = Transition(
-                    self_loop=1.0 - self.trans_prob - self.term_prob,
-                    co=self.trans_prob,
-                    end=self.term_prob
+                    self_loop=remaining_prob,
+                    co=trans_probs[i],
+                    start=start_probs[i],
+                    end=end_probs[i]
                 )
             # internal point of the chain
             else:
-                start_prob = self.term_prob if i <= (self.rfactor - self.term_rfactor) else 0.0
-                end_prob = self.term_prob if (i + 1) >= self.term_rfactor else 0.0
                 self._transition_probs[i] = Transition(
-                    self_loop=0.0,
-                    rigid=1.0 - end_prob - trans_probs[i],
-                    start=start_prob,
+                    self_loop=0.0, # no looping within the chain
+                    rigid=remaining_prob,
+                    start=start_probs[i],
                     co=trans_probs[i],
-                    end=end_prob
+                    end=end_probs[i],
                 )
 
     def _create_distribution(self, state):

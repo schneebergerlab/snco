@@ -84,10 +84,18 @@ def train_rhmm(co_markers, model_type='haploid', cm_per_mb=4.5,
     else:
         raise ValueError(f"Unsupported data ploidy type: {model_type}")
     fg_params, bg_params = estimate(X, rfactor, dist_type=dist_type)
+
+    def format_params(params, indent=2):
+        return '\n'.join(
+            f'{" " * indent}{k}: {v:.4g}' for k, v in sorted(params.items())
+        )
+
     log.debug(
-        'Estimated model parameters from data: '
-        f'fg_params {fg_params}, bg_params {bg_params}'
+        "Estimated model parameters from data:\n"
+        f"Foreground:\n{format_params(fg_params)}\n"
+        f"Background:\n{format_params(bg_params)}"
     )
+
     return RigidHMM(
         states=states,
         rfactor=rfactor,

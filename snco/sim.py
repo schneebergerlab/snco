@@ -273,10 +273,19 @@ def simulate_doublets(co_markers, n_doublets, doublet_ratio_scale=0.05, ratio_cl
         Simulated haplotype-specific marker records for doublets.
     """
     sim_co_markers_doublets = MarkerRecords.new_like(co_markers, copy_metadata=False)
-    barcodes = rng.choice(co_markers.barcodes, size=n_doublets * 2, replace=True)
-    # sorting by total markers makes m_i and m_j relatively similar in size
-    barcodes = sorted(barcodes, key=co_markers.total_marker_count)
-    for cb_i, cb_j in zip(barcodes[0::2], barcodes[1::2]):
+    barcodes = np.array(co_markers.barcodes)
+    n_barcodes = len(barcodes)
+    marker_counts = np.array([co_markers.total_marker_count(b) for b in barcodes])
+    i_positions = rng.integers(0, n_barcodes, size=n_doublets)
+    probs = 1.0 / (np.abs(marker_counts[None, :] - marker_counts[i_positions, None]) + 1e-6)
+
+    for k, i in enumerate(i_positions):
+        cb_i = barcodes[i]
+        p = probs[k]
+        p[i] = 0.0
+        p /= p.sum()
+        cb_j = rng.choice(barcodes, p=p)
+        assert cb_i != cb_j
         sim_id = f'doublet:{cb_i}_{cb_j}'
         for chrom in sim_co_markers_doublets.chrom_sizes:
             m_i = co_markers[cb_i, chrom]
