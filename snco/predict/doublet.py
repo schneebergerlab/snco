@@ -74,7 +74,7 @@ def generate_doublet_prediction_features(co_markers, co_preds):
             stats.accuracy_score(cb_co_markers, cb_co_preds),
             stats.uncertainty_score(cb_co_preds),
             stats.coverage_score(cb_co_markers),
-            np.log10(stats.n_crossovers(cb_co_preds) + 1)
+            #np.log10(stats.n_crossovers(cb_co_preds) + 1)
         ])
         barcodes.append(cb)
     X = np.array(X)
@@ -207,7 +207,9 @@ def detect_doublets(co_markers, co_preds, rhmm, n_doublets, k_neighbours,
     sim_co_markers = simulate_doublets(co_markers, n_sim)
     log.info('Predicting crossovers for simulated doublets')
     sim_co_preds = detect_crossovers(
-        sim_co_markers, rhmm, batch_size=batch_size, processes=processes
+        sim_co_markers, rhmm,
+        sample_paths=False,
+        batch_size=batch_size, processes=processes
     )
     log.info('Classifying doublets using simulated doublets '
              f'and {k_neighbours} nearest neighbours')

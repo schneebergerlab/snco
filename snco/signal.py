@@ -44,6 +44,7 @@ def argmax_smoothed_haplotype(m, window=40):
 def align_foreground_column(X, window=40):
     """
     Reorder marker counts so the dominant (foreground) haplotype is always in column 0.
+    Supports masked arrays (mask is also aligned)
 
     Parameters
     ----------
@@ -58,10 +59,20 @@ def align_foreground_column(X, window=40):
         List of arrays with reordered haplotype columns.
     """
     X_reordered = []
+
     for x in X:
         fg_idx = argmax_smoothed_haplotype(x, window)
-        ordered_idx = np.stack([fg_idx, 1 - fg_idx], axis=1)
-        X_reordered.append(np.take_along_axis(x, ordered_idx, axis=1))
+        idx = np.stack([fg_idx, 1 - fg_idx], axis=1)
+
+        if isinstance(x, np.ma.MaskedArray):
+            # reorder mask the same way
+            x_reordered = np.take_along_axis(x.data, idx, axis=1)
+            mask_reordered = np.take_along_axis(x.mask, idx, axis=1)
+            X_reordered.append(np.ma.array(x_reordered, mask=mask_reordered))
+        else:
+            x_reordered = np.take_along_axis(x, idx, axis=1)
+            X_reordered.append(x_reordered)
+
     return X_reordered
 
 
@@ -80,7 +91,7 @@ def detect_heterozygous_bins(X_ordered, window=40):
     Returns
     -------
     list of np.ndarray
-        List of boolean masks indicating homozygous bins for each input array.
+        List of boolean masks indicating heterozygous bins for each input array.
     """
     heterozygous_mask = []
     for x in X_ordered:

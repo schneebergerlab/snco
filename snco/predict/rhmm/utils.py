@@ -1,4 +1,6 @@
+import warnings
 import numpy as np
+import torch
 
 def interp_nan_inplace(arr, axis):
     """
@@ -35,3 +37,38 @@ def sorted_edit_distance(state1, state2):
         if h1 != h2:
             dist += 1
     return dist
+
+
+def numpy_to_torch(x):
+    """
+    Convert a NumPy array or masked array to the appropriate Torch object.
+
+    Rules:
+      - Plain ndarray -> torch.Tensor
+      - np.ma.MaskedArray -> masked_tensor(data, mask)
+        with mask polarity corrected for Torch.
+    """
+    if isinstance(x, np.ma.MaskedArray):
+        warnings.filterwarnings("ignore", module="torch.masked.maskedtensor.core")
+        return torch.masked.masked_tensor(
+            torch.from_numpy(np.asarray(x.data, dtype=x.dtype)),
+            torch.from_numpy((~x.mask).astype(bool))
+        )
+
+    # plain ndarray
+    return torch.from_numpy(np.asarray(x))
+
+
+def mask_array_zeros(X, axis=1):
+    # allow negative axes
+    if axis < 0:
+        axis += X.ndim
+    if not (0 <= axis < X.ndim):
+        raise ValueError("axis out of range")
+    Xm = np.moveaxis(X, axis, 0)
+    other_axes = tuple(range(1, X.ndim))
+    mask = Xm.sum(axis=other_axes) == 0
+    reshape = [1] * X.ndim
+    reshape[axis] = -1
+    mask = np.broadcast_to(mask.reshape(reshape), X.shape)
+    return np.ma.array(X, mask=mask)

@@ -128,8 +128,8 @@ def aln_collapser(bam_bundle_iter, decoy_haplotypes, pos_tol=10):
 
 
 @contextmanager
-def collapse_bam_alignments(bam_fn, decoy_haplotypes, position_tolerance=10):
-    bam = pysam.AlignmentFile(bam_fn, mode='rb')
+def collapse_bam_alignments(bam_fn, decoy_haplotypes, position_tolerance=10, threads=1):
+    bam = pysam.AlignmentFile(bam_fn, mode='rb', threads=threads)
 
     header = bam.header.to_dict()
 
@@ -163,10 +163,11 @@ def collapse_bam_alignments(bam_fn, decoy_haplotypes, position_tolerance=10):
 @click.option('-o', '--output-bam', nargs=1, required=True)
 @click.option('--decoy-haplotypes', required=False, help='Comma-separated list of decoy RG IDs', default=None)
 @click.option('--position-tolerance', required=False, default=10)
-def main(input_bam, output_bam, decoy_haplotypes, position_tolerance):
+@click.option('-t', '--threads', required=False, default=1)
+def main(input_bam, output_bam, decoy_haplotypes, position_tolerance, threads):
     decoy_haplotypes = set(decoy_haplotypes.split(',')) if decoy_haplotypes else set()
-    with collapse_bam_alignments(input_bam, decoy_haplotypes, position_tolerance) as (header, bam_iter):
-        with pysam.AlignmentFile(output_bam, 'wb', header=header) as output_bam:
+    with collapse_bam_alignments(input_bam, decoy_haplotypes, position_tolerance, threads // 2) as (header, bam_iter):
+        with pysam.AlignmentFile(output_bam, 'wb', header=header, threads=threads // 2) as output_bam:
             for aln in bam_iter:
                 output_bam.write(aln)
 

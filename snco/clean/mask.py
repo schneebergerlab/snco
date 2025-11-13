@@ -81,7 +81,7 @@ def median_absolute_deviation(arr):
 
 
 def create_resequencing_haplotype_imbalance_mask(co_markers, expected_ratio='auto',
-                                                 nmad_mask=4, correction=1e-2,
+                                                 nmad_mask=3, correction=1e-2,
                                                  apply_per_geno=True):
     """
     Special haplotype imbalance method for resequencing data (not scRNA)
@@ -214,8 +214,8 @@ def mask_regions_bed(co_markers, mask_bed_fn):
     )
     bs = co_markers.bin_size
     for chrom, invs in mask_invs.groupby('chrom'):
-        start_bins = np.floor(invs.start // bs).astype(int)
-        end_bins = np.ceil(invs.end // bs).astype(int)
+        start_bins = np.floor(invs.start / bs).astype(int)
+        end_bins = np.ceil(invs.end / bs).astype(int)
         
         for m in co_markers_m[:, chrom].values():
             for s, e in zip(start_bins, end_bins):

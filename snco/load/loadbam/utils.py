@@ -68,7 +68,7 @@ def get_chrom_sizes_bam(bam_fn, exclude_contigs=None):
     return chrom_sizes
 
 
-def chrom_chunks(chrom_sizes, bin_size, nchunks):
+def chrom_chunks(chrom_sizes, bin_size, processes):
     """
     Generate chunks of chromosome bins for parallel processing.
 
@@ -78,8 +78,8 @@ def chrom_chunks(chrom_sizes, bin_size, nchunks):
         A dictionary where keys are chromosome names and values are their respective lengths.
     bin_size : int
         The bin size in base pairs.
-    nchunks : int
-        The number of chunks to divide the bins into.
+    processes : int
+        The number of processes used. processes * 10 chunks are generated
 
     Yields
     ------
@@ -94,7 +94,7 @@ def chrom_chunks(chrom_sizes, bin_size, nchunks):
         tot += nbins
         chrom_nbins[chrom] = nbins
 
-    chunk_size = tot // nchunks
+    chunk_size = max(tot // (processes * 10), 1)
     for chrom, nbins in chrom_nbins.items():
         start = 0
         while start < nbins:

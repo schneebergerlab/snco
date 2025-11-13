@@ -1,5 +1,8 @@
+import logging
 import click
 from .snco_opts import snco_opts
+
+log = logging.getLogger('snco')
 
 
 snco_opts.option(
@@ -35,24 +38,46 @@ snco_opts.option(
 
 
 snco_opts.option(
-    '--model-lambdas',
+    '-h', '--interference-half-life',
     subcommands=['predict', 'bam2pred', 'csl2pred'],
     required=False,
-    type=(click.FloatRange(1e-5, 10.0), click.FloatRange(1e-5, 10.0)),
-    default=None,
-    help=('optional lambda parameters for foreground and background Poisson distributions of '
-          'model. Default is to fit to the data')
+    type=click.FloatRange(0, 10_000_000),
+    metavar='INTEGER OR FLOAT',
+    default=5_000,
+    help=('Distance below segment_size at which recombination rate halves (exponentially) '
+          'to enforce crossover-interference. If <1, this is considered a fraction of '
+          'segment_size, else it is an absolute value in bp')
+)
+
+
+
+snco_opts.option(
+    '--distribution-type',
+    subcommands=['predict', 'bam2pred', 'csl2pred'],
+    required=False,
+    type=click.Choice(['poisson', 'nb']),
+    default='poisson',
+    help=('type of underlying distribution used to model the count data. Can be either poisson or nb')
 )
 
 
 snco_opts.option(
-    '--empty-fraction',
-    subcommands=['predict', 'bam2pred'],
+    '--sample-co-locs/--no-sample-cos', 'sample_paths',
+    subcommands=['predict', 'bam2pred', 'csl2pred'],
     required=False,
-    type=click.FloatRange(0, 1),
-    default=None,
-    help=('optional lambda parameters for foreground and background Poisson distributions of '
-          'model. Default is to fit to the data')
+    default=True,
+    help='Whether to sample stochastic crossover locations for each barcode'
+)
+
+
+snco_opts.option(
+    '--n-samples',
+    subcommands=['predict', 'bam2pred', 'csl2pred'],
+    required=False,
+    type=click.IntRange(1, 999),
+    default=25,
+    metavar='INTEGER OR FLOAT',
+    help=('The number of stochastic samples to take for each barcode')
 )
 
 
@@ -127,7 +152,7 @@ def _check_device(ctx, param, value):
     n_devices = getattr(torch, device_type).device_count()
     if not n_devices:
         log.error(f'no devices available of type {device_type}')
-    if (device_number + 1) > n_devices:
+    elif (device_number + 1) > n_devices:
         log.error(
             f'device number is too high, only {n_devices} device of type {device_type} avaiable'
         )
@@ -149,6 +174,6 @@ snco_opts.option(
     subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.IntRange(1, 10_000),
-    default=1_000,
+    default=128,
     help='batch size for prediction. larger may be faster but use more memory'
 )

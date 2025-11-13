@@ -1,5 +1,6 @@
 import click
 from .snco_opts import snco_opts
+from .file_opts import _input_file_type
 from snco.defaults import DEFAULT_EXCLUDE_CONTIGS
 
 
@@ -92,9 +93,37 @@ snco_opts.option(
 
 
 def _parse_crossing_combinations(ctx, param, value):
-    if value is not None:
-        value = set([frozenset(geno.split(':')) for geno in value.split(',')])
-    return value
+    """
+    Parse --crossing-combinations like "A:B,A:C,B:C" into a list of (hap1, hap2) tuples.
+    Raises on duplicates and reciprocal-equivalent pairs (e.g., "A:B" and "B:A").
+    """
+    if not value:
+        return None
+
+    tokens = [t.strip() for t in value.split(',') if t.strip()]
+
+    combos = []
+    seen_unordered = set()
+
+    for t in tokens:
+        haps = [h.strip() for h in t.split(':')]
+        if len(haps) != 2 or not haps[0] or not haps[1]:
+            raise click.BadParameter(
+                f"Invalid crossing combination '{t}'. Use 'hap1:hap2'.",
+                ctx=ctx, param=param
+            )
+        haps = tuple(haps)
+        haps_unordered = frozenset(haps)
+        if haps_unordered in seen_unordered:
+            raise click.BadParameter(
+                f"Duplicate or reciprocal-equivalent crossing combination '{t}'. "
+                "Supply each pair only once.",
+                ctx=ctx, param=param
+            )
+        combos.append(haps)
+        seen_unordered.add(haps_unordered)
+
+    return combos
 
 
 snco_opts.option(
@@ -104,7 +133,19 @@ snco_opts.option(
     default=None,
     callback=_parse_crossing_combinations,
     help=('comma separated list of allowed combinations of parental haplotypes used in crosses, '
-          'encoded in format "hap1:hap2,hap1:hap3" etc')
+          'encoded in format "hap1:hap2,hap1:hap3" etc. Incompatible with recombinant mode')
+)
+
+
+snco_opts.option(
+    '--recombinant-parent-jsons', 'genotype_recombinant_parental_haplotypes',
+    subcommands=['loadbam', 'loadcsl', 'bam2pred', 'csl2pred'],
+    nargs=2, type=click.Tuple([_input_file_type, _input_file_type]),
+    required=False,
+    default=None,
+    help=('This option switches on recombinant genotyping mode. Two pred jsons must be provided, that '
+          'encode the two recombinant haplotypes of each parental genotype. Barcodes from the input '
+          'are then matched to these recombinant genotypes.')
 )
 
 

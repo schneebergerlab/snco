@@ -17,10 +17,10 @@ def get_vcf_samples(vcf_fn, ref_name):
     frozenset
         A frozenset containing the sample names (including the reference sample).
     """
+    samples = [ref_name,]
     with pysam.VariantFile(vcf_fn) as vcf:
-        samples = set(vcf.header.samples)
-    samples.add(ref_name)
-    return frozenset(samples)
+        samples += sorted(vcf.header.samples)
+    return tuple(samples)
 
 
 def parse_sample_alleles(variant, ref_name):

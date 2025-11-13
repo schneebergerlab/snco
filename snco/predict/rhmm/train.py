@@ -8,16 +8,15 @@ from .estimate import (
     estimate_diploid_emissions_ordered,
     estimate_diploid_emissions_f2
 )
-
+from .utils import mask_array_zeros
 
 log = logging.getLogger('snco')
 DEFAULT_DEVICE = torch.device('cpu')
 
 
 def train_rhmm(co_markers, model_type='haploid', cm_per_mb=4.5,
-               segment_size=1_000_000, terminal_segment_size=50_000,
-               model_lambdas=None, empty_fraction=None,
-               bc_haplotype=0, device=DEFAULT_DEVICE):
+               segment_size=1_000_000, terminal_segment_size=50_000, interference_half_life=100_000,
+               dist_type='poisson', bc_haplotype=0, mask_empty_bins=True, device=DEFAULT_DEVICE):
     """
     Constructs a RigidHMM instance and fits it to the crossover marker data.
 
@@ -30,17 +29,19 @@ def train_rhmm(co_markers, model_type='haploid', cm_per_mb=4.5,
     cm_per_mb : float, optional
         Recombination rate in centimorgans per megabase (default: 4.5).
     segment_size : int, optional
-        Size of internal genomic segments, i.e. minimum distance between crossovers 
+        Size of internal genomic segments, i.e. soft-enforced distance between crossovers 
         (default: 1,000,000 bp).
     terminal_segment_size : int, optional
         Size of terminal genomic segments, i.e. minimum distance between crossovers and 
         ends of chromosomes (default: 50,000 bp).
-    model_lambdas : float, optional
-        lambdas for poisson used to represent foreground and background. If None, estimate from data.
-    empty_fraction : float, optional
-        Estimated fraction of empty bins in zero inflated model. If None, estimate from data.
+    interference_half_life : int, optional
+        Distance below segment_size at which recombination rate halves to enforce crossover-interference
+    dist_type : str, optional
+        Type of distribution to use in rHMM - can be either poisson or nb.
     bc_haplotype : int, optional
         The haplotype which was used as the backcross parent. Either 0 for ref or 1 for alt (default 0)
+    mask_empty_bins : bool, optional
+        Use masked arrays/tensors for bins which are empty in all barcodes (i.e. have no markers/are masked)
     device : torch.device, optional
         Device to initialize the model on (default: cpu).
 
@@ -53,8 +54,18 @@ def train_rhmm(co_markers, model_type='haploid', cm_per_mb=4.5,
     rfactor = segment_size // bin_size
     term_rfactor = terminal_segment_size // bin_size
     trans_prob = cm_per_mb * (bin_size / 1e8)
+    if interference_half_life < 1:
+        interference_half_life = interference_half_life * segment_size
+    trans_prob_decay_rate = interference_half_life / bin_size / np.log(2)
 
-    X = list(co_markers.deep_values())
+    if not mask_empty_bins:
+        X = list(co_markers.deep_values())
+    else:
+        X = []
+        for chrom in co_markers.chrom_sizes:
+            X_chrom = co_markers[:, chrom].stack_values()
+            X += [m for m in mask_array_zeros(X_chrom, axis=1)]
+        
 
     if model_type == 'haploid':
         states = [(0,), (1,)]
@@ -72,21 +83,19 @@ def train_rhmm(co_markers, model_type='haploid', cm_per_mb=4.5,
         estimate = estimate_diploid_emissions_f2
     else:
         raise ValueError(f"Unsupported data ploidy type: {model_type}")
-    if model_lambdas is None or empty_fraction is None:
-        fg_lambda, bg_lambda, empty_fraction = estimate(X, rfactor)
-        log.debug(
-            'Estimated model parameters from data: '
-            f'fg_lambda {fg_lambda:.2g}, bg_lambda {bg_lambda:.2g}, empty_fraction {empty_fraction:.2g}'
-        )
-    else:
-        bg_lambda, fg_lambda = sorted(model_lambdas)
+    fg_params, bg_params = estimate(X, rfactor, dist_type=dist_type)
+    log.debug(
+        'Estimated model parameters from data: '
+        f'fg_params {fg_params}, bg_params {bg_params}'
+    )
     return RigidHMM(
         states=states,
         rfactor=rfactor,
         term_rfactor=term_rfactor,
         trans_prob=trans_prob,
-        fg_lambda=fg_lambda,
-        bg_lambda=bg_lambda,
-        empty_fraction=empty_fraction,
+        fg_params=fg_params,
+        bg_params=bg_params,
+        dist_type=dist_type,
+        trans_prob_decay_rate=trans_prob_decay_rate,
         device=device
     )

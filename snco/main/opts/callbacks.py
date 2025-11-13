@@ -25,6 +25,7 @@ def validate_loadbam_input(kwargs):
         cb_tag = kwargs.get('cb_tag')
         method = 'exact' if cb_tag in ('CB', 'RG') else '1mm'
         log.info(f"setting CB correction method to '{method}' for data with CB tag '{cb_tag}'")
+        kwargs['cb_correction_method'] = method 
     if kwargs.get('umi_collapse_method') == 'auto':
         if seq_type in ('10x_rna', 'bd_rna', 'bd_atac'):
             umi_tag = kwargs.get('umi_tag')
@@ -47,13 +48,15 @@ def validate_loadbam_input(kwargs):
         kwargs['cb_correction_method'] = 'exact'
         kwargs['validate_barcodes'] = False
     if kwargs.get('cb_tag') == 'CB' and kwargs.get('cb_correction_method') == '1mm':
-        log.warn("'--cb-tag' is set to 'CB', which usually indicates pre-corrected barcodes, but "
-                 "'--cb-correction-method' is set to '1mm'. This may lead to overcorrection")
+        log.warning("'--cb-tag' is set to 'CB', which usually indicates pre-corrected barcodes, but "
+                    "'--cb-correction-method' is set to '1mm'. This may lead to overcorrection")
     if kwargs.get('umi_tag') == 'UB' and kwargs.get('umi_collapse_method') == 'directional':
-        log.warn("'--umi-tag' is set to 'UB', which usually indicates pre-corrected UMIs, but "
-                 "'--cb-correction-method' is set to 'directional'. This may lead to overcorrection")
+        log.warning("'--umi-tag' is set to 'UB', which usually indicates pre-corrected UMIs, but "
+                    "'--cb-correction-method' is set to 'directional'. This may lead to overcorrection")
     if kwargs.get('run_genotype') and kwargs.get('hap_tag_type') == "star_diploid":
         log.error('--hap-tag-type must be "multi_haplotype" when --genotype is switched on')
+    if kwargs.get('genotype_recombinant_parental_haplotypes') and kwargs.get('genotype_crossing_combinations'):
+        log.error("Provide either --recombinant-parent-jsons or --crossing-combinations, not both.")
     if not kwargs.get('run_genotype') and kwargs.get('hap_tag_type') == "multi_haplotype":
         crossing_combinations = kwargs.get('genotype_crossing_combinations')
         if crossing_combinations is not None:
@@ -75,7 +78,9 @@ def validate_loadcsl_input(kwargs):
         # set to haploid for loadbam and loadcsl, other commands infer from data
         kwargs['ploidy_type'] = 'haploid'
     if kwargs.get('run_genotype') and kwargs.get('genotype_vcf_fn') is None:
-        log.error('--genotype-vcf-fn must be provided when --haplotype is switched on')
+        log.error('--genotype-vcf-fn must be provided when --genotype is switched on')
+    if kwargs.get('genotype_recombinant_parental_haplotypes') and kwargs.get('genotype_crossing_combinations'):
+        log.error("Provide either --recombinant-parent-jsons or --crossing-combinations, not both.")
     return kwargs
 
 

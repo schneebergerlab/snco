@@ -21,10 +21,12 @@ import itertools as it
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.colors import Normalize, LinearSegmentedColormap
+import matplotlib as mpl
 
 from .utils import load_json
-from .recombination import recombination_landscape
+from .recombination import recombination_landscape, coefficient_of_coincidence
 from .distortion import segregation_distortion
+from .load.genotype import GenotypeKey
 from .defaults import DEFAULT_RANDOM_SEED
 
 
@@ -65,6 +67,8 @@ def chrom_subplots(chrom_sizes, figsize=(18, 5), xtick_every=1e7,
         sharey='row',
         sharex='col'
     )
+    if len(chrom_sizes) == 1 and isinstance(axes, mpl.axes.Axes):
+        axes = [axes,]
 
     for chrom, ax in zip(chrom_sizes, axes):
         ax.set_xlim(0, chrom_sizes[chrom])
@@ -119,6 +123,8 @@ def chrom2d_subplots(chrom_sizes, figsize=(10, 10), xtick_every=1e7):
         sharey='row',
         sharex='col'
     )
+    if len(chrom_sizes) == 1 and isinstance(axes, mpl.axes.Axes):
+        axes = [[axes,],]
     axes = axes[::-1]
 
     for chrom, ax in zip(chrom_sizes, axes[0]):
@@ -161,6 +167,7 @@ def chrom2dtriangle_subplots(chrom_sizes, figsize=(10, 10), xtick_every=1e7):
     axes : numpy.ndarray
         2D array of axes for the triangular subplot grid.
     """
+    assert len(chrom_sizes) > 1
     fig, axes = plt.subplots(
         figsize=figsize,
         ncols=len(chrom_sizes) - 1,
@@ -339,8 +346,8 @@ def single_cell_markerplot(cb, co_markers, *, co_preds=None, figsize=(18, 4), ch
         chrom_sizes = {c: chrom_sizes[c] for c in chroms}
     fig, axes = chrom_subplots(chrom_sizes, figsize=figsize)
     try:
-        hap1, hap2 = co_markers.metadata['genotypes'][cb].split(':')
-    except KeyError:
+        hap1, hap2 = GenotypeKey.from_str(co_markers.metadata['genotypes'][cb]).genotype
+    except (KeyError, ValueError):
         hap1, hap2 = 'hap1', 'hap2'
     axes[0].set_ylabel(f'Marker coverage ({hap1} vs {hap2})')
     if co_preds is not None:
@@ -412,6 +419,7 @@ def plot_recombination_landscape(co_preds, co_markers=None,
                                  nboots=100, ci=95,
                                  min_prob=5e-3,
                                  axes=None,
+                                 colour=None,
                                  figsize=(12, 4),
                                  use_cached=False,
                                  rng=DEFAULT_RNG):
@@ -456,6 +464,8 @@ def plot_recombination_landscape(co_preds, co_markers=None,
     else:
         fig = plt.gcf()
         assert len(axes) == len(co_preds.chrom_sizes)
+        if len(co_preds.chrom_sizes) == 1 and isinstance(axes, mpl.axes.Axes):
+            axes = [axes,]
 
     if not 'genotypes' in co_preds.metadata:
         apply_per_geno = False
@@ -477,19 +487,19 @@ def plot_recombination_landscape(co_preds, co_markers=None,
     upper = 100 - lower
 
     for geno, geno_cm_per_mb in cm_per_mb.items():
-        colour = None
+        curr_colour = colour
         for chrom, ax in zip(geno_cm_per_mb, axes):
             x = np.arange(0, co_preds.nbins[chrom]) * co_preds.bin_size
             c = geno_cm_per_mb[chrom]
-            line, = ax.step(x, np.nanmean(c, axis=0), color=colour)
+            line, = ax.step(x, np.nanmean(c, axis=0), color=curr_colour)
             # when colour is None this guarantees shading and label colours are correct
-            colour = line.get_color()
+            curr_colour = line.get_color()
             ax.fill_between(
                 x=x,
                 y1=np.nanpercentile(c, lower, axis=0),
                 y2=np.nanpercentile(c, upper, axis=0),
                 alpha=0.25,
-                color=colour
+                color=curr_colour
             )
         if apply_per_geno:
             axes[-1].plot([], [], color=colour, label=geno)
@@ -545,6 +555,8 @@ def plot_allele_ratio(co_preds,
     else:
         fig = plt.gcf()
         assert len(axes) == len(co_preds.chrom_sizes)
+        if len(co_preds.chrom_sizes) == 1 and isinstance(axes, mpl.axes.Axes):
+            axes = [axes,]
 
     if not 'genotypes' in co_preds.metadata:
         apply_per_geno = False
@@ -717,6 +729,8 @@ def plot_segregation_distortion(co_preds, cb_whitelist=None,
     else:
         fig = plt.gcf()
         assert len(axes) == len(co_preds.chrom_sizes)
+        if len(co_preds.chrom_sizes) == 1 and isinstance(axes, mpl.axes.Axes):
+            axes = [axes,]
 
     if order == 1:
         _plot_segdist_1d(seg_dist, co_preds.chrom_sizes, fig, axes,
@@ -726,6 +740,124 @@ def plot_segregation_distortion(co_preds, cb_whitelist=None,
                          cmap=cmap, vmin=vmin, vmax=vmax, label=label)
 
     return axes
+
+
+def plot_coefficient_of_coincidence(co_preds,
+                                    apply_per_geno=False, nboots=100, ci=95,
+                                    min_dist=None, max_dist=None, step_size=1e6,
+                                    only_adjacent=False, chroms=None, show_L_int=True,
+                                    axes=None,
+                                    figsize=(12, 4),
+                                    rng=DEFAULT_RNG):
+    """
+    Plot the coefficient-of-coincidence (CoC) curve with bootstrap confidence intervals.
+
+    Parameters
+    ----------
+    co_preds : PredictionRecords
+        haplotype predictions object with metadata slot crossover_samples
+    apply_per_geno : bool, optional
+        If True, group ``co_preds`` by genotype and plot one curve per group.
+        Ignored if genotype metadata is missing.
+    nboots : int, optional
+        Number of bootstrap replicates used to estimate the CoC distribution.
+    ci : float, optional
+        Confidence interval width (percent). For example, ``ci=95`` produces
+        2.5th and 97.5th percentiles.
+    min_dist : int or None, optional
+        Minimum physical distance (in bp) used when constructing CoC bins. If
+        None, this is set to the rigidity of the model used for haplotype predictions
+    max_dist : int or None, optional
+        Maximum physical distance (in bp). If None, determined from the length of the
+        smallest chromosome
+    step_size : int, optional
+        Bin step size in bp for computing the CoC curve. Default 1 Mb.
+    only_adjacent : bool, optional
+        If True, compute CoC using only adjacent crossover distances.
+    chroms : list or None
+        If provided, limits the plot to a particular chromosome.
+    show_L_int: bool, optional
+        If True, plot the position of the interference length (defined by Ernst et al. 2024)
+    axes : matplotlib.axes.Axes or None, optional
+        Existing axes to draw on. If None, a new figure and axes are created.
+    figsize : tuple, optional
+        Size of the figure if ``ax`` is not provided.
+    rng : numpy.random.Generator, optional
+        Random number generator passed to bootstrap sampling.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure containing the plot.
+    ax : matplotlib.axes.Axes
+        Axes on which the CoC curve and confidence intervals were drawn.
+
+    Notes
+    -----
+    This function calls ``coefficient_of_coincidence`` to compute bootstrap
+    CoC curves, then plots the mean curve and a shaded percentile band
+    corresponding to the chosen confidence interval. Horizontal reference
+    lines are drawn at CoC = 1 and CoC = 0.5. If ``apply_per_geno=True``,
+    each genotype receives its own curve and legend entry.
+    """
+    if chroms is None:
+        chrom_sizes = co_preds.chrom_sizes
+    else:
+        chrom_sizes = {chrom: co_preds.chrom_sizes[chrom] for chrom in chroms}
+    if axes is None:
+        if max_dist is None:
+            fig, axes = chrom_subplots(chrom_sizes, figsize=figsize)
+        else:
+            fig, axes = chrom_subplots({chrom: max_dist for chrom in chrom_sizes}, figsize=figsize)
+    else:
+        fig = plt.gcf()
+        assert len(axes) == len(chrom_sizes)
+        if len(co_preds.chrom_sizes) == 1 and isinstance(axes, mpl.axes.Axes):
+            axes = [axes,]
+
+
+    if not 'genotypes' in co_preds.metadata:
+        apply_per_geno = False
+
+    lower = (100 - ci) / 2
+    upper = 100 - lower
+
+    for geno, geno_co_preds in co_preds.groupby('genotype' if apply_per_geno else 'none'):
+        N = len(geno_co_preds)
+        colour = None
+        geno_coc, x, l_int = coefficient_of_coincidence(
+            geno_co_preds, nboots=nboots, chroms=chroms, only_adjacent=only_adjacent,
+            min_dist=min_dist, max_dist=max_dist, step_size=step_size,
+        )
+        for chrom, ax in zip(chrom_sizes, axes):
+            line, = ax.plot(x[chrom], np.nanmean(geno_coc[chrom], axis=0), color=colour)
+            colour = line.get_color()
+            ax.fill_between(
+                x=x[chrom],
+                y1=np.nanpercentile(geno_coc[chrom], lower, axis=0),
+                y2=np.nanpercentile(geno_coc[chrom], upper, axis=0),
+                alpha=0.25,
+                color=colour
+            )
+            if show_L_int:
+                ax.axvline(np.nanmean(l_int[chrom]), color=colour)
+                ax.axvspan(np.nanpercentile(l_int[chrom], lower),
+                           np.nanpercentile(l_int[chrom], upper),
+                           color=colour, alpha=0.25, zorder=0)
+
+        if apply_per_geno:
+            axes[-1].plot([], [], color=colour, label=geno)
+
+    for chrom, ax in zip(chrom_sizes, axes):
+        ax.axhline(1, color='#252525', zorder=-1)
+        ax.axhline(0.5, color='#252525', zorder=-1, ls='--')
+        ax.set_xlabel(f'{chrom} inter-CO distance (Mb)')
+
+    axes[0].set_ylabel('Coefficient of coincidence')
+    if apply_per_geno:
+        axes[-1].legend(loc=2, title='Genotype')
+    plt.tight_layout()
+    return fig, axes
 
 
 def run_plot(cell_barcode, marker_json_fn, pred_json_fn, output_fig_fn=None,

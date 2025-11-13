@@ -22,7 +22,8 @@ def run_predict(marker_json_fn, output_json_fn, *,
                 co_markers=None,
                 cb_whitelist_fn=None, bin_size=25_000, ploidy_type=None,
                 segment_size=1_000_000, terminal_segment_size=50_000,
-                cm_per_mb=4.5, model_lambdas=None, empty_fraction=None,
+                cm_per_mb=4.5, interference_half_life=100_000, distribution_type='poisson',
+                sample_paths=True, n_samples=10,
                 predict_doublets=True, n_doublets=0.25, k_neighbours=0.25,
                 generate_stats=True, write_bed=True, nco_min_prob_change=2.5e-3,
                 output_precision=3, processes=1,
@@ -54,10 +55,16 @@ def run_predict(marker_json_fn, output_json_fn, *,
         Size of terminal segments (default: 50,000).
     cm_per_mb : float, optional
         Centimorgan per megabase rate (default: 4.5).
-    model_lambdas : tuple of float, optional
-        Optional Poisson lambdas to parameterise rHMM.
-    empty_fraction : float, optional
-        Estimated fraction of empty bins in zero inflated model. If None, estimate from data.
+    interference_half_life : int, optional
+        Distance below segment_size at which recombination rate halves (exponentially)
+        to enforce crossover-interference. If <1, this is considered a fraction of
+        segment_size, else it is an absolute value in basepairs (default 0.1).
+    distribution_type : str, optional
+        Type of distribution to use in rHMM - can be either poisson or nb.
+    sample_paths : bool, optional
+        Whether to sample stochastic crossover locations for each barcode (default: True)
+    n_samples : int, optional
+        The number of samples to take for each barcode (default: 10)
     predict_doublets : bool, optional
         Whether to detect doublets (default: True).
     n_doublets : float or int, optional
@@ -96,12 +103,14 @@ def run_predict(marker_json_fn, output_json_fn, *,
         cm_per_mb=cm_per_mb,
         segment_size=segment_size,
         terminal_segment_size=terminal_segment_size,
-        model_lambdas=model_lambdas,
-        empty_fraction=empty_fraction,
+        interference_half_life=interference_half_life,
+        dist_type=distribution_type,
         device=device,
     )
     co_preds = detect_crossovers(
-        co_markers, rhmm, batch_size=batch_size, processes=processes
+        co_markers, rhmm,
+        sample_paths=sample_paths, n_samples=n_samples,
+        batch_size=batch_size, processes=processes, rng=rng,
     )
     if predict_doublets:
         co_preds = detect_doublets(
@@ -183,8 +192,7 @@ def run_doublet(marker_json_fn, pred_json_fn, output_json_fn, *,
     if normalise_coverage:
         co_markers = normalise_marker_counts(co_markers)
 
-    rparams = co_preds.metadata['rhmm_params']
-    rhmm = RigidHMM(**rparams, device=device)
+    rhmm = RigidHMM.from_params(co_preds.metadata['rhmm_params'], device=device)
 
     co_preds = detect_doublets(
         co_markers, co_preds, rhmm,

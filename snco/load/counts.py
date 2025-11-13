@@ -34,6 +34,9 @@ class IntervalMarkerCounts:
     bin_idx: int
     counts: dict = field(default_factory=dict)
 
+    def __iter__(self):
+        return iter(self.counts)
+
     def __getitem__(self, index):
         if index not in self.counts:
             self.counts[index] = Counter()

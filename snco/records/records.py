@@ -266,7 +266,7 @@ class BaseRecords(object):
         return self._records.pop(cb)
 
     @classmethod
-    def new_like(cls, other):
+    def new_like(cls, other, copy_metadata=True):
         """
         Create a new empty object like another `BaseRecords` instance.
 
@@ -286,7 +286,7 @@ class BaseRecords(object):
             other.bin_size,
             copy(other.seq_type),
             copy(other.ploidy_type),
-            deepcopy(other.metadata)
+            deepcopy(other.metadata) if copy_metadata else None
         )
         new_instance._cmd = other._cmd
         return new_instance
@@ -469,7 +469,7 @@ class BaseRecords(object):
             environment['records'] = self
 
             def func(cb):
-                local_vars = {key: val[cb] for key, val in environment.items()}
+                local_vars = {key: val[cb] for key, val in environment.items() if cb in val}
                 local_vars['cb'] = cb
                 return eval(expr, {"__builtins__": SAFE_BUILTINS}, local_vars)
 

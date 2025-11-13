@@ -1,7 +1,10 @@
 import numpy as np
 
 from snco.records import MarkerRecords, PredictionRecords
-from snco.plot import single_cell_markerplot, plot_recombination_landscape, plot_allele_ratio
+from snco.plot import (
+    single_cell_markerplot, plot_recombination_landscape,
+    plot_allele_ratio, plot_coefficient_of_coincidence
+)
 
 
 class RecordsAPIMixin:
@@ -197,6 +200,56 @@ class PredictionRecordsWrapper(PredictionRecords, RecordsAPIMixin):
             full customization options.
         """
         return plot_allele_ratio(self, **kwargs)
+
+    def plot_coefficient_of_coincidence(self, **kwargs):
+        """
+        Plot the coefficient-of-coincidence (CoC) curve with bootstrap confidence intervals.
+
+        Parameters
+        ----------
+        co_preds : PredictionRecords
+            haplotype predictions object with metadata slot crossover_samples
+        apply_per_geno : bool, optional
+            If True, group ``co_preds`` by genotype and plot one curve per group.
+            Ignored if genotype metadata is missing.
+        nboots : int, optional
+            Number of bootstrap replicates used to estimate the CoC distribution.
+        ci : float, optional
+            Confidence interval width (percent). For example, ``ci=95`` produces
+            2.5th and 97.5th percentiles.
+        min_dist : int or None, optional
+            Minimum physical distance (in bp) used when constructing CoC bins. If
+            None, this is set to the rigidity of the model used for haplotype predictions
+        max_dist : int or None, optional
+            Maximum physical distance (in bp). If None, determined from the length of the
+            smallest chromosome
+        step_size : int, optional
+            Bin step size in bp for computing the CoC curve. Default 1 Mb.
+        only_adjacent : bool, optional
+            If True, compute CoC using only adjacent crossover distances.
+        ax : matplotlib.axes.Axes or None, optional
+            Existing axes to draw on. If None, a new figure and axes are created.
+        figsize : tuple, optional
+            Size of the figure if ``ax`` is not provided.
+        rng : numpy.random.Generator, optional
+            Random number generator passed to bootstrap sampling.
+
+        Returns
+        -------
+        fig : matplotlib.figure.Figure
+            Figure containing the plot.
+        ax : matplotlib.axes.Axes
+            Axes on which the CoC curve and confidence intervals were drawn.
+
+        Notes
+        -----
+        This function calls ``coefficient_of_coincidence`` to compute bootstrap
+        CoC curves, then plots the mean curve and a shaded percentile band
+        corresponding to the chosen confidence interval. Horizontal reference
+        lines are drawn at CoC = 1 and CoC = 0.5. If ``apply_per_geno=True``,
+        each genotype receives its own curve and legend entry.
+        """
+        return plot_coefficient_of_coincidence(self, **kwargs)
     
     def _repr_table_info(self):
         rows = []

@@ -1,15 +1,14 @@
 import os
 import logging
 from collections import defaultdict
+from functools import partial
 
 import numpy as np
 import pandas as pd
 
 from snco.utils import load_json
-from snco.records import MarkerRecords, PredictionRecords
-from snco.clean.background import (
-    estimate_overall_background_signal, subtract_background
-)
+from snco.records import MarkerRecords, PredictionRecords, NestedDataArray
+from snco.clean.background import estimate_overall_background_signal
 from snco.defaults import DEFAULT_RANDOM_SEED
 
 
@@ -86,7 +85,7 @@ def read_ground_truth_haplotypes_bed(co_invs_fn, chrom_sizes, bin_size=25_000):
     return gt
 
 
-def read_ground_truth_haplotypes_json(pred_json_fn):
+def read_ground_truth_haplotypes_json(pred_json_fn, bc_haplotype=0):
     """
     Read ground truth haplotypes from a JSON file.
 
@@ -101,9 +100,51 @@ def read_ground_truth_haplotypes_json(pred_json_fn):
         Ground truth haplotypes with haplotype probabilities rounded to integers.
     """
     gt = PredictionRecords.read_json(pred_json_fn)
-    for *_, m in gt.deep_items():
-        np.round(m, decimals=0, out=m)
+    if gt.ploidy_type == 'haploid':
+        for *_, m in gt.deep_items():
+            np.round(m, decimals=0, out=m)
+    elif gt.ploidy_type == 'diploid_bc1':
+        for *_, m in gt.deep_items():
+            np.round(2 * (m - 0.5 * bc_haplotype), decimals=0, out=m)
+    elif gt.ploidy_type == 'diploid_f2':
+        raise NotImplementedError('Simulation with a "diploid_f2" ground truth sample is currently not supported')
     return gt
+
+
+def random_bg_sample(m, n_bg, bg_signal=None, rng=DEFAULT_RNG):
+    """
+    Randomly sample background signal proportionally to observed counts and background model.
+
+    Parameters
+    ----------
+    m : np.ndarray
+        Marker count matrix with shape (bins, haplotypes).
+    bg_signal : np.ndarray
+        Background probabilities with shape (bins, haplotypes).
+    n_bg : int
+        Number of background markers to sample.
+    rng : np.random.Generator, optional
+        Random number generator.
+
+    Returns
+    -------
+    np.ndarray
+        Matrix of sampled background markers.
+    """
+    if bg_signal is None:
+        bg_signal = np.ones_like(m)
+    bg_idx = np.nonzero(m)
+    m_valid = m[bg_idx]
+    p = m_valid * bg_signal[bg_idx]
+    bg = np.zeros_like(m)
+    p_denom = p.sum(axis=None)
+    if p_denom == 0:
+        return bg
+    p = p / p_denom
+    n_p = p.shape[0]
+    bg_c = np.bincount(rng.choice(np.arange(n_p), size=n_bg, replace=True, p=p), minlength=n_p)
+    bg[bg_idx] = np.minimum(bg_c, m_valid)
+    return bg
 
 
 def apply_gt_to_markers(gt, m, bg_rate, bg_signal, rng=DEFAULT_RNG):
@@ -132,7 +173,13 @@ def apply_gt_to_markers(gt, m, bg_rate, bg_signal, rng=DEFAULT_RNG):
     s = len(m)
 
     # simulate a realistic background signal using the average background across the dataset
-    fg, bg = subtract_background(m, bg_signal, bg_rate, return_bg=True)
+    tot = m.sum(axis=None)
+    if tot:
+        n_bg = round(tot * bg_rate)
+        bg = random_bg_sample(m, n_bg, bg_signal, rng=rng)
+    else:
+        bg = m.copy()
+    fg = m - bg
 
     # flatten haplotypes
     fg = fg.sum(axis=1)
@@ -172,22 +219,38 @@ def simulate_singlets(co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sam
     sim_co_markers : MarkerRecords
         Simulated haplotype-specific marker records.
     """
-    sim_co_markers = MarkerRecords.new_like(co_markers)
-    sim_co_markers.metadata['ground_truth'] = PredictionRecords.new_like(co_markers)
+    sim_co_markers = MarkerRecords.new_like(co_markers, copy_metadata=False)
+    # copy non- barcode-specific metadata, regenerate barcode-specific metadata with new sim barcodes:
+    metadata_to_recreate = {}
+    for md_name, metadata in co_markers.metadata.items():
+        if 'cb' in metadata.levels:
+            sim_co_markers.add_metadata(**{md_name: metadata.new_like(metadata)})
+            metadata_to_recreate[md_name] = metadata.levels.index('cb')
+        else:
+            sim_co_markers.add_metadata(**{md_name: metadata.copy()})
+    sim_co_markers.add_metadata(ground_truth=NestedDataArray(levels=('cb', 'chrom')))
+    sim_id_mapping = defaultdict(list)
     for sample_id in ground_truth.barcodes:
         cbs_to_sim = rng.choice(co_markers.barcodes, replace=False, size=nsim_per_sample)
         for cb in cbs_to_sim:
             sim_id = f'{sample_id}:{cb}'
+            sim_id_mapping[cb].append(sim_id)
             for chrom in ground_truth.chrom_sizes:
                 gt = ground_truth[sample_id, chrom]
                 sim_co_markers[sim_id, chrom] = apply_gt_to_markers(
                     gt, co_markers[cb, chrom], frac_bg[cb], bg_signal[chrom], rng=rng
                 )
                 sim_co_markers.metadata['ground_truth'][sim_id, chrom] = gt
+    for md_name, lvl_idx in metadata_to_recreate.items():
+        for metadata_idx, val in co_markers.metadata[md_name].deep_items():
+            for sim_id in sim_id_mapping[metadata_idx[lvl_idx]]:
+                sim_metadata_idx = metadata_idx[:lvl_idx] + (sim_id, ) + metadata_idx[lvl_idx + 1:]
+                sim_co_markers.metadata[md_name][sim_metadata_idx] = val
+
     return sim_co_markers
 
 
-def simulate_doublets(co_markers, n_doublets, rng=DEFAULT_RNG):
+def simulate_doublets(co_markers, n_doublets, doublet_ratio_scale=0.05, ratio_clip=0.2, rng=DEFAULT_RNG):
     """
     Simulate doublet barcodes by summing markers from random barcode pairs.
 
@@ -197,6 +260,10 @@ def simulate_doublets(co_markers, n_doublets, rng=DEFAULT_RNG):
         Haplotype-specific markers from a real dataset, to use as basis for simulation.
     n_doublets : int
         Number of doublet barcodes to simulate.
+    doublet_ratio_scale : float
+        The scale of the normal distribution (around 0.5) used to create mixing ratios of doublets
+    ratio_clip : float
+        The minimum fraction that a barcode can contribute to a doublet
     rng : Generator, optional
         NumPy random generator.
 
@@ -205,7 +272,7 @@ def simulate_doublets(co_markers, n_doublets, rng=DEFAULT_RNG):
     sim_co_markers_doublets : MarkerRecords
         Simulated haplotype-specific marker records for doublets.
     """
-    sim_co_markers_doublets = MarkerRecords.new_like(co_markers)
+    sim_co_markers_doublets = MarkerRecords.new_like(co_markers, copy_metadata=False)
     barcodes = rng.choice(co_markers.barcodes, size=n_doublets * 2, replace=True)
     # sorting by total markers makes m_i and m_j relatively similar in size
     barcodes = sorted(barcodes, key=co_markers.total_marker_count)
@@ -214,7 +281,15 @@ def simulate_doublets(co_markers, n_doublets, rng=DEFAULT_RNG):
         for chrom in sim_co_markers_doublets.chrom_sizes:
             m_i = co_markers[cb_i, chrom]
             m_j = co_markers[cb_j, chrom]
-            sim_co_markers_doublets[sim_id, chrom] = m_i + m_j
+            doublet_n_markers = (m_i.sum() + m_j.sum()) // 2
+            i_frac = np.clip(
+                rng.normal(loc=0.5, scale=doublet_ratio_scale),
+                a_min=ratio_clip,
+                a_max=1.0 - ratio_clip
+            )
+            m_i_samp = random_bg_sample(m_i, int(doublet_n_markers * i_frac))
+            m_j_samp = random_bg_sample(m_j, int(doublet_n_markers * (1 - i_frac)))
+            sim_co_markers_doublets[sim_id, chrom] = m_i_samp + m_j_samp
     return sim_co_markers_doublets
 
 

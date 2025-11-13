@@ -366,7 +366,7 @@ class NestedData:
                 for key, val in obj.items():
                     yield from _recursive_items(val, depth + 1, key_path + (key,))
 
-        yield from _recursive_items(self._data, 0, tuple())       
+        yield from _recursive_items(self._data, 0, tuple())
 
     def setdefault(self, index, default):
         try:

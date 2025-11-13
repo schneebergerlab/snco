@@ -3,7 +3,21 @@ import numpy as np
 from snco.records import MarkerRecords
 
 
-def normalise_bin_coverage(co_markers, shrinkage_q=0.99):
+def _compute_bias_factor(co_markers, hap_bias_shrinkage=0.75, bc_haplotype=0):
+    if co_markers.ploidy_type == 'diploid_bc1':
+        expected_ratio = (3, 1) if bc_haplotype == 0 else (1, 3)
+    else:
+        expected_ratio = (1, 1)
+    hap_totals = np.sum([m.sum(axis=0) for m in co_markers.deep_values()], axis=0)
+    expected = np.array(expected_ratio, dtype=float)
+    expected /= expected.sum()
+    observed = hap_totals / hap_totals.sum()
+    raw_factor = observed / expected
+    bias_factor = 1.0 + hap_bias_shrinkage * (raw_factor - 1.0)
+    return bias_factor
+
+
+def normalise_bin_coverage(co_markers, shrinkage_q=0.99, correct_hap_bias=True, hap_bias_shrinkage=0.75):
     """
     Down-weight bins with extreme coverage to reduce bias from regions with high expression,
     high marker density, or collapsed repeats.
@@ -22,6 +36,10 @@ def normalise_bin_coverage(co_markers, shrinkage_q=0.99):
         Quantile used to compute the shrinkage threshold for each chromosome.
         Higher values (e.g., 0.99) apply weaker normalization; lower values
         (e.g., 0.75) apply stronger normalization.
+    correct_hap_bias : bool, optional, default True
+        Whether to correct for reference/other bias in global counts per haplotype
+    hap_bias_shrinkage: float, optional, default=0.5
+        The shrinkage parameter used when correcting haplotype bias
     """
     tot = {}
     n_cb = len(co_markers)
@@ -31,6 +49,10 @@ def normalise_bin_coverage(co_markers, shrinkage_q=0.99):
         else:
             tot[chrom] += m
     bin_means = {chrom: t / n_cb for chrom, t in tot.items()}
+    if correct_hap_bias:
+        bias_factor = _compute_bias_factor(co_markers, hap_bias_shrinkage)
+    else:
+        bias_factor = np.ones(shape=2)
 
     lambdas = {
         chrom: np.quantile(bm[bm > 0].ravel(), shrinkage_q)
@@ -48,7 +70,7 @@ def normalise_bin_coverage(co_markers, shrinkage_q=0.99):
 
     co_markers_n = MarkerRecords.new_like(co_markers)
     for cb, chrom, m in co_markers.deep_items():
-        scaled = m * norm_factor[chrom]
+        scaled = m * norm_factor[chrom] / bias_factor[None, :]
         co_markers_n[cb, chrom] = np.round(scaled).astype(int)
 
     return co_markers_n

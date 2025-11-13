@@ -44,6 +44,7 @@ def run_loadbam(bam_fn, output_json_fn, *,
                 hap_tag='ha', hap_tag_type='star_diploid',
                 min_alignment_score=0.95, min_mapq=None,
                 run_genotype=False, genotype_crossing_combinations=None,
+                genotype_recombinant_parental_haplotypes=None,
                 genotype_em_max_iter=1000, genotype_em_min_delta=1e-3,
                 genotype_em_bootstraps=25, validate_barcodes=True,
                 min_markers_per_cb=100, min_markers_per_chrom=20,
@@ -84,6 +85,10 @@ def run_loadbam(bam_fn, output_json_fn, *,
         If True, perform genotyping (default is False).
     genotype_crossing_combinations : list of frozenset, optional
         List of allowed crossing combinations for genotyping (default is None).
+    genotype_recombinant_parental_haplotypes : tuple or None, optional
+        Switched on recombinant mode. A tuple of length 2 containing the paths to the two 
+        PredictionRecords json objects, which encode the recombination patterns of the two 
+        haplotypes of the parental genotypes
     genotype_em_max_iter : int, optional
         Maximum number of EM iterations for genotyping (default is 1000).
     genotype_em_min_delta : float, optional
@@ -126,8 +131,10 @@ def run_loadbam(bam_fn, output_json_fn, *,
         hap_tag=hap_tag,
         hap_tag_type=hap_tag_type,
         run_genotype=run_genotype,
+        recombinant_mode=genotype_recombinant_parental_haplotypes is not None,
         genotype_kwargs={
             'crossing_combinations': genotype_crossing_combinations,
+            'recombinant_parental_haplotypes': genotype_recombinant_parental_haplotypes,
             'max_iter': genotype_em_max_iter,
             'min_delta': genotype_em_min_delta,
             'n_bootstraps': genotype_em_bootstraps,
@@ -137,6 +144,7 @@ def run_loadbam(bam_fn, output_json_fn, *,
         },
         cb_whitelist=cb_whitelist,
         min_alignment_score=min_alignment_score,
+        min_mapq=min_mapq,
         exclude_contigs=exclude_contigs,
     )
     co_markers = _post_load_filtering(
@@ -156,7 +164,9 @@ def run_loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, *,
                 cb_whitelist_fn=None, bin_size=25_000, snp_counts_only=False,
                 seq_type=None, ploidy_type='haploid',
                 run_genotype=False, genotype_vcf_fn=None,
-                genotype_crossing_combinations=None, reference_genotype_name='col0',
+                genotype_crossing_combinations=None,
+                genotype_recombinant_parental_haplotypes=None,
+                reference_genotype_name='col0',
                 genotype_em_max_iter=1000, genotype_em_min_delta=1e-3, genotype_em_bootstraps=25,
                 min_markers_per_cb=100, min_markers_per_chrom=20,
                 min_geno_prob=0.9, max_geno_error_rate=0.25,
@@ -191,6 +201,10 @@ def run_loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, *,
         Path to the VCF file for genotyping. Required if `run_genotype` is True.
     genotype_crossing_combinations : list, optional
         List of genotype crossing combinations for the genotyping process (default is None).
+    genotype_recombinant_parental_haplotypes : tuple or None, optional
+        Switched on recombinant mode. A tuple of length 2 containing the paths to the two 
+        PredictionRecords json objects, which encode the recombination patterns of the two 
+        haplotypes of the parental genotypes
     reference_genotype_name : str, optional
         The name of the reference sample in the VCF file (default is 'col0').
     genotype_em_max_iter : int, optional
@@ -229,11 +243,14 @@ def run_loadcsl(cellsnp_lite_dir, chrom_sizes_fn, output_json_fn, *,
         seq_type=seq_type,
         ploidy_type=ploidy_type,
         validate_barcodes=validate_barcodes,
+        snp_counts_only=snp_counts_only,
         run_genotype=run_genotype,
+        recombinant_mode=genotype_recombinant_parental_haplotypes is not None,
         genotype_vcf_fn=genotype_vcf_fn,
         reference_name=reference_genotype_name,
         genotype_kwargs={
             'crossing_combinations': genotype_crossing_combinations,
+            'recombinant_parental_haplotypes': genotype_recombinant_parental_haplotypes,
             'max_iter': genotype_em_max_iter,
             'min_delta': genotype_em_min_delta,
             'n_bootstraps': genotype_em_bootstraps,
