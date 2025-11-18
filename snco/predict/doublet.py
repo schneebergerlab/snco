@@ -3,6 +3,7 @@ import logging
 import numpy as np
 import pandas as pd
 from scipy.spatial import KDTree
+from scipy.stats import pearsonr
 
 import torch
 
@@ -12,6 +13,7 @@ from ..records import NestedData
 from ..sim import simulate_doublets
 from .. import stats
 from ..defaults import DEFAULT_RANDOM_SEED
+from ..main.logger import progress_bar
 
 
 log = logging.getLogger('snco')
@@ -47,6 +49,18 @@ def k_nearest_neighbours_classifier(X_train, y_train, k_neighbours):
 
     return _knn
 
+def per_chrom_cov_corr(co_markers):
+    av_cov = {}
+    for chrom in co_markers.chrom_sizes:
+        av_cov[chrom] = co_markers[:, chrom].stack_values().sum(axis=None) / len(co_markers)
+    chroms = list(av_cov)
+    av_cov = list(av_cov.values())
+    corrs = {}
+    for cb, cb_co_markers in co_markers.items():
+        cov = [cb_co_markers[chrom].sum() for chrom in chroms]
+        corrs[cb] = np.log(1 - (pearsonr(cov, av_cov)[0] + 1) / 2)
+    return corrs
+
 
 def generate_doublet_prediction_features(co_markers, co_preds):
     """
@@ -68,13 +82,14 @@ def generate_doublet_prediction_features(co_markers, co_preds):
     """
     X = []
     barcodes = []
+
+    corrs = per_chrom_cov_corr(co_markers)
     for cb, cb_co_markers in co_markers.items():
         cb_co_preds = co_preds[cb]
         X.append([
             stats.accuracy_score(cb_co_markers, cb_co_preds),
-            stats.uncertainty_score(cb_co_preds),
-            stats.coverage_score(cb_co_markers),
-            #np.log10(stats.n_crossovers(cb_co_preds) + 1)
+            np.exp(co_preds.metadata['logprobs'][cb] / co_markers.total_marker_count(cb)),
+            corrs[cb],
         ])
         barcodes.append(cb)
     X = np.array(X)
@@ -100,72 +115,14 @@ def min_max_normalise(*X_arrs):
     return [(X - X_min) / (X_max - X_min) for X in X_arrs]
 
 
-def classify_doublet_barcodes(true_co_markers, true_co_preds,
-                              sim_co_markers, sim_co_preds,
-                              k_neighbours, rng=DEFAULT_RNG):
-    """
-    Predicts doublets among barcodes by training a KNN classifier on simulated doublets.
-
-    Parameters
-    ----------
-    true_co_markers : MarkerRecords
-        Original MarkerRecords dataset with haplotype specific read/variant information.
-    true_co_preds : PredictionRecords
-        Haplotype predictions for original markers.
-    sim_co_markers : MarkerDataset
-        Simulated MarkerRecords dataset with synthetic doublets.
-    sim_co_preds : PredictionRecords
-        Haplotype predictions for simulated markers.
-    k_neighbours : int
-        Number of neighbors to use in KNN.
-    rng : np.random.Generator, optional
-        Random number generator instance.
-
-    Returns
-    -------
-    PredictionRecords
-        Updated predictions for original dataset including doublet probability annnotations.
-    """
-    X_true, cb_true = generate_doublet_prediction_features(
-        true_co_markers, true_co_preds
-    )
-    X_doublet, _ = generate_doublet_prediction_features(
-        sim_co_markers, sim_co_preds
-    )
-    N = len(sim_co_markers)
-    X_train = np.concatenate(
-        [X_true[rng.integers(0, len(X_true), size=N)], X_doublet],
-        axis=0
-    )
-    y_train = np.repeat([0, 1], [N, N])
-
-    X_train, X_true = min_max_normalise(X_train, X_true)
-
-    k_neighbours = min(int(N // 2), k_neighbours)
-    knn_classifier = k_nearest_neighbours_classifier(X_train, y_train, k_neighbours)
-    doublet_pred = knn_classifier(X_true)
-    doublet_n = (doublet_pred > 0.5).sum()
-    log.info(
-        f'Identified {doublet_n} putative doublets ({doublet_n / len(doublet_pred) * 100:.2f}%)'
-    )
-    if log.getEffectiveLevel() <= logging.DEBUG:
-        X_pred_series = pd.Series(
-            knn_classifier(X_train) > 0.5, name='Prediction'
-        ).map({False: 'hq', True: 'doublet'})
-        y_pred_series = pd.Series(y_train, name='Simulation').map({0: 'real', 1: 'sim'})
-        log.debug(pd.crosstab(X_pred_series, y_pred_series))
-    
-    doublet_probs = dict(zip(cb_true, doublet_pred))
-    true_co_preds.add_metadata(
-        doublet_probability=NestedData(levels=('cb', ), dtype=float, data=doublet_probs)
-    )
-    return true_co_preds
-
-
 def detect_doublets(co_markers, co_preds, rhmm, n_doublets, k_neighbours,
-                    batch_size=1000, processes=1, rng=DEFAULT_RNG):
+                    max_iter=25, early_stopping_thresh=0.01, inertia=0.95,
+                    batch_size=128, processes=1, rng=DEFAULT_RNG):
     """
-    Detects and flags doublet cell barcodes using simulated doublets and KNN.
+    Detects and flags doublet cell barcodes using simulated doublets and iterative KNN.
+    Doublets are simulated by combining random barcodes and predicting crossover patterns.
+    Summary statistics are then compared to the real data to identify likely doublets and singlets.
+    n_iter rounds of KNN are performed to improve the separation of singlets and doublets.
 
     Parameters
     ----------
@@ -176,11 +133,18 @@ def detect_doublets(co_markers, co_preds, rhmm, n_doublets, k_neighbours,
     rhmm : RigidHMM
         Fitted rHMM model.
     n_doublets : float or int
-        Number or fraction of simulated doublets.
+        Number or fraction of simulated doublets used per iteration.
     k_neighbours : float or int
         Number or fraction of neighbors to use in KNN.
+        The maximum number used is sqrt(n_doublets * 2)
+    max_iter : int
+        Maximum number of iterations of KNN to do.
+    early_stopping_thresh : float
+        The mean change in doublet probability at which to stop the doublet prediction.
+    inertia : float
+        The weighting of the observed doublet rate vs the expectation on each update.
     batch_size : int, optional
-        Batch size for rHMM prediction (default: 1000).
+        Batch size for rHMM prediction (default: 128).
     processes : int, optional
         Number of threads (default: 1).
     rng : np.random.Generator, optional
@@ -191,31 +155,75 @@ def detect_doublets(co_markers, co_preds, rhmm, n_doublets, k_neighbours,
     PredictionRecords
         Updated predictions for dataset including doublet probability annnotations.
     """
+
     if n_doublets > 1:
-        n_sim = int(min(n_doublets, len(co_markers) // 2))
+        n_sim = int(min(n_doublets, len(co_markers)))
     else:
         if not n_doublets:
             raise ValueError('n-doublets must be >0 for doublet detection')
         n_sim = int(len(co_markers) * n_doublets)
 
-    if k_neighbours > 1:
-        k_neighbours = int(min(k_neighbours, n_sim))
-    else:
+    if k_neighbours < 1.0:
         k_neighbours = int(n_sim * k_neighbours)
+    k_neighbours = int(min(k_neighbours, max(np.sqrt(n_sim * 2), 10)))
 
-    log.info(f'Simulating {n_sim} doublets')
-    sim_co_markers = simulate_doublets(co_markers, n_sim)
-    log.info('Predicting crossovers for simulated doublets')
+    X_true, cb_true = generate_doublet_prediction_features(
+        co_markers, co_preds,
+    )
+
+    n_sim_pool = n_sim * min(max_iter, 5)
+    log.info(f'Simulating {n_sim_pool} doublets')
+    sim_co_markers = simulate_doublets(co_markers, n_sim_pool, rng=rng)
     sim_co_preds = detect_crossovers(
         sim_co_markers, rhmm,
         sample_paths=False,
-        batch_size=batch_size, processes=processes
+        batch_size=batch_size,
+        processes=processes,
     )
-    log.info('Classifying doublets using simulated doublets '
-             f'and {k_neighbours} nearest neighbours')
-    co_preds = classify_doublet_barcodes(
-        co_markers, co_preds,
+
+    X_doublet, _ = generate_doublet_prediction_features(
         sim_co_markers, sim_co_preds,
-        k_neighbours, rng=rng,
     )
+
+    doublet_rate = np.nan
+    neg_idx = rng.integers(0, len(X_true), size=n_sim)
+    pos_idx = rng.integers(0, len(X_doublet), size=n_sim)
+    y_train = np.repeat([0, 1], [n_sim, n_sim])
+    p_doublet = None
+    p_delta = 1.0
+
+    def _prog_func(i):
+        i = 0 if i is None else i
+        return f'[{i}/{max_iter}], DR:{doublet_rate:.0f}% ΔP: {p_delta:.2f}'
+
+    doublet_progress = progress_bar(
+        list(range(1, max_iter + 1)),
+        label=f'Detecting doublets',
+        item_show_func=_prog_func,
+    )
+
+
+    with doublet_progress:
+        for it in doublet_progress:
+            X_train = np.concatenate([X_true[neg_idx], X_doublet[pos_idx]], axis=0)
+            X_train_n, X_true_n = min_max_normalise(X_train, X_true)
+            knn = k_nearest_neighbours_classifier(X_train_n, y_train, k_neighbours)
+            p_update = knn(X_true_n)
+            p_delta = np.mean(np.abs(p_update - p_doublet)) if p_doublet is not None else 1.0
+            if p_delta < early_stopping_thresh:
+                break
+            p_doublet = p_update
+            doublet_rate = (p_doublet > 0.5).mean() * 100
+            w = np.clip((1.0 - p_doublet) ** 1.5, 1e-12, None)
+            w /= w.sum()
+            neg_idx = rng.choice(len(X_true), size=n_sim, replace=True, p=w)
+            pos_idx = rng.integers(0, len(X_doublet), size=n_sim)
+
+    doublet_probs = dict(zip(cb_true, p_doublet))
+    co_preds.add_metadata(
+        doublet_probability=NestedData(
+            levels=('cb',), dtype=float, data=doublet_probs
+        )
+    )
+
     return co_preds

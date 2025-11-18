@@ -14,6 +14,15 @@ log = logging.getLogger('snco')
 DEFAULT_DEVICE = torch.device('cpu')
 
 
+def _calculate_co_shrinkage(co_markers, min_shrink=0.05):
+    # shrinkage factor for crossover rate based on the sparsity of the input data.
+    # helps to prevent the model wandering in low information regions
+    informative_bins = np.concatenate([
+        (m == 0).all(axis=1) for m in co_markers.deep_values()
+    ])
+    return np.clip(1 - np.mean(informative_bins), min_shrink, 1.0)
+
+
 def train_rhmm(co_markers, model_type='haploid', cm_per_mb=4.5,
                segment_size=1_000_000, terminal_segment_size=50_000, interference_half_life=100_000,
                dist_type='poisson', bc_haplotype=0, mask_empty_bins=True, device=DEFAULT_DEVICE):
@@ -53,7 +62,7 @@ def train_rhmm(co_markers, model_type='haploid', cm_per_mb=4.5,
     bin_size = co_markers.bin_size
     rfactor = segment_size // bin_size
     term_rfactor = terminal_segment_size // bin_size
-    trans_prob = cm_per_mb * (bin_size / 1e8)
+    trans_prob = cm_per_mb * (bin_size / 1e10) * _calculate_co_shrinkage(co_markers)
     if interference_half_life < 1:
         interference_half_life = interference_half_life * segment_size
     trans_prob_decay_rate = interference_half_life / bin_size / np.log(2)

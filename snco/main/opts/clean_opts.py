@@ -123,8 +123,8 @@ snco_opts.option(
     subcommands=['clean', 'bam2pred', 'csl2pred'],
     required=False,
     default=None,
-    help=('whether to normalise marker counts so that totals for each barcode are equivalent'
-          'default: yes for --seq-type "wgs", otherwise no')
+    help=('whether to normalise marker counts so that distributions for each barcode are '
+          'approximately equivalent')
 )
 
 

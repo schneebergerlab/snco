@@ -20,7 +20,7 @@ snco_opts.option(
     subcommands=['predict', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.IntRange(10_000, 1_000_000),
-    default=50_000,
+    default=250_000,
     help=('terminal rfactor of the rigid HMM. approx. controls min distance of COs '
           'from chromosome ends')
 )
@@ -48,7 +48,6 @@ snco_opts.option(
           'to enforce crossover-interference. If <1, this is considered a fraction of '
           'segment_size, else it is an absolute value in bp')
 )
-
 
 
 snco_opts.option(
@@ -95,7 +94,7 @@ snco_opts.option(
     subcommands=['sim', 'predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.FloatRange(0.0, 10_000),
-    default=0.25,
+    default=1000,
     metavar='INTEGER OR FLOAT',
     help=('number of doublets to simulate. If >1, treated as integer number of doublets. '
           'If <1, treated as a fraction of the total dataset')
@@ -107,7 +106,7 @@ snco_opts.option(
     subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
     type=click.FloatRange(0.01, 10_000),
-    default=0.25,
+    default=100,
     metavar='INTEGER OR FLOAT',
     help=('K neighbours to use for doublet calling. If >1, treated as integer k neighbours. '
           'If <1, treated as a fraction of --n-doublets')
@@ -119,7 +118,7 @@ snco_opts.option(
     subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,
     default=True,
-    help='whether to use synthetic doublet scoring to predict likely doublets in the data'
+    help='whether to generate a stats tsv file for the output predictions'
 )
 
 

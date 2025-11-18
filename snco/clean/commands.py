@@ -54,8 +54,8 @@ def run_clean(marker_json_fn, output_json_fn, *,
         Minimum markers per chromosome per barcode.
     normalise_bins : bool, default=True
         Whether to normalise the coverage of bins to account for marker density/expression variation.
-    normalise_depth : bool, default='auto'
-        Whether to normalise the total coverage of barcodes to make it approximately equal.
+    normalise_depth : bool, default=True
+        Whether to normalise the coverage of barcodes to make them approximately equivalent.
     bin_shrinkage_quantile : float, default=0.99
         The quantile used when computing the shrinkage parameter for bin normalisation.
     max_bin_count : int, default=20
@@ -159,9 +159,6 @@ def run_clean(marker_json_fn, output_json_fn, *,
             co_markers = clean_marker_background(
                 co_markers, apply_per_geno=apply_per_geno
             )
-
-    if normalise_depth == 'auto':
-        normalise_depth = co_markers.seq_type == 'wgs'
 
     if normalise_depth:
         log.info(

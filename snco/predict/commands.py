@@ -24,7 +24,7 @@ def run_predict(marker_json_fn, output_json_fn, *,
                 segment_size=1_000_000, terminal_segment_size=50_000,
                 cm_per_mb=4.5, interference_half_life=100_000, distribution_type='poisson',
                 sample_paths=True, n_samples=10,
-                predict_doublets=True, n_doublets=0.25, k_neighbours=0.25,
+                predict_doublets=True, n_doublets=0.25, k_neighbours=0.25, doublet_prior=0.1,
                 generate_stats=True, write_bed=True, nco_min_prob_change=2.5e-3,
                 output_precision=3, processes=1,
                 batch_size=1_000, device=DEFAULT_DEVICE,
@@ -71,6 +71,8 @@ def run_predict(marker_json_fn, output_json_fn, *,
         Number or fraction of doublets to simulate (default: 0.25).
     k_neighbours : float or int, optional
         Number or fraction of neighbors for KNN (default: 0.25).
+    doublet_prior : float
+        The prior expectation for the doublet rate. This is used to scale KNN outcomes.
     generate_stats : bool, optional
         Whether to generate prediction statistics (default: True).
     write_bed : bool, optional
@@ -115,7 +117,8 @@ def run_predict(marker_json_fn, output_json_fn, *,
     if predict_doublets:
         co_preds = detect_doublets(
             co_markers, co_preds, rhmm, n_doublets, k_neighbours,
-            batch_size=batch_size, processes=processes, rng=rng,
+            doublet_prior=doublet_prior, batch_size=batch_size,
+            processes=processes, rng=rng,
         )
 
     if output_json_fn is not None:
@@ -132,13 +135,13 @@ def run_predict(marker_json_fn, output_json_fn, *,
         co_preds.write_json(output_json_fn, output_precision)
         if write_bed:
             output_bed_fn = f'{os.path.splitext(output_json_fn)[0]}.bed'
-            co_preds.write_bed(output_bed_fn, precision=output_precision)
+            co_preds.write_bed(output_bed_fn, precision=2)
     return co_preds
 
 
 def run_doublet(marker_json_fn, pred_json_fn, output_json_fn, *,
                 cb_whitelist_fn=None, bin_size=25_000,
-                normalise_coverage=False, n_doublets=0.25, k_neighbours=0.25,
+                n_doublets=0.25, k_neighbours=0.25,
                 generate_stats=True, output_precision=3, batch_size=1_000,
                 processes=1, device=DEFAULT_DEVICE, rng=DEFAULT_RNG):
     """
@@ -160,6 +163,8 @@ def run_doublet(marker_json_fn, pred_json_fn, output_json_fn, *,
         Number or fraction of doublets to simulate.
     k_neighbours : float or int, optional
         Number or fraction of KNN neighbors.
+    doublet_prior : float
+        The prior expectation for the doublet rate. This is used to scale KNN outcomes.
     generate_stats : bool, optional
         Whether to generate output statistics (default: True).
     output_precision : int, optional
@@ -186,19 +191,12 @@ def run_doublet(marker_json_fn, pred_json_fn, output_json_fn, *,
     if set(co_preds.barcodes) != set(co_markers.barcodes):
         raise ValueError('Cell barcodes from marker-json-fn and predict-json-fn do not match')
 
-    if normalise_coverage == 'auto':
-        normalise_coverage = co_markers.seq_type == "wgs"
-        log.info(f'Set normalise_coverage to {normalise_coverage} to match seq_type {co_markers.seq_type}')
-    if normalise_coverage:
-        co_markers = normalise_marker_counts(co_markers)
-
     rhmm = RigidHMM.from_params(co_preds.metadata['rhmm_params'], device=device)
 
     co_preds = detect_doublets(
         co_markers, co_preds, rhmm,
-        n_doublets, k_neighbours,
-        batch_size=batch_size, processes=processes,
-        rng=rng,
+        n_doublets=n_doublets, k_neighbours=k_neighbours,
+        batch_size=batch_size, processes=processes, rng=rng,
     )
 
     if output_json_fn is not None:

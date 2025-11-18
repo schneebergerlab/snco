@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 from datetime import datetime
+from contextlib import contextmanager
 from collections import deque
 
 import click
@@ -90,4 +91,6 @@ def click_logger(tool_name):
 def progress_bar(iterable, label=None, **kwargs):
     if label is not None:
         label = log_msg_formatter()('INFO', label)
-    return click.progressbar(iterable, label=label, **kwargs)
+    default_kwargs = {'width': 25, 'show_eta': False, 'show_percent': False}
+    default_kwargs.update(kwargs)
+    return click.progressbar(iterable, label=label, **default_kwargs)

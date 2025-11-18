@@ -250,7 +250,7 @@ def simulate_singlets(co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sam
     return sim_co_markers
 
 
-def simulate_doublets(co_markers, n_doublets, doublet_ratio_scale=0.05, ratio_clip=0.2, rng=DEFAULT_RNG):
+def simulate_doublets(co_markers, n_doublets, doublet_weight=None, doublet_ratio_scale=0.1, ratio_clip=0.1, rng=DEFAULT_RNG):
     """
     Simulate doublet barcodes by summing markers from random barcode pairs.
 
@@ -274,28 +274,36 @@ def simulate_doublets(co_markers, n_doublets, doublet_ratio_scale=0.05, ratio_cl
     """
     sim_co_markers_doublets = MarkerRecords.new_like(co_markers, copy_metadata=False)
     barcodes = np.array(co_markers.barcodes)
+    if doublet_weight is not None:
+        dw = np.array([doublet_weight[cb] for cb in barcodes])
+    else:
+        dw = np.ones(len(barcodes))
+    dw /= dw.sum()
     n_barcodes = len(barcodes)
     marker_counts = np.array([co_markers.total_marker_count(b) for b in barcodes])
-    i_positions = rng.integers(0, n_barcodes, size=n_doublets)
+    i_positions = rng.choice(np.arange(len(barcodes)), size=n_doublets, p=dw)
     probs = 1.0 / (np.abs(marker_counts[None, :] - marker_counts[i_positions, None]) + 1e-6)
-
     for k, i in enumerate(i_positions):
         cb_i = barcodes[i]
-        p = probs[k]
+        p = probs[k] * dw
         p[i] = 0.0
         p /= p.sum()
         cb_j = rng.choice(barcodes, p=p)
         assert cb_i != cb_j
-        sim_id = f'doublet:{cb_i}_{cb_j}'
+        sim_id = f'doublet{k}:{cb_i}_{cb_j}'
+        i_frac = np.clip(
+            rng.normal(loc=0.5, scale=doublet_ratio_scale),
+            a_min=ratio_clip,
+            a_max=1.0 - ratio_clip
+        )
         for chrom in sim_co_markers_doublets.chrom_sizes:
             m_i = co_markers[cb_i, chrom]
             m_j = co_markers[cb_j, chrom]
+            if rng.random() > 0.5:
+                m_i = np.flip(m_i, axis=1)
+            if rng.random() > 0.5:
+                m_j = np.flip(m_j, axis=1)
             doublet_n_markers = (m_i.sum() + m_j.sum()) // 2
-            i_frac = np.clip(
-                rng.normal(loc=0.5, scale=doublet_ratio_scale),
-                a_min=ratio_clip,
-                a_max=1.0 - ratio_clip
-            )
             m_i_samp = random_bg_sample(m_i, int(doublet_n_markers * i_frac))
             m_j_samp = random_bg_sample(m_j, int(doublet_n_markers * (1 - i_frac)))
             sim_co_markers_doublets[sim_id, chrom] = m_i_samp + m_j_samp

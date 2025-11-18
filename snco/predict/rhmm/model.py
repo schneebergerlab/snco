@@ -132,7 +132,6 @@ class RigidHMM:
             remaining_prob = 1.0 - trans_probs[i] - end_probs[i]
             assert remaining_prob > 0
             if i == 0:
-                # self loop and rigid transition should be equally likely - no penalising this
                 self._transition_probs[i] = Transition(
                     self_loop=remaining_prob / 2,
                     rigid=remaining_prob / 2,
@@ -152,8 +151,8 @@ class RigidHMM:
             # internal point of the chain
             else:
                 self._transition_probs[i] = Transition(
-                    self_loop=0.0, # no looping within the chain
-                    rigid=remaining_prob,
+                    self_loop=remaining_prob / 2,
+                    rigid=remaining_prob / 2,
                     start=start_probs[i],
                     co=trans_probs[i],
                     end=end_probs[i],
@@ -334,6 +333,25 @@ class RigidHMM:
             2D array of predicted probabilities of alternative haplotype (hap 1), with shape (N, L).
         """
         return self.predict_haplo_proba(X, batch_size)
+
+    @torch.no_grad()
+    def log_probability(self, X, batch_size=128):
+        logp = []
+        for X_batch in np.array_split(X, int(np.ceil(len(X) / batch_size))):
+            batch_size, chrom_size = X_batch.shape[:2]
+            X_batch = numpy_to_torch(X_batch)
+            if self._device is not None:
+                X_batch = X_batch.to(self._device)
+            lp_batch = self._model.log_probability(X_batch).cpu().numpy()
+            if np.isnan(lp_batch).any():
+                log.warn(
+                    'At least one sample is impossible under the rHMM. '
+                    'This is usually caused either by doublets, or low CO interference that is '
+                    'much shorter than rfactor. '
+                    'Try reducing --segment-size or increasing --interference-half-life'
+                )
+            logp.append(lp_batch)
+        return np.concatenate(logp)
 
     @torch.no_grad()
     def sample(self, X, n=1, batch_size=128, rng=DEFAULT_RNG):

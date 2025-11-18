@@ -1,6 +1,8 @@
 import numpy as np
+from pomegranate import distributions as pmd
 
 from snco.records import MarkerRecords
+from snco.predict.rhmm.dists import ZeroInflated
 
 
 def _compute_bias_factor(co_markers, hap_bias_shrinkage=0.75, bc_haplotype=0):
@@ -76,11 +78,54 @@ def normalise_bin_coverage(co_markers, shrinkage_q=0.99, correct_hap_bias=True, 
     return co_markers_n
 
 
-def normalise_barcode_depth(co_markers):
-    total_counts = {cb: co_markers.total_marker_count(cb) for cb in co_markers.barcodes}
-    norm_factor = np.median(list(total_counts.values()))
+def _estimate_zip_lambda(cb_co_markers):
+    m = np.concatenate(list(cb_co_markers.values())).sum(axis=1)
+    zip_ = ZeroInflated(
+        pmd.Poisson([m[m!=0].mean(),]),
+        priors=[(m == 0).mean()]
+    ).fit(m.reshape(-1, 1))
+    return zip_.distribution.lambdas.numpy()[0]
+
+
+def normalise_barcode_depth(co_markers, min_norm_factor=2.0):
+    """
+    Normalise per-barcode marker depths using ZIP-estimated expected counts.
+
+    This scales each barcode’s marker counts by an estimated Poisson mean
+    (λ) obtained from a zero-inflated Poisson fit to its concatenated
+    marker counts. All barcodes are rescaled to a common target depth
+    defined as the median of the estimated λ values, with an enforced
+    minimum (`min_norm_factor`). Counts are rounded to integers.
+
+    Parameters
+    ----------
+    co_markers : MarkerRecords
+        Input marker record object containing per-barcode marker count
+        arrays.
+    min_norm_factor : float, optional
+        Lower bound on the global normalisation factor. Ensures that very
+        low median λ estimates do not collapse all counts. Default is 2.0.
+
+    Returns
+    -------
+    MarkerRecords
+        A new ``MarkerRecords`` instance with normalised marker counts for
+        each barcode and chromosome.
+
+    Notes
+    -----
+    For each barcode, the expected depth λ is estimated from all
+    concatenated marker counts using a zero-inflated Poisson model. The
+    final scaling applied is:
+
+        scaled = counts / λ_cb * max(median(λ), min_norm_factor)
+
+    Where ``λ_cb`` is the estimated Poisson mean for barcode ``cb``.
+    """
+    lambdas = {cb: _estimate_zip_lambda(co_markers[cb]) for cb in co_markers.barcodes}
+    norm_factor = np.maximum(np.median(list(lambdas.values())), min_norm_factor)
     co_markers_n = MarkerRecords.new_like(co_markers)
     for cb, chrom, m in co_markers.deep_items():
-        scaled = m / total_counts[cb] * norm_factor
+        scaled = m / lambdas[cb] * norm_factor
         co_markers_n[cb, chrom] = np.round(scaled).astype(int)
     return co_markers_n

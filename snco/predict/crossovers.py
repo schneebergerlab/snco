@@ -1,5 +1,5 @@
 import logging
-from collections import namedtuple
+from collections import namedtuple, Counter
 import numpy as np
 import pandas as pd
 
@@ -50,7 +50,8 @@ def samples_to_crossover_positions(haplotype_samples):
 
 def detect_crossovers(co_markers, rhmm, mask_empty_bins=True,
                       sample_paths=True, n_samples=10,
-                      batch_size=128, processes=1, rng=DEFAULT_RNG):
+                      batch_size=128, processes=1, rng=DEFAULT_RNG,
+                      show_progress=True):
     """
     Applies an rHMM to predict crossovers from marker data.
 
@@ -82,15 +83,19 @@ def detect_crossovers(co_markers, rhmm, mask_empty_bins=True,
         co_markers.chrom_sizes,
         label='Predicting COs',
         item_show_func=str,
+        hidden=not show_progress
     )
+    logprobs = Counter()
     with chrom_progress:
         for chrom in chrom_progress:
             X = np.array([co_markers[cb, chrom] for cb in seen_barcodes])
             if mask_empty_bins:
                 X = mask_array_zeros(X, axis=1)
             X_pred = rhmm.predict(X, batch_size=batch_size)
-            for cb, p in zip(seen_barcodes, X_pred):
+            X_logprob = rhmm.log_probability(X, batch_size=batch_size)
+            for cb, p, lp in zip(seen_barcodes, X_pred, X_logprob):
                 co_preds[cb, chrom] = p
+                logprobs[cb] += lp
             if sample_paths:
                 X_samp = rhmm.sample(X, n=n_samples, batch_size=batch_size, rng=rng)
                 co_pos, co_signs = samples_to_crossover_positions(X_samp)
@@ -103,6 +108,11 @@ def detect_crossovers(co_markers, rhmm, mask_empty_bins=True,
             dtype=(float, list),
             data=rhmm.params
         ),
+        logprobs=NestedData(
+            levels=('cb',),
+            dtype=(float),
+            data=dict(logprobs),
+        )
     )
     if sample_paths:
         co_preds.add_metadata(crossover_samples=crossover_samples)
