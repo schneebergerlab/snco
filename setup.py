@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='snco',
-    version='0.5.0',
+    version='0.5.1',
     description=(
         'crossover mapping for single cell/nucleus sequencing data'
     ),
