@@ -24,7 +24,7 @@ def run_predict(marker_json_fn, output_json_fn, *,
                 segment_size=1_000_000, terminal_segment_size=50_000,
                 cm_per_mb=4.5, interference_half_life=100_000, distribution_type='poisson',
                 sample_paths=True, n_samples=10,
-                predict_doublets=True, n_doublets=0.25, k_neighbours=0.25, doublet_prior=0.1,
+                predict_doublets=True, n_doublets=0.25, k_neighbours=0.25,
                 generate_stats=True, write_bed=True, nco_min_prob_change=2.5e-3,
                 output_precision=3, processes=1,
                 batch_size=1_000, device=DEFAULT_DEVICE,
@@ -71,8 +71,6 @@ def run_predict(marker_json_fn, output_json_fn, *,
         Number or fraction of doublets to simulate (default: 0.25).
     k_neighbours : float or int, optional
         Number or fraction of neighbors for KNN (default: 0.25).
-    doublet_prior : float
-        The prior expectation for the doublet rate. This is used to scale KNN outcomes.
     generate_stats : bool, optional
         Whether to generate prediction statistics (default: True).
     write_bed : bool, optional
@@ -116,8 +114,7 @@ def run_predict(marker_json_fn, output_json_fn, *,
     )
     if predict_doublets:
         co_preds = detect_doublets(
-            co_markers, co_preds, rhmm, n_doublets, k_neighbours,
-            doublet_prior=doublet_prior, batch_size=batch_size,
+            co_markers, co_preds, rhmm, n_doublets, k_neighbours, batch_size=batch_size,
             processes=processes, rng=rng,
         )
 

@@ -151,8 +151,8 @@ class RigidHMM:
             # internal point of the chain
             else:
                 self._transition_probs[i] = Transition(
-                    self_loop=remaining_prob / 2,
-                    rigid=remaining_prob / 2,
+                    self_loop=0.0,
+                    rigid=remaining_prob,
                     start=start_probs[i],
                     co=trans_probs[i],
                     end=end_probs[i],

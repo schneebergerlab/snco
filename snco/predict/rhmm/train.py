@@ -14,7 +14,7 @@ log = logging.getLogger('snco')
 DEFAULT_DEVICE = torch.device('cpu')
 
 
-def _calculate_co_shrinkage(co_markers, min_shrink=0.05):
+def _calculate_co_shrinkage(co_markers, min_shrink=0.15):
     # shrinkage factor for crossover rate based on the sparsity of the input data.
     # helps to prevent the model wandering in low information regions
     informative_bins = np.concatenate([
