@@ -8,6 +8,7 @@ import pandas as pd
 
 from snco.utils import load_json
 from snco.records import MarkerRecords, PredictionRecords, NestedDataArray
+from snco.clean.filter import filter_low_coverage_barcodes
 from snco.clean.background import estimate_overall_background_signal
 from snco.signal import smooth_counts_sum
 from snco.defaults import DEFAULT_RANDOM_SEED
@@ -397,8 +398,10 @@ def ground_truth_from_marker_records(co_markers):
 
 
 def run_sim(marker_json_fn, output_json_fn, ground_truth_fn, *,
-            cb_whitelist_fn=None, bin_size=25_000, bg_marker_rate=None,
-            bg_window_size=2_500_000, nsim_per_sample=100, n_doublets=0.0,
+            cb_whitelist_fn=None, bin_size=25_000,
+            min_markers_per_cb=100, min_markers_per_chrom=20,
+            bg_marker_rate=None, bg_window_size=2_500_000,
+            nsim_per_sample=100, n_doublets=0.0,
             rng=DEFAULT_RNG):
     """
     Run the full simulation pipeline to create synthetic marker data from ground truth.
@@ -415,6 +418,10 @@ def run_sim(marker_json_fn, output_json_fn, ground_truth_fn, *,
         Optional path to cell barcode whitelist.
     bin_size : int, optional
         Genomic bin size.
+    min_markers_per_cb : int, optional
+        Minimum number of markers required per barcode (default is 100).
+    min_markers_per_chrom : int, optional
+        Minimum number of markers required per chromosome (default is 20).
     bg_marker_rate : float, optional
         Fixed background rate.
     bg_window_size : int, optional
@@ -432,6 +439,10 @@ def run_sim(marker_json_fn, output_json_fn, ground_truth_fn, *,
         Simulated marker data.
     """
     co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
+    if min_markers_per_cb or min_markers_per_chrom:
+        co_markers = filter_low_coverage_barcodes(
+            co_markers, min_markers_per_cb, min_markers_per_chrom
+        )
 
     if os.path.splitext(ground_truth_fn)[1] == '.bed':
         ground_truth_haplotypes = read_ground_truth_haplotypes_bed(

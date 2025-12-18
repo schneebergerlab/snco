@@ -115,7 +115,7 @@ def run_predict(marker_json_fn, output_json_fn, *,
     if predict_doublets:
         co_preds = detect_doublets(
             co_markers, co_preds, rhmm, n_doublets, batch_size=batch_size,
-            processes=processes, rng=rng, device=device
+            processes=processes, rng=rng,
         )
 
     if output_json_fn is not None:
