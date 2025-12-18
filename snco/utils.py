@@ -9,7 +9,7 @@ from snco.records import MarkerRecords, PredictionRecords
 log = logging.getLogger('snco')
 
 
-def load_json(json_fn, cb_whitelist_fn, bin_size, data_type='markers', subset=None):
+def load_json(json_fn, cb_whitelist_fn, bin_size, data_type='markers', subset=None, frozen=False):
     """
     Load MarkerRecords or PredictionRecords from a JSON file and filter based on cell barcode whitelist.
 
@@ -42,15 +42,15 @@ def load_json(json_fn, cb_whitelist_fn, bin_size, data_type='markers', subset=No
         If the data type cannot be automatically determined from the file.
     """
     if data_type == 'markers':
-        data = MarkerRecords.read_json(json_fn, subset=subset)
+        data = MarkerRecords.read_json(json_fn, subset=subset, frozen=frozen)
     elif data_type == 'predictions':
-        data = PredictionRecords.read_json(json_fn, subset=subset)
+        data = PredictionRecords.read_json(json_fn, subset=subset, frozen=frozen)
     elif data_type == 'auto':
         try:
-            data = MarkerRecords.read_json(json_fn, subset=subset)
+            data = MarkerRecords.read_json(json_fn, subset=subset, frozen=frozen)
         except ValueError as exc:
             try:
-                data = PredictionRecords.read_json(json_fn, subset=subset)
+                data = PredictionRecords.read_json(json_fn, subset=subset, frozen=frozen)
             except ValueError:
                 raise IOError(
                     f'data type of file {json_fn} could not be determined automatically'

@@ -19,56 +19,90 @@ def _compute_bias_factor(co_markers, hap_bias_shrinkage=0.75, bc_haplotype=0):
     return bias_factor
 
 
-def normalise_bin_coverage(co_markers, shrinkage_q=0.99, correct_hap_bias=True, hap_bias_shrinkage=0.75):
+def normalise_bin_coverage(co_markers, shrinkage_q=0.99, allow_upweight=False, max_upweight=4.0,
+                           binwise_hap_mode='shared', correct_hap_bias=True, hap_bias_shrinkage=0.75):
     """
-    Down-weight bins with extreme coverage to reduce bias from regions with high expression,
-    high marker density, or collapsed repeats.
+    Normalise per-bin coverage across chromosomes by shrinking extreme coverage values.
 
-    This function computes per-bin average coverage across all barcodes, then applies
-    a shrinkage factor based on a quantile-derived threshold (`lambda`). Bins with
-    coverage above the chosen quantile are scaled down, while low-coverage bins remain
-    mostly unchanged. Counts are scaled per chromosome and rounded to integers.
+    This function computes per-bin average coverage across all barcodes and applies a
+    chromosome-specific normalisation factor. By default, bins with unusually high
+    coverage are down-weighted to reduce bias from collapsed repeats, high marker
+    density, or other technical artefacts, while typical bins are left largely unchanged.
+
+    Optionally, when `allow_upweight=True`, bins with moderately lower-than-typical
+    coverage may be up-weighted toward the medias. This mode is intended for
+    non-sparse, high-coverage datasets and includes safeguards to avoid amplifying noise
+    or inventing signal in bins with near-zero coverage.
+
+    Normalisation is applied per chromosome and approximately preserves total coverage.
+    Counts are scaled and rounded to integers.
 
     Parameters
     ----------
     co_markers : MarkerRecords
-        Marker data structure containing count matrices for multiple barcodes and chromosomes.
-        Each entry should be a 2D NumPy array of shape (bins, haplotypes).
+        Marker data structure containing count matrices for multiple barcodes and
+        chromosomes. Each entry is a 2D NumPy array of shape (bins, haplotypes).
     shrinkage_q : float, optional, default=0.99
-        Quantile used to compute the shrinkage threshold for each chromosome.
-        Higher values (e.g., 0.99) apply weaker normalization; lower values
-        (e.g., 0.75) apply stronger normalization.
-    correct_hap_bias : bool, optional, default True
-        Whether to correct for reference/other bias in global counts per haplotype
-    hap_bias_shrinkage: float, optional, default=0.5
-        The shrinkage parameter used when correcting haplotype bias
+        Quantile used to define the shrinkage reference when `allow_upweight=False`.
+        Higher values restrict shrinkage to extreme high-coverage bins; lower values
+        apply stronger down-weighting.
+    allow_upweight : bool, optional, default=False
+        If False, only down-weighting of high-coverage bins is performed.
+        If True, bins with moderately low coverage may also be up-weighted toward a
+        representative depth (the median bin coverage), subject to caps and thresholds.
+    max_upweight : float, optional, default=4.0
+        Maximum multiplicative factor applied when up-weighting low-coverage bins.
+        Only used when `allow_upweight=True`.
+    binwise_hap_mode : "independent" or "shared", optional, default "shared"
+        Whether to calculate shared or independent norm factors for each haplotype in each bin.
+    correct_hap_bias : bool, optional, default=True
+        Whether to correct for global reference/alternate haplotype count imbalance
+        prior to per-bin normalisation.
+    hap_bias_shrinkage : float, optional, default=0.75
+        Shrinkage parameter used when estimating the haplotype bias correction.
+    Notes
+    -----
+    Up-weighting low-coverage bins can amplify noise and should only be enabled for
+    datasets with sufficiently high and relatively uniform coverage (e.g. ≥10×
+    resequencing). For sparse data, the default down-weight-only behaviour is safer.
     """
     tot = {}
     n_cb = len(co_markers)
+
+    shared = (binwise_hap_mode == "shared")
+    if binwise_hap_mode not in ("shared", "independent"):
+        raise ValueError("binwise_hap_mode must be 'shared' or 'independent'")
+
     for cb, chrom, m in co_markers.deep_items():
-        if chrom not in tot:
-            tot[chrom] = m.copy()
-        else:
-            tot[chrom] += m
+        mc = m.sum(axis=1, keepdims=True) if shared else m
+        tot[chrom] = mc.copy() if chrom not in tot else (tot[chrom] + mc)
     bin_means = {chrom: t / n_cb for chrom, t in tot.items()}
     if correct_hap_bias:
         bias_factor = _compute_bias_factor(co_markers, hap_bias_shrinkage)
     else:
         bias_factor = np.ones(shape=2)
 
+    target_q = shrinkage_q if not allow_upweight else 0.5
     lambdas = {
-        chrom: np.quantile(bm[bm > 0].ravel(), shrinkage_q)
+        chrom: np.quantile(bm[bm > 0].ravel(), target_q)
         for chrom, bm in bin_means.items()
     }
 
     norm_factor = {}
     for chrom, bm in bin_means.items():
-        f = lambdas[chrom] / (bm + lambdas[chrom])
+        lam = lambdas[chrom]
+        if not allow_upweight:
+            f = lam / (bm + lam)
+        else:
+            f = lam / (bm + 1e-6)
+            f = np.where(bm > 0.0, f, 0.0)
+            f = np.minimum(max_upweight, f)
+
         original_sum = bm.sum()
         new_sum = (bm * f).sum()
         scale = original_sum / new_sum if new_sum > 0 else 1.0
-        f = np.minimum(1.0, f * scale)
-        norm_factor[chrom] = f
+        nf = np.minimum(1.0 if not allow_upweight else max_upweight, f * scale)
+        norm_factor[chrom] = nf
 
     co_markers_n = MarkerRecords.new_like(co_markers)
     for cb, chrom, m in co_markers.deep_items():

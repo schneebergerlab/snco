@@ -102,18 +102,6 @@ snco_opts.option(
 
 
 snco_opts.option(
-    '--k-neighbours',
-    subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
-    required=False,
-    type=click.FloatRange(0.01, 10_000),
-    default=100,
-    metavar='INTEGER OR FLOAT',
-    help=('K neighbours to use for doublet calling. If >1, treated as integer k neighbours. '
-          'If <1, treated as a fraction of --n-doublets')
-)
-
-
-snco_opts.option(
     '--generate-stats/--no-stats',
     subcommands=['predict', 'doublet', 'bam2pred', 'csl2pred'],
     required=False,

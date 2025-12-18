@@ -136,7 +136,11 @@ def run_clean(marker_json_fn, output_json_fn, *,
         log.info(
             f'Normalising bin coverage to reduce marker or expression biases'
         )
-        co_markers = normalise_bin_coverage(co_markers, shrinkage_q=bin_shrinkage_quantile, correct_hap_bias=False)
+        co_markers = normalise_bin_coverage(
+            co_markers, shrinkage_q=bin_shrinkage_quantile, correct_hap_bias=False,
+            allow_upweight=True if co_markers.seq_type == "wgs" else False,
+            binwise_hap_mode='independent' if co_markers.seq_type in ('10x_rna', 'bd_rna') else 'shared'
+        )
 
     n = len(co_markers)
     # currently this method does not make sense for non-haploid samples

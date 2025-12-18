@@ -9,6 +9,7 @@ import pandas as pd
 from snco.utils import load_json
 from snco.records import MarkerRecords, PredictionRecords, NestedDataArray
 from snco.clean.background import estimate_overall_background_signal
+from snco.signal import smooth_counts_sum
 from snco.defaults import DEFAULT_RANDOM_SEED
 
 
@@ -147,7 +148,7 @@ def random_bg_sample(m, n_bg, bg_signal=None, rng=DEFAULT_RNG):
     return bg
 
 
-def apply_gt_to_markers(gt, m, bg_rate, bg_signal, rng=DEFAULT_RNG):
+def apply_gt_to_markers(gt, m, bg_rate, bg_signal, conv_bins, rng=DEFAULT_RNG):
     """
     Simulate marker counts using a known ground truth haplotype.
 
@@ -161,6 +162,7 @@ def apply_gt_to_markers(gt, m, bg_rate, bg_signal, rng=DEFAULT_RNG):
         Estimated background rate for the cell.
     bg_signal : ndarray
         Per-bin background signal for the chromosome.
+    conv_bins : convolution size for rough fg/bg estimation
     rng : Generator, optional
         NumPy random generator.
 
@@ -172,11 +174,14 @@ def apply_gt_to_markers(gt, m, bg_rate, bg_signal, rng=DEFAULT_RNG):
     gt = gt.astype(int)
     s = len(m)
 
+    m_smooth = smooth_counts_sum(m, conv_bins)
+    nf = m_smooth.mean()
+    bg_probs = 1 - (m_smooth + nf / 2) / (m_smooth.sum(axis=1, keepdims=True) + nf)
     # simulate a realistic background signal using the average background across the dataset
     tot = m.sum(axis=None)
     if tot:
         n_bg = round(tot * bg_rate)
-        bg = random_bg_sample(m, n_bg, bg_signal, rng=rng)
+        bg = random_bg_sample(m, n_bg, bg_signal * bg_probs, rng=rng)
     else:
         bg = m.copy()
     fg = m - bg
@@ -195,7 +200,8 @@ def apply_gt_to_markers(gt, m, bg_rate, bg_signal, rng=DEFAULT_RNG):
     return sim
 
 
-def simulate_singlets(co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sample, rng=DEFAULT_RNG):
+def simulate_singlets(co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sample,
+                     conv_window_size, rng=DEFAULT_RNG):
     """
     Simulate single-cell barcodes based on ground truth haplotypes.
 
@@ -211,6 +217,8 @@ def simulate_singlets(co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sam
         Background fraction per cell barcode.
     nsim_per_sample : int
         Number of simulated cells per ground truth haplotype.
+    conv_window_size : int, optional
+        Window size for convolution-based background estimation.
     rng : Generator, optional
         NumPy random generator.
 
@@ -230,6 +238,7 @@ def simulate_singlets(co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sam
             sim_co_markers.add_metadata(**{md_name: metadata.copy()})
     sim_co_markers.add_metadata(ground_truth=NestedDataArray(levels=('cb', 'chrom')))
     sim_id_mapping = defaultdict(list)
+    conv_bins = conv_window_size // co_markers.bin_size
     for sample_id in ground_truth.barcodes:
         cbs_to_sim = rng.choice(co_markers.barcodes, replace=False, size=nsim_per_sample)
         for cb in cbs_to_sim:
@@ -238,7 +247,8 @@ def simulate_singlets(co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sam
             for chrom in ground_truth.chrom_sizes:
                 gt = ground_truth[sample_id, chrom]
                 sim_co_markers[sim_id, chrom] = apply_gt_to_markers(
-                    gt, co_markers[cb, chrom], frac_bg[cb], bg_signal[chrom], rng=rng
+                    gt, co_markers[cb, chrom],
+                    frac_bg[cb], bg_signal[chrom], conv_bins, rng=rng
                 )
                 sim_co_markers.metadata['ground_truth'][sim_id, chrom] = gt
     for md_name, lvl_idx in metadata_to_recreate.items():
@@ -310,7 +320,8 @@ def simulate_doublets(co_markers, n_doublets, doublet_weight=None, doublet_ratio
     return sim_co_markers_doublets
 
 
-def generate_simulated_data(co_markers, ground_truth, conv_window_size=2_500_000,
+def generate_simulated_data(co_markers, ground_truth,
+                            conv_window_size=2_500_000,
                             bg_rate=None, nsim_per_sample=100,
                             doublet_rate=0.0, rng=DEFAULT_RNG):
     """
@@ -350,7 +361,8 @@ def generate_simulated_data(co_markers, ground_truth, conv_window_size=2_500_000
         frac_bg = defaultdict(lambda: bg_rate)
 
     sim_co_markers = simulate_singlets(
-        co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sample, rng=rng
+        co_markers, ground_truth, bg_signal, frac_bg, nsim_per_sample,
+        conv_window_size, rng=rng
     )
 
     if doublet_rate:
@@ -420,6 +432,7 @@ def run_sim(marker_json_fn, output_json_fn, ground_truth_fn, *,
         Simulated marker data.
     """
     co_markers = load_json(marker_json_fn, cb_whitelist_fn, bin_size)
+
     if os.path.splitext(ground_truth_fn)[1] == '.bed':
         ground_truth_haplotypes = read_ground_truth_haplotypes_bed(
             ground_truth_fn, co_markers.chrom_sizes, bin_size

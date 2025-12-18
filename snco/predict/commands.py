@@ -114,8 +114,8 @@ def run_predict(marker_json_fn, output_json_fn, *,
     )
     if predict_doublets:
         co_preds = detect_doublets(
-            co_markers, co_preds, rhmm, n_doublets, k_neighbours, batch_size=batch_size,
-            processes=processes, rng=rng,
+            co_markers, co_preds, rhmm, n_doublets, batch_size=batch_size,
+            processes=processes, rng=rng, device=device
         )
 
     if output_json_fn is not None:
@@ -137,8 +137,7 @@ def run_predict(marker_json_fn, output_json_fn, *,
 
 
 def run_doublet(marker_json_fn, pred_json_fn, output_json_fn, *,
-                cb_whitelist_fn=None, bin_size=25_000,
-                n_doublets=0.25, k_neighbours=0.25,
+                cb_whitelist_fn=None, bin_size=25_000, n_doublets=500,
                 generate_stats=True, output_precision=3, batch_size=1_000,
                 processes=1, device=DEFAULT_DEVICE, rng=DEFAULT_RNG):
     """
@@ -158,10 +157,6 @@ def run_doublet(marker_json_fn, pred_json_fn, output_json_fn, *,
         Genomic bin size (default: 25,000).
     n_doublets : float or int, optional
         Number or fraction of doublets to simulate.
-    k_neighbours : float or int, optional
-        Number or fraction of KNN neighbors.
-    doublet_prior : float
-        The prior expectation for the doublet rate. This is used to scale KNN outcomes.
     generate_stats : bool, optional
         Whether to generate output statistics (default: True).
     output_precision : int, optional
@@ -191,8 +186,7 @@ def run_doublet(marker_json_fn, pred_json_fn, output_json_fn, *,
     rhmm = RigidHMM.from_params(co_preds.metadata['rhmm_params'], device=device)
 
     co_preds = detect_doublets(
-        co_markers, co_preds, rhmm,
-        n_doublets=n_doublets, k_neighbours=k_neighbours,
+        co_markers, co_preds, rhmm, n_doublets=n_doublets,
         batch_size=batch_size, processes=processes, rng=rng,
     )
 
