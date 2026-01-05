@@ -650,23 +650,37 @@ def parallel_assign_genotypes(genotype_markers, genotype_options, *, processes=1
     return geno_assignments, geno_probabilities, geno_nmarkers, geno_error_rates
 
 
-def _parallel_convert_ic(inv_counts, genotype_options):
+def _parallel_convert_ic(inv_counts, genotype_options, weight_by_reads=True):
     genotype_markers = defaultdict(Counter)
     for ic in inv_counts:
         pos_parental_geno = genotype_options.get_bin_haplotypes(ic.chrom, ic.bin_idx)
         for cb, cb_counts in ic.counts.items():
+            
+            if not weight_by_reads:
+                # find the single haplotype combo with the most reads
+                best_hap_comb, _ = max(cb_counts.items(), key=lambda x: x[1])
+                # only process the winner, with a weight of 1
+                items_to_process = [(best_hap_comb, 1)]
+            else:
+                # standard mode: process all reads with their original counts
+                items_to_process = cb_counts.items()
+
             cb_pos_geno_markers = Counter()
-            for hap_comb, count in cb_counts.items():
+            for hap_comb, count in items_to_process:
                 supported_genotypes = 0
                 for geno, pos_geno in pos_parental_geno.items():
                     if pos_geno & hap_comb:
                         supported_genotypes |= 1 << genotype_options.idx[geno]
-                cb_pos_geno_markers[supported_genotypes] += count
+    
+                # count is now either the read count (standard) or 1 (bin voting)
+                if supported_genotypes:
+                    cb_pos_geno_markers[supported_genotypes] += count
+            
             genotype_markers[cb] += cb_pos_geno_markers
     return genotype_markers
 
 
-def resolve_inv_counts_to_genotype_markers(inv_counts, genotype_options, processes=1):
+def resolve_inv_counts_to_genotype_markers(inv_counts, genotype_options, processes=1, weight_by_reads=True):
     """
     Convert per-interval haplotype counts into genotype-support groups.
 
@@ -683,6 +697,9 @@ def resolve_inv_counts_to_genotype_markers(inv_counts, genotype_options, process
         Candidate genotype set; used to look up positional haplotypes per bin.
     processes : int, optional
         The number of processes to use for parallel computation (default is 1).
+    weight_by_reads : bool, optional
+        If True (default), weight markers by read/UMI count. If False, each
+        haplotype observation contributes 1 regardless of read depth.
 
     Returns
     -------
@@ -698,7 +715,7 @@ def resolve_inv_counts_to_genotype_markers(inv_counts, genotype_options, process
     )
 
     genotype_markers = defaultdict(Counter)
-    worker = _GenotypingWorker(_parallel_convert_ic, genotype_options)
+    worker = _GenotypingWorker(_parallel_convert_ic, genotype_options, weight_by_reads=weight_by_reads)
     results = Parallel(processes, backend='loky')(
         delayed(worker)(ic_chunk) for ic_chunk in ic_chunks
     )
@@ -817,9 +834,14 @@ def genotype_from_inv_counts(inv_counts, recombinant_mode=False, recombinant_par
 
     log.info(f'Performing genotyping in {genotype_options.mode} mode with {len(genotype_options)} possible genotypes')
 
+    # In recombinant mode, use bin-wise weighting to prevent shared haplotypes
+    # from drowning out discriminative signal between similar parents
+    is_recombinant_processing = recombinant_mode or recombinant_parental_haplotypes is not None
+    weight_by_reads = not is_recombinant_processing
+
     # use genotype options to infer total support for each genotype for each barcode
     genotype_markers = resolve_inv_counts_to_genotype_markers(
-        inv_counts, genotype_options, processes=min(processes, 10)
+        inv_counts, genotype_options, processes=min(processes, 10), weight_by_reads=weight_by_reads
     )
     log.debug(f'Resolved interval bin counts to genotyping markers for {len(genotype_markers)} barcodes')
 
