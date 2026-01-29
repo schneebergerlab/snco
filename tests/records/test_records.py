@@ -1,8 +1,8 @@
 import tempfile
 import pytest
 import numpy as np
-from snco.records import MarkerRecords, PredictionRecords, NestedData
-from snco.load.counts import IntervalMarkerCounts
+from coelsch.records import MarkerRecords, PredictionRecords, NestedData
+from coelsch.load.counts import IntervalMarkerCounts
 
 
 @pytest.fixture

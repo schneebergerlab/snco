@@ -1,6 +1,6 @@
-## Preparing a bam file for `snco loadcsl`
+## Preparing a bam file for `coelsch loadcsl`
 
-If you prefer to work with SNPs rather than marker reads, then `snco` also provides a load command for reading data from the output of [`cellsnp-lite`](https://github.com/single-cell-genetics/cellsnp-lite). This is a tool that uses a bam file (aligned to the reference genome i.e. haplotype 1) with cell barcode tags, along with a vcf of known variants (in haplotype 2) to call SNPs for each individual cell barcode. In order to produce a high quality vcf file of variants that are syntenic and co-linear, we still recommend to use the same `minimap2 + syri + syri_vcr_to_stardiploid.py` method described in the [Data preparation for `loadbam`](./data_preparation_for_loadbam.md) page.
+If you prefer to work with SNPs rather than marker reads, then `coelsch` also provides a load command for reading data from the output of [`cellsnp-lite`](https://github.com/single-cell-genetics/cellsnp-lite). This is a tool that uses a bam file (aligned to the reference genome i.e. haplotype 1) with cell barcode tags, along with a vcf of known variants (in haplotype 2) to call SNPs for each individual cell barcode. In order to produce a high quality vcf file of variants that are syntenic and co-linear, we still recommend to use the same `minimap2 + syri + syri_vcr_to_stardiploid.py` method described in the [Data preparation for `loadbam`](./data_preparation_for_loadbam.md) page.
 
 
 ```bash
@@ -37,4 +37,4 @@ ls sn_gametes_csl
     cellSNP.samples.tsv  cellSNP.tag.DP.mtx
 
 
-These output files can be used directly with `snco loadcsl`.
+These output files can be used directly with `coelsch loadcsl`.

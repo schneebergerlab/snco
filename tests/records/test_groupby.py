@@ -1,8 +1,8 @@
 from copy import deepcopy
 import pytest
 
-from snco.records import MarkerRecords, NestedData
-from snco.records.groupby import RecordsGroupyBy, dummy_grouper, genotype_grouper
+from coelsch.records import MarkerRecords, NestedData
+from coelsch.records.groupby import RecordsGroupyBy, dummy_grouper, genotype_grouper
 
 @pytest.fixture
 def marker_records():

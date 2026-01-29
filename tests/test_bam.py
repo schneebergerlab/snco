@@ -45,14 +45,14 @@ def mock_bamfile(make_mock_alignment):
 
 @pytest.fixture
 def patched_alignment_file(mock_bamfile):
-    with patch('snco.load.loadbam.bam.pysam.AlignmentFile', return_value=mock_bamfile) as patched:
+    with patch('coelsch.load.loadbam.bam.pysam.AlignmentFile', return_value=mock_bamfile) as patched:
         yield patched
 
 
 @pytest.fixture
 def reader_factory(patched_alignment_file):
-    from snco.load.loadbam.bam import BAMHaplotypeIntervalReader
-    from snco.load.barcodes.cb import CellBarcodeWhitelist
+    from coelsch.load.loadbam.bam import BAMHaplotypeIntervalReader
+    from coelsch.load.barcodes.cb import CellBarcodeWhitelist
 
     def _create(whitelist, cb_correction_method='exact', umi_collapse_method='directional'):
         return BAMHaplotypeIntervalReader(
@@ -120,7 +120,7 @@ def multi_hap_mock_alignment():
 
 
 def test_multi_haplotype_validated(multi_hap_mock_alignment):
-    from snco.load.loadbam.bam import BAMHaplotypeIntervalReader, MultiHaplotypeValidator
+    from coelsch.load.loadbam.bam import BAMHaplotypeIntervalReader, MultiHaplotypeValidator
 
     aln_valid = multi_hap_mock_alignment()  # allowed set
     aln_equal = multi_hap_mock_alignment(ha='col0,ler,db1')  # equals validator → should be skipped
@@ -132,7 +132,7 @@ def test_multi_haplotype_validated(multi_hap_mock_alignment):
     mock_bam.get_reference_length.return_value = 100_000
     mock_bam.fetch.return_value = [aln_valid, aln_equal] + alns_disallowed
 
-    with patch('snco.load.loadbam.bam.pysam.AlignmentFile', return_value=mock_bam):
+    with patch('coelsch.load.loadbam.bam.pysam.AlignmentFile', return_value=mock_bam):
         reader = BAMHaplotypeIntervalReader(
             'dummy.bam',
             hap_tag_type='multi_haplotype',
