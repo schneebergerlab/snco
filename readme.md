@@ -7,6 +7,8 @@
 
 ## **coelsch**: <ins>C</ins>ross<ins>o</ins>ver <ins>e</ins>stimation, <ins>l</ins>ocalisation and <ins>s</ins>ingle <ins>c</ins>ell <ins>h</ins>aplotyping 
 
+(formerly known as `snco`)
+
 `coelsch` is a set of tools for identifying recombination events at the single nucleus/cell level, using read alignments and/or SNP matrices from single nucleus sequencing experiments of recombinant haploid gametes. Reads alignments or SNPs are summarised into a per-cell barcode "marker" dataset which can then be used to perform crossover analysis with a hidden Markov model. `coelsch` also provides commands for generating per-barcode summary statistics, plotting marker and crossover profiles, identifying segregation distortions, and simulating ground truth datasets using marker distributions from real data.
 
 `coelsch` is still under active development, so expect some bugs and changes! If in doubt about the behaviour of `coelsch` or how it might change, feel free to reach out by opening an issue!
