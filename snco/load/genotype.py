@@ -650,7 +650,7 @@ def parallel_assign_genotypes(genotype_markers, genotype_options, *, processes=1
     return geno_assignments, geno_probabilities, geno_nmarkers, geno_error_rates
 
 
-def _parallel_convert_ic(inv_counts, genotype_options):
+def _parallel_convert_ic(inv_counts, genotype_options, threshold):
     genotype_markers = defaultdict(Counter)
     for ic in inv_counts:
         pos_parental_geno = genotype_options.get_bin_haplotypes(ic.chrom, ic.bin_idx)
@@ -661,12 +661,18 @@ def _parallel_convert_ic(inv_counts, genotype_options):
                 for geno, pos_geno in pos_parental_geno.items():
                     if pos_geno & hap_comb:
                         supported_genotypes |= 1 << genotype_options.idx[geno]
-                cb_pos_geno_markers[supported_genotypes] += count
+                cb_pos_geno_markers[supported_genotypes] += min(count, threshold)
             genotype_markers[cb] += cb_pos_geno_markers
     return genotype_markers
 
 
-def resolve_inv_counts_to_genotype_markers(inv_counts, genotype_options, processes=1):
+def _calculate_ic_upper_threshold(inv_counts, threshold_percentile=95):
+    count_values = np.fromiter(it.chain.from_iterable(ic.deep_values() for ic in inv_counts), dtype=int)
+    return int(np.percentile(count_values, threshold_percentile))
+
+
+def resolve_inv_counts_to_genotype_markers(inv_counts, genotype_options,
+                                           threshold_percentile=95, processes=1):
     """
     Convert per-interval haplotype counts into genotype-support groups.
 
@@ -690,6 +696,7 @@ def resolve_inv_counts_to_genotype_markers(inv_counts, genotype_options, process
         Mapping ``cb -> Counter({frozenset[GenotypeKey]: count, ...})``.
     """
 
+    t = _calculate_ic_upper_threshold(inv_counts, threshold_percentile)
     ic_chunks = weighted_chunks(
         inv_counts,
         weight_fn=lambda ic: len(ic.counts),
@@ -698,7 +705,7 @@ def resolve_inv_counts_to_genotype_markers(inv_counts, genotype_options, process
     )
 
     genotype_markers = defaultdict(Counter)
-    worker = _GenotypingWorker(_parallel_convert_ic, genotype_options)
+    worker = _GenotypingWorker(_parallel_convert_ic, genotype_options, threshold=t)
     results = Parallel(processes, backend='loky')(
         delayed(worker)(ic_chunk) for ic_chunk in ic_chunks
     )

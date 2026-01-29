@@ -58,6 +58,18 @@ class IntervalMarkerCounts:
             for hap, val in hap_counts.items():
                 yield cb, hap, val
 
+    def deep_values(self):
+        """
+        Yields all values in counts.
+
+        Yields
+        ------
+        int
+            count value
+        """
+        for hap_counts in self.counts.values():
+            yield from hap_counts.values()
+
     @classmethod
     def new_like(cls, other):
         """

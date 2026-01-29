@@ -35,7 +35,7 @@ DEFAULT_RNG = np.random.default_rng(DEFAULT_RANDOM_SEED)
 XLIM_OFFSET = 1e4
 
 
-def chrom_subplots(chrom_sizes, figsize=(18, 5), xtick_every=1e7,
+def chrom_subplots(chrom_sizes, figsize=(18, 5), xtick_every=1e7, xbuffer=5e5,
                    span_features=None, span_kwargs=None):
     """
     Create correctly proportioned subplots for individual chromosomes.
@@ -71,7 +71,7 @@ def chrom_subplots(chrom_sizes, figsize=(18, 5), xtick_every=1e7,
         axes = [axes,]
 
     for chrom, ax in zip(chrom_sizes, axes):
-        ax.set_xlim(0, chrom_sizes[chrom])
+        ax.set_xlim(-xbuffer, chrom_sizes[chrom] + xbuffer)
         xticks = np.arange(0, chrom_sizes[chrom], xtick_every)
         ax.set_xticks(xticks)
         ax.set_xticklabels([int(i // 1e6) for i in xticks])
@@ -94,7 +94,7 @@ def chrom_subplots(chrom_sizes, figsize=(18, 5), xtick_every=1e7,
     return fig, axes
 
 
-def chrom2d_subplots(chrom_sizes, figsize=(10, 10), xtick_every=1e7):
+def chrom2d_subplots(chrom_sizes, figsize=(10, 10), xtick_every=1e7, xbuffer=5e5):
     """
     Create correctly proportioned 2D subplots for chromosome pairs.
 
@@ -128,7 +128,7 @@ def chrom2d_subplots(chrom_sizes, figsize=(10, 10), xtick_every=1e7):
     axes = axes[::-1]
 
     for chrom, ax in zip(chrom_sizes, axes[0]):
-        ax.set_xlim(0, chrom_sizes[chrom])
+        ax.set_xlim(-xbuffer, chrom_sizes[chrom] + xbuffer)
         xticks = np.arange(0, chrom_sizes[chrom], xtick_every)
         ax.set_xticks(xticks)
         ax.set_xticklabels([int(i // 1e6) for i in xticks])
@@ -136,7 +136,7 @@ def chrom2d_subplots(chrom_sizes, figsize=(10, 10), xtick_every=1e7):
         ax.set_xlabel(f'Chr{chrom_label} (Mb)')
 
     for chrom, ax in zip(chrom_sizes, axes[:, 0]):
-        ax.set_ylim(0, chrom_sizes[chrom])
+        ax.set_ylim(-xbuffer, chrom_sizes[chrom] + xbuffer)
         yticks = np.arange(0, chrom_sizes[chrom], xtick_every)
         ax.set_yticks(yticks)
         ax.set_yticklabels([int(i // 1e6) for i in yticks])
