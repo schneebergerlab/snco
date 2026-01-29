@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from snco.records import NestedData, NestedDataArray
+from coelsch.records import NestedData, NestedDataArray
 
 @pytest.fixture
 def simple_nested_data():

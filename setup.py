@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='snco',
+    name='coelsch',
     version='0.6.1',
     description=(
         'crossover mapping for single cell/nucleus sequencing data'
@@ -9,7 +9,7 @@ setup(
     author='Matthew Parker',
     entry_points={
         'console_scripts': [
-            'snco = snco.main:main',
+            'coelsch = coelsch.main:main',
         ]
     },
     packages=find_packages(),

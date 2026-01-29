@@ -6,7 +6,7 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'snco'
+project = 'coelsch'
 copyright = '2024, Matthew Parker'
 author = 'Matthew Parker'
 release = '0.0pre'

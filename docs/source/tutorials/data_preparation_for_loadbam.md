@@ -1,10 +1,10 @@
-## Preparing a bam file for `snco loadbam`
+## Preparing a bam file for `coelsch loadbam`
 
-The recommended method for preparing data for crossover analysis with `snco` is to use `STARsolo` in diploid mode. This mode is available in `STAR` version 2.7.11a onwards and allows reads to be mapped to a heterozygous diploid genome, i.e. two phased haplotypes at once. In order to do this, `STAR` requires a reference genome of haplotype 1, and a vcf file containing variants that transform haplotype 1 into haplotype 2, to be supplied during genome indexing.
+The recommended method for preparing data for crossover analysis with `coelsch` is to use `STARsolo` in diploid mode. This mode is available in `STAR` version 2.7.11a onwards and allows reads to be mapped to a heterozygous diploid genome, i.e. two phased haplotypes at once. In order to do this, `STAR` requires a reference genome of haplotype 1, and a vcf file containing variants that transform haplotype 1 into haplotype 2, to be supplied during genome indexing.
 
 ### Preparing a vcf file for `STARsolo` diploid mode
 
-If you have fully assembled genomes for both haplotypes, you can use `minimap2` to align them to each other, followed by analysis with `syri` to identify variants. As part of the `snco` package we provide a post-processing script for filtering `syri` output, to retain variants in syntenic regions that are useful for crossover analysis.
+If you have fully assembled genomes for both haplotypes, you can use `minimap2` to align them to each other, followed by analysis with `syri` to identify variants. As part of the `coelsch` package we provide a post-processing script for filtering `syri` output, to retain variants in syntenic regions that are useful for crossover analysis.
 
 Here is an example of how to prepare variants for analysis of gametes from an Arabidopsis Col-0 × Ler-0 F1 hybrid. First we align the Ler-0 genome to the Col-0 reference using minimap2:
 
@@ -40,7 +40,7 @@ syri -F B -f --hdrseq \
 ```
 
 
-Then we use the `syri_vcf_to_stardiploid.py` script provided with `snco` to filter the variants and convert the vcf into one compatible with `STAR`.
+Then we use the `syri_vcf_to_stardiploid.py` script provided with `coelsch` to filter the variants and convert the vcf into one compatible with `STAR`.
 
 
 ```bash
@@ -66,7 +66,7 @@ head col0_ler0.stardiploid.vcf
 
 ### Running `STARsolo` in diploid mode
 
-The next step is to build the diploid genome index for `STAR`. This is done by adding the parameters `--genomeTransformVCF` and `--genomeTransformType` to the normal `STAR --runMode genomeGenerate` command. You will also have to provide a gtf file of gene annotations for the reference genome, although the use of this is not necessary for downstream `snco` analysis. Please read the `STAR` manual for further information and more options.
+The next step is to build the diploid genome index for `STAR`. This is done by adding the parameters `--genomeTransformVCF` and `--genomeTransformType` to the normal `STAR --runMode genomeGenerate` command. You will also have to provide a gtf file of gene annotations for the reference genome, although the use of this is not necessary for downstream `coelsch` analysis. Please read the `STAR` manual for further information and more options.
 
 
 ```bash
@@ -127,8 +127,8 @@ STAR \
     Oct 29 14:06:49 ..... finished successfully
 
 
-__NB: the current version of STARsolo + diploid mode (version 2.7.11b) has a bug, which prevents correct deduplication of UMIs for reads that map to haplotype 2.__ See [STAR issue #2112](https://github.com/alexdobin/STAR/issues/2112) for details. Until this is resolved, it is recommended to switch off UMI deduplication with STAR using `--soloUMIdedup "NoDedup"`, and perform deduplication with `snco loadbam --umi-collapse-method="directional"` instead.
+__NB: the current version of STARsolo + diploid mode (version 2.7.11b) has a bug, which prevents correct deduplication of UMIs for reads that map to haplotype 2.__ See [STAR issue #2112](https://github.com/alexdobin/STAR/issues/2112) for details. Until this is resolved, it is recommended to switch off UMI deduplication with STAR using `--soloUMIdedup "NoDedup"`, and perform deduplication with `coelsch loadbam --umi-collapse-method="directional"` instead.
 
 If your data is from a 10x single cell/nucleus ATAC sequencing experiment, it is still possible to use `STARsolo` diploid mode to perform alignment, but some adjustments have to be made. The main one is to switch of splice alignment using `--alignIntronMax 1` and `--alignMatesGapMax 500`. There is further information on how best to use `STAR` with ATAC-seq data on the `STAR` GitHub issue tracker.
 
-The output of the `STARsolo` command is a bam file, in which each read has a `CB` tag that defines the cell barcode, a `UR` tag that defines the UMI, and a `ha` tag that identifies which of the two haplotypes it aligns best to. This is then the input for the `snco` analysis...
+The output of the `STARsolo` command is a bam file, in which each read has a `CB` tag that defines the cell barcode, a `UR` tag that defines the UMI, and a `ha` tag that identifies which of the two haplotypes it aligns best to. This is then the input for the `coelsch` analysis...

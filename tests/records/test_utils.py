@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from snco.records.utils import (
+from coelsch.records.utils import (
     validate_data,
     array_encoder_full,
     array_encoder_sparse,
