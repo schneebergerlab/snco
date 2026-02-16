@@ -188,7 +188,7 @@ def apply_marker_threshold(co_markers, max_marker_threshold):
     return co_markers_t
 
 
-def mask_regions_bed(co_markers, mask_bed_fn):
+def mask_regions_bed(co_markers, mask_bed_fn, inplace=False):
     """
     Mask regions listed in a BED file.
 
@@ -198,13 +198,16 @@ def mask_regions_bed(co_markers, mask_bed_fn):
         Marker data to be masked.
     mask_bed_fn : str
         Path to BED file with regions to mask.
+    inplace: bool
+        Whether to perform masking inplace
 
     Returns
     -------
     MarkerRecords
         Masked marker records.
     """
-    co_markers_m = co_markers.copy()
+    if not inplace:
+        co_markers = co_markers.copy()
     mask_invs = pd.read_csv(
         mask_bed_fn,
         sep='\t',
@@ -217,7 +220,7 @@ def mask_regions_bed(co_markers, mask_bed_fn):
         start_bins = np.floor(invs.start / bs).astype(int)
         end_bins = np.ceil(invs.end / bs).astype(int)
         
-        for m in co_markers_m[:, chrom].values():
+        for m in co_markers[:, chrom].values():
             for s, e in zip(start_bins, end_bins):
                 m[s: e] = 0
-    return co_markers_m
+    return co_markers

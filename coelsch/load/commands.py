@@ -21,7 +21,7 @@ def _post_load_filtering(co_markers, min_markers_per_cb, min_markers_per_chrom,
     log.info(f'Identified {n} cell barcodes')
     if min_markers_per_cb or min_markers_per_chrom:
         co_markers = filter_low_coverage_barcodes(
-            co_markers, min_markers_per_cb, min_markers_per_chrom
+            co_markers, min_markers_per_cb, min_markers_per_chrom, with_copy=False
         )
         log.info(
             f'Removed {n - len(co_markers)} barcodes with fewer than {min_markers_per_cb} markers '
@@ -29,7 +29,7 @@ def _post_load_filtering(co_markers, min_markers_per_cb, min_markers_per_chrom,
         )
     n = len(co_markers)
     if min_geno_prob:
-        co_markers = filter_genotyping_score(co_markers, min_geno_prob, max_geno_error_rate)
+        co_markers = filter_genotyping_score(co_markers, min_geno_prob, max_geno_error_rate, with_copy=False)
         log.info(
             f'Removed {n - len(co_markers)} barcodes with genotyping probability < {min_geno_prob}'
         )

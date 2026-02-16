@@ -91,7 +91,7 @@ def run_clean(marker_json_fn, output_json_fn, *,
     n = len(co_markers)
     if min_markers_per_cb:
         co_markers = filter_low_coverage_barcodes(
-            co_markers, min_markers_per_cb, min_markers_per_chrom
+            co_markers, min_markers_per_cb, min_markers_per_chrom, with_copy=False
         )
         log.info(
             f'Removed {n - len(co_markers)} barcodes with fewer than {min_markers_per_cb} markers '
@@ -99,7 +99,7 @@ def run_clean(marker_json_fn, output_json_fn, *,
         )
     n = len(co_markers)
     if 'genotypes' in co_markers.metadata:
-        co_markers = filter_genotyping_score(co_markers, min_geno_prob, max_geno_error_rate)
+        co_markers = filter_genotyping_score(co_markers, min_geno_prob, max_geno_error_rate, with_copy=False)
         log.info(
             f'Removed {n - len(co_markers)} barcodes with genotyping probability < {min_geno_prob}'
         )
@@ -185,7 +185,7 @@ def run_clean(marker_json_fn, output_json_fn, *,
         log.info(f'Thresholded bins with >{max_bin_count} markers')
 
     if mask_bed_fn is not None:
-        co_markers = mask_regions_bed(co_markers, mask_bed_fn)
+        co_markers = mask_regions_bed(co_markers, mask_bed_fn, inplace=True)
         log.info(f'Masked regions blacklisted in {mask_bed_fn}')
 
     if output_json_fn is not None:

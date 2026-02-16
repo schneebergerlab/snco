@@ -465,7 +465,7 @@ class NestedData:
         if not inplace:
             return s
 
-    def filter(self, whitelist, level=0, inplace=True):
+    def filter(self, whitelist, level=0, inplace=True, with_copy=False):
         """
         Filters the nested data dictionary by retaining only keys in the whitelist at the specified level.
 
@@ -477,6 +477,8 @@ class NestedData:
             The level name or index to filter on (default is 0).
         inplace : bool, optional
             Whether to modify the current object in-place or return a new filtered object (default is True).
+        with_copy : bool, optional
+            Whether to make a copy of the data whilst filtering, returns a view if False
 
         Returns
         -------
@@ -498,7 +500,8 @@ class NestedData:
             return None
         else:
             obj = self.new_like(self)
-            obj._data = _recursive_filter(deepcopy(self._data), 0)
+            d = deepcopy(self._data) if with_copy else self._data
+            obj._data = _recursive_filter(d, 0)
             return obj
 
     def transpose_levels(self, reordered_levels, inplace=False):

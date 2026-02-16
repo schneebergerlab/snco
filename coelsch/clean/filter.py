@@ -1,4 +1,4 @@
-def filter_low_coverage_barcodes(co_markers, min_cov=0, min_cov_per_chrom=0):
+def filter_low_coverage_barcodes(co_markers, min_cov=0, min_cov_per_chrom=0, with_copy=True):
     """
     Remove cell barcodes with insufficient total or per-chromosome marker coverage.
 
@@ -10,6 +10,8 @@ def filter_low_coverage_barcodes(co_markers, min_cov=0, min_cov_per_chrom=0):
         Minimum total number of markers required across all chromosomes.
     min_cov_per_chrom : int, default=0
         Minimum number of markers required per chromosome.
+    with_copy : bool, optional
+        Whether to make a copy of the data whilst filtering, returns a view if False
 
     Returns
     -------
@@ -21,10 +23,10 @@ def filter_low_coverage_barcodes(co_markers, min_cov=0, min_cov_per_chrom=0):
         m_counts = [m.sum(axis=None) for m in co_markers[cb].values()]
         return (sum(m_counts) >= min_cov) & (min(m_counts) >= min_cov_per_chrom)
 
-    return co_markers.query(_low_cov_query)
+    return co_markers.query(_low_cov_query, with_copy=with_copy)
 
 
-def filter_genotyping_score(co_markers, min_geno_prob=0.9, max_geno_error_rate=0.25):
+def filter_genotyping_score(co_markers, min_geno_prob=0.9, max_geno_error_rate=0.25, with_copy=True):
     """
     Remove barcodes with genotyping probability below a given threshold.
 
@@ -36,6 +38,8 @@ def filter_genotyping_score(co_markers, min_geno_prob=0.9, max_geno_error_rate=0
         Minimum allowed genotype probability.
     max_geno_error_rate : float, default=0.25
         The maximum inferred background noise rate from genotyping
+    with_copy : bool, optional
+        Whether to make a copy of the data whilst filtering, returns a view if False
 
     Returns
     -------
@@ -51,4 +55,4 @@ def filter_genotyping_score(co_markers, min_geno_prob=0.9, max_geno_error_rate=0
     def _geno_query(cb):
         return (geno_probs[cb] >= min_geno_prob) & (genotype_error_rates[cb] <= max_geno_error_rate)
 
-    return co_markers.query(_geno_query)
+    return co_markers.query(_geno_query, with_copy=with_copy)

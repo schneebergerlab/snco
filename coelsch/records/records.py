@@ -377,7 +377,7 @@ class BaseRecords(object):
             if 'cb' in mdata.levels:
                 mdata.filter(cb_whitelist, level='cb', inplace=True)
 
-    def filter(self, cb_whitelist, inplace=True):
+    def filter(self, cb_whitelist, inplace=True, with_copy=True):
         """
         Filter the records to include only cell barcodes in the provided whitelist.
 
@@ -386,8 +386,9 @@ class BaseRecords(object):
         cb_whitelist : list or set
             A collection of cell barcodes to retain in the records.
         inplace : bool, default=True
-            If True, modifies the current object in place.
-            If False, returns a new filtered instance.
+            If True, modifies the current object in place. If False, returns a new filtered instance.
+        with_copy : bool, optional
+            Whether to make a copy of the data whilst filtering, returns a view if False
 
         Returns
         -------
@@ -396,15 +397,15 @@ class BaseRecords(object):
         """
         cb_whitelist = set(cb_whitelist)
         if inplace:
-            self._records.filter(cb_whitelist, level=0, inplace=True)
+            self._records.filter(cb_whitelist, level=0, inplace=True, with_copy=with_copy)
             self._filter_metadata(cb_whitelist)
         else:
             s = self.new_like(self, copy_metadata=True)
-            s._records = self._records.filter(cb_whitelist, level=0, inplace=False)
+            s._records = self._records.filter(cb_whitelist, level=0, inplace=False, with_copy=with_copy)
             s._filter_metadata(cb_whitelist)
             return s
 
-    def query(self, func_or_expr):
+    def query(self, func_or_expr, with_copy=True):
         """
         Query the records using a string expression or a function applied to each cell barcode,
         optionally supplying additional context based on the function signature.
@@ -425,6 +426,8 @@ class BaseRecords(object):
         func_or_expr : callable or str
             A function that accepts a cell barcode (str) as its first argument, or a string expression
             to evaluate for each barcode.
+        with_copy : bool, optional
+            Whether to make a copy of the data whilst filtering, returns a view if False
 
         Returns
         -------
@@ -493,7 +496,8 @@ class BaseRecords(object):
 
         return self.filter(
             (cb for cb in self.barcodes if func(cb, **func_kwargs)),
-            inplace=False
+            inplace=False,
+            with_copy=with_copy,
         )
 
     def groupby(self, by):
