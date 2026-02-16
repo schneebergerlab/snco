@@ -395,10 +395,13 @@ class BaseRecords(object):
             The filtered records object if `inplace=False`, otherwise None.
         """
         cb_whitelist = set(cb_whitelist)
-        s = self if inplace else self.copy()
-        s._records.filter(cb_whitelist, level=0, inplace=True)
-        s._filter_metadata(cb_whitelist)
-        if not inplace:
+        if inplace:
+            self._records.filter(cb_whitelist, level=0, inplace=True)
+            self._filter_metadata(cb_whitelist)
+        else:
+            s = self.new_like(self, copy_metadata=True)
+            s._records = self._records.filter(cb_whitelist, level=0, inplace=False)
+            s._filter_metadata(cb_whitelist)
             return s
 
     def query(self, func_or_expr):
