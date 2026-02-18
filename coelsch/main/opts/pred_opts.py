@@ -9,7 +9,7 @@ coelsch_opts.option(
     '-R', '--segment-size',
     subcommands=['predict', 'bam2pred', 'csl2pred'],
     required=False,
-    type=click.IntRange(100_000, 10_000_000),
+    type=click.IntRange(100_000, 25_000_000),
     default=1_000_000,
     help='rfactor of the rigid HMM. Approximately controls minimum distance between COs'
 )
@@ -19,7 +19,7 @@ coelsch_opts.option(
     '-t', '--terminal-segment-size',
     subcommands=['predict', 'bam2pred', 'csl2pred'],
     required=False,
-    type=click.IntRange(10_000, 1_000_000),
+    type=click.IntRange(10_000, 5_000_000),
     default=250_000,
     help=('terminal rfactor of the rigid HMM. approx. controls min distance of COs '
           'from chromosome ends')
@@ -30,7 +30,7 @@ coelsch_opts.option(
     '-C', '--cm-per-mb',
     subcommands=['predict', 'bam2pred', 'csl2pred'],
     required=False,
-    type=click.FloatRange(1.0, 20.0),
+    type=click.FloatRange(1e-3, 20.0),
     default=4.5,
     help=('Approximate average centiMorgans per megabase. '
           'Used to parameterise the rigid HMM transitions')

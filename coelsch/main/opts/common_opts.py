@@ -8,7 +8,7 @@ coelsch_opts.option(
                  'sim', 'clean', 'predict',
                  'doublet', 'stats', 'segdist'],
     required=False,
-    type=click.IntRange(1000, 100_000),
+    type=click.IntRange(1000, 5_000_000),
     default=25_000,
     help='Bin size for marker distribution'
 )
